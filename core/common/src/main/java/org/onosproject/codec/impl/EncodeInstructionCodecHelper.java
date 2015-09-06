@@ -75,6 +75,12 @@ public final class EncodeInstructionCodecHelper {
                 result.put(InstructionCodec.SLOT_GRANULARITY, ochSignal.slotGranularity());
                 break;
 
+            case OPLK_ATT:
+                final L0ModificationInstruction.ModAttenuationInstruction modAttenuationInstruction =
+                        (L0ModificationInstruction.ModAttenuationInstruction) instruction;
+                result.put(InstructionCodec.OPLK_ATT, modAttenuationInstruction.attenuation());
+                break;
+
             default:
                 log.info("Cannot convert L0 subtype of {}", instruction.subtype());
         }

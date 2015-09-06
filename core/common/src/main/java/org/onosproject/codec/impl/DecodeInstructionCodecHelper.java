@@ -168,6 +168,11 @@ public final class DecodeInstructionCodecHelper {
                     InstructionCodec.SLOT_GRANULARITY + InstructionCodec.MISSING_MEMBER_MESSAGE).asInt();
             return Instructions.modL0Lambda(new OchSignal(gridType, channelSpacing,
                     spacingMultiplier, slotGranularity));
+        } else if (subType.equals(L0ModificationInstruction.L0SubType.OPLK_ATT.name()))
+        {
+            int attenuation = nullIsIllegal(json.get(InstructionCodec.OPLK_ATT),
+                    InstructionCodec.OPLK_ATT + InstructionCodec.MISSING_MEMBER_MESSAGE).asInt();
+            return Instructions.modL0Attenuation(attenuation);
         }
         throw new IllegalArgumentException("L0 Instruction subtype "
                 + subType + " is not supported");

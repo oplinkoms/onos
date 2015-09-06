@@ -29,6 +29,7 @@ import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.instructions.L0ModificationInstruction.L0SubType;
 import org.onosproject.net.flow.instructions.L0ModificationInstruction.ModLambdaInstruction;
 import org.onosproject.net.flow.instructions.L0ModificationInstruction.ModOchSignalInstruction;
+import org.onosproject.net.flow.instructions.L0ModificationInstruction.ModAttenuationInstruction;
 import org.onosproject.net.flow.instructions.L3ModificationInstruction.L3SubType;
 import org.onosproject.net.flow.instructions.L3ModificationInstruction.ModIPInstruction;
 import org.onosproject.net.flow.instructions.L3ModificationInstruction.ModIPv6FlowLabelInstruction;
@@ -117,6 +118,18 @@ public final class Instructions {
         } else {
             throw new UnsupportedOperationException(String.format("Unsupported type: %s", lambda));
         }
+    }
+
+    /**
+     * Creates a L0 modification.
+     *
+     * @param attenuation the attenuation to modify to
+     * @return a L0 modification
+     */
+    @Deprecated
+    public static L0ModificationInstruction modL0Attenuation(int attenuation) {
+        checkNotNull(attenuation, "L0 attenuation cannot be null");
+        return new ModAttenuationInstruction(attenuation);
     }
 
     /**

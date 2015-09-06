@@ -61,6 +61,7 @@ public final class CriterionCodec extends JsonCodec<Criterion> {
     protected static final String SLOT_GRANULARITY = "slotGranularity";
     protected static final String OCH_SIGNAL_ID = "ochSignalId";
     protected static final String TUNNEL_ID = "tunnelId";
+    protected static final String OCH_SIGNAL_TYPE = "ochSignalType";
 
     @Override
     public ObjectNode encode(Criterion criterion, CodecContext context) {

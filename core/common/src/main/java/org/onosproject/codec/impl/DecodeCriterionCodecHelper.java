@@ -24,6 +24,7 @@ import org.onlab.packet.MacAddress;
 import org.onlab.packet.MplsLabel;
 import org.onlab.packet.TpPort;
 import org.onlab.packet.VlanId;
+import org.onosproject.net.OchSignalType;
 import org.onosproject.net.ChannelSpacing;
 import org.onosproject.net.GridType;
 import org.onosproject.net.Lambda;
@@ -415,7 +416,11 @@ public final class DecodeCriterionCodecHelper {
     private class OchSigTypeDecoder implements CriterionDecoder {
         @Override
         public Criterion decodeCriterion(ObjectNode json) {
-            return null;
+            //return null;
+            OchSignalType type = OchSignalType.valueOf(
+                    nullIsIllegal(json.get(CriterionCodec.OCH_SIGNAL_TYPE),
+                    CriterionCodec.OCH_SIGNAL_TYPE + MISSING_MEMBER_MESSAGE).asText());
+            return Criteria.matchOchSignalType(type);
         }
     }
 

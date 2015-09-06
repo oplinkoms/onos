@@ -360,6 +360,11 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
         }
 
         @Override
+        public Builder setAttenuation(int attenuation) {
+            return add(Instructions.modL0Attenuation(attenuation));
+        }
+
+        @Override
         public Builder group(GroupId groupId) {
             return add(Instructions.createGroup(groupId));
         }

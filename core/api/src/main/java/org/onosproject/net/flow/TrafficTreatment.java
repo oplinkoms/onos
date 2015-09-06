@@ -253,6 +253,14 @@ public interface TrafficTreatment {
         Builder setLambda(short lambda);
 
         /**
+         * Sets the optical attenuation.
+         *
+         * @param attenuation optical attenuation, amplifier 10 (X10)
+         * @return a treatment builder
+         */
+        Builder setAttenuation(int attenuation);
+
+        /**
          * Sets the group ID.
          *
          * @param groupId group ID

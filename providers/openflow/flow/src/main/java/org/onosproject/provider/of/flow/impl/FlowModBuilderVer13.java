@@ -29,6 +29,7 @@ import org.onosproject.net.flow.instructions.Instructions.OutputInstruction;
 import org.onosproject.net.flow.instructions.L0ModificationInstruction;
 import org.onosproject.net.flow.instructions.L0ModificationInstruction.ModLambdaInstruction;
 import org.onosproject.net.flow.instructions.L0ModificationInstruction.ModOchSignalInstruction;
+import org.onosproject.net.flow.instructions.L0ModificationInstruction.ModAttenuationInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction.ModEtherInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction.ModMplsBosInstruction;
@@ -285,6 +286,8 @@ public class FlowModBuilderVer13 extends FlowModBuilder {
                     log.warn(e.getMessage());
                     break;
                 }
+            case OPLK_ATT:
+                return buildModAttenuationInstruction((ModAttenuationInstruction) i);
             default:
                 log.warn("Unimplemented action type {}.", l0m.subtype());
                 break;
@@ -306,6 +309,10 @@ public class FlowModBuilderVer13 extends FlowModBuilder {
                 new CircuitSignalID(gridType, channelSpacing,
                         (short) signal.spacingMultiplier(), (short) signal.slotGranularity())
         ));
+    }
+
+    private OFAction buildModAttenuationInstruction(ModAttenuationInstruction instruction) {
+        return factory().actions().oplinkAtt(factory().oxms().ochSigatt(U32.of(instruction.attenuation())));
     }
 
     private OFAction buildL2Modification(Instruction i) {

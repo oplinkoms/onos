@@ -36,6 +36,10 @@ public abstract class L0ModificationInstruction implements Instruction {
          * OCh (Optical Channel) modification.
          */
         OCH,
+        /**
+         * Oplink attenuation action modification.
+         */
+        OPLK_ATT
     }
 
     public abstract L0SubType subtype();
@@ -133,6 +137,51 @@ public abstract class L0ModificationInstruction implements Instruction {
         public String toString() {
             return MoreObjects.toStringHelper(this)
                     .add("lambda", lambda)
+                    .toString();
+        }
+    }
+
+    /**
+     * Represents an L0 OPLINK attenuation modification instruction.
+     */
+    public static final class ModAttenuationInstruction extends L0ModificationInstruction {
+
+        private final int attenuation; //Amplifier 10 (X10)
+
+        ModAttenuationInstruction(int att) {
+            this.attenuation = att;
+        }
+
+        @Override
+        public L0SubType subtype() {
+            return L0SubType.OPLK_ATT;
+        }
+
+        public int attenuation() {
+            return attenuation;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(attenuation);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof ModAttenuationInstruction)) {
+                return false;
+            }
+            final ModAttenuationInstruction that = (ModAttenuationInstruction) obj;
+            return Objects.equals(this.attenuation, that.attenuation);
+        }
+
+        @Override
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                    .add("attenuation", attenuation)
                     .toString();
         }
     }
