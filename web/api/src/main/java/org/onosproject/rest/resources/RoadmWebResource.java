@@ -3,6 +3,8 @@ package org.onosproject.rest.resources;
 import static org.onlab.util.Tools.nullIsNotFound;
 import static org.onosproject.net.DeviceId.deviceId;
 
+import java.io.InputStream;
+
 import javax.ws.rs.GET;
 import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
@@ -47,7 +49,7 @@ public class RoadmWebResource extends AbstractWebResource {
      */
     @PUT
     @Path("{id}/port")
-    public Response setRoadmPortPower(@PathParam("id") String id) {
+    public Response setRoadmPortPower(@PathParam("id") String id,  InputStream stream) {
 
         Device device = nullIsNotFound(service.getDevice(deviceId(id)), DEVICE_NOT_FOUND);
 

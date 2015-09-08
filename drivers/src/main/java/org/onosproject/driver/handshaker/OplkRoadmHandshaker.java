@@ -27,7 +27,6 @@ import org.projectfloodlight.openflow.protocol.OFPortOptical;
 import org.projectfloodlight.openflow.protocol.OFStatsReply;
 import org.projectfloodlight.openflow.protocol.OFStatsType;
 import org.projectfloodlight.openflow.types.OFPort;
-
 import com.google.common.collect.ImmutableSet;
 
 public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenFlowOpticalSwitch {
@@ -135,6 +134,38 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
     public Device.Type deviceType() {
         return Device.Type.ROADM;
     }
+
+/*
+    @Override
+    public final void sendMsg(OFMessage m) {
+        OFMessage newMsg = m;
+
+        if (m.getType() == OFType.STATS_REQUEST) {
+            OFStatsRequest sr = (OFStatsRequest) m;
+            log.debug("Rebuilding stats request type {}", sr.getStatsType());
+            switch (sr.getStatsType()) {
+                case FLOW:
+                    OFOplinkChannelPowerRequest chRequest = this.factory().buildOplinkChannelPowerRequest()
+                            .setXid(sr.getXid())
+                            .setFlags(sr.getFlags())
+                            .build();
+                    newMsg = chRequest;
+                    break;
+                case PORT:
+                    OFOplinkPortPowerRequest pRequest = this.factory().buildOplinkPortPowerRequest()
+                    .setXid(sr.getXid())
+                    .setFlags(sr.getFlags())
+                    .build();
+                    newMsg = pRequest;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        super.sendMsg(newMsg);
+    }
+*/
 
     private void sendHandshakeOFExperimenterPortDescRequest() throws IOException {
         // send multi part message for port description for optical switches
