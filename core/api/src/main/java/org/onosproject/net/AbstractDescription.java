@@ -38,7 +38,9 @@ public abstract class AbstractDescription implements Annotated {
      */
     protected AbstractDescription(SparseAnnotations... annotations) {
         checkArgument(annotations.length <= 1, "Only one set of annotations is expected");
-        this.annotations = annotations.length == 1 ? annotations[0] : EMPTY;
+        // this.annotations = annotations.length == 1 ? annotations[0] : EMPTY;
+        // Modify this code, by OPLINK
+        this.annotations = annotations.length == 1 ? (annotations[0] == null ? EMPTY : annotations[0]) : EMPTY;
     }
 
     @Override

@@ -1,9 +1,9 @@
 package org.onosproject.driver.handshaker;
 
-
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -27,7 +27,6 @@ import org.projectfloodlight.openflow.protocol.OFPortOptical;
 import org.projectfloodlight.openflow.protocol.OFStatsReply;
 import org.projectfloodlight.openflow.protocol.OFStatsType;
 import org.projectfloodlight.openflow.types.OFPort;
-import com.google.common.collect.ImmutableSet;
 
 public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenFlowOpticalSwitch {
     private final AtomicBoolean driverHandshakeComplete = new AtomicBoolean(false);
@@ -36,11 +35,14 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
 
     @Override
     public List<? extends OFObject> getPortsOf(PortDescPropertyType type) {
+/*
         if (!type.equals(PortDescPropertyType.OPTICAL_TRANSPORT)) {
             return Collections.EMPTY_LIST;
         }
 
         return opticalPorts;
+*/
+        return ImmutableList.copyOf(opticalPorts);
     }
 
     @Override
@@ -219,6 +221,7 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
      * @param wPorts OF reply with circuit ports
      */
     private void createOpticalPortList(OFCircuitPortsReply wPorts) {
+/*
         opticalPorts = new ArrayList<>(wPorts.getEntries().size());
 
         for (OFPortOptical p : wPorts.getEntries()) {
@@ -233,6 +236,9 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
 
             opticalPorts.add(createOpticalPort(p, signalType));
         }
+*/
+        opticalPorts = new ArrayList<>();
+        opticalPorts.addAll(wPorts.getEntries());
     }
 
     /**
