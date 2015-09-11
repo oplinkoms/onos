@@ -19,10 +19,12 @@ import org.onosproject.openflow.controller.driver.SwitchDriverSubHandshakeNotSta
 import org.projectfloodlight.openflow.protocol.OFCircuitPortStatus;
 import org.projectfloodlight.openflow.protocol.OFCircuitPortsReply;
 import org.projectfloodlight.openflow.protocol.OFCircuitPortsRequest;
+import org.projectfloodlight.openflow.protocol.OFExperimenterStatsReply;
 import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFObject;
 import org.projectfloodlight.openflow.protocol.OFOplinkChannelPowerRequest;
 import org.projectfloodlight.openflow.protocol.OFOplinkPortPowerRequest;
+import org.projectfloodlight.openflow.protocol.OFOplinkStatsReply;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 import org.projectfloodlight.openflow.protocol.OFPortDescPropOpticalTransport;
 import org.projectfloodlight.openflow.protocol.OFPortDescStatsReply;
@@ -120,8 +122,22 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
                 OFStatsReply stats = (OFStatsReply) m;
                 if (stats.getStatsType() == OFStatsType.EXPERIMENTER) {
                     log.warn("OPLK ROADM : Received stats reply message {}", m);
-                    createOpticalPortList((OFCircuitPortsReply) m);
-                    driverHandshakeComplete.set(true);
+                    OFExperimenterStatsReply sMsg = (OFExperimenterStatsReply) stats;
+                    if (sMsg.getExperimenter() == 0x748771) {
+                        //OTN extension 1.0 port-desc
+                        createOpticalPortList((OFCircuitPortsReply) m);
+                        driverHandshakeComplete.set(true);
+                    } else {
+                        //OFOplinkStatsReply statMsg
+                        OFOplinkStatsReply oMsg = (OFOplinkStatsReply) stats;
+                        if (oMsg.getSubtype() == 20) {
+                            //OFOplinkStatExpSubtype.PD_POWER)
+                            log.debug("OPLK ROADM : received port power reply");
+                        } else if (oMsg.getSubtype() == 21) {
+                            //OFOplinkStatExpSubtype.CH_POWER)
+                            log.debug("OPLK ROADM : received channel power reply");
+                        }
+                    }
                 }
                 break;
             default:
