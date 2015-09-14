@@ -19,21 +19,15 @@ import org.onosproject.openflow.controller.driver.SwitchDriverSubHandshakeNotSta
 import org.projectfloodlight.openflow.protocol.OFCircuitPortStatus;
 import org.projectfloodlight.openflow.protocol.OFCircuitPortsReply;
 import org.projectfloodlight.openflow.protocol.OFCircuitPortsRequest;
-import org.projectfloodlight.openflow.protocol.OFExperimenterStatsReply;
 import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFObject;
 import org.projectfloodlight.openflow.protocol.OFOplinkChannelPowerRequest;
 import org.projectfloodlight.openflow.protocol.OFOplinkPortPowerRequest;
-import org.projectfloodlight.openflow.protocol.OFOplinkStatsReply;
-import org.projectfloodlight.openflow.protocol.OFPortDesc;
-import org.projectfloodlight.openflow.protocol.OFPortDescPropOpticalTransport;
-import org.projectfloodlight.openflow.protocol.OFPortDescStatsReply;
 import org.projectfloodlight.openflow.protocol.OFPortOptical;
 import org.projectfloodlight.openflow.protocol.OFStatsReply;
 import org.projectfloodlight.openflow.protocol.OFStatsRequest;
 import org.projectfloodlight.openflow.protocol.OFStatsType;
 import org.projectfloodlight.openflow.protocol.OFType;
-import org.projectfloodlight.openflow.types.OFPort;
 
 public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenFlowOpticalSwitch {
     private final AtomicBoolean driverHandshakeComplete = new AtomicBoolean(false);
@@ -42,13 +36,6 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
 
     @Override
     public List<? extends OFObject> getPortsOf(PortDescPropertyType type) {
-/*
-        if (!type.equals(PortDescPropertyType.OPTICAL_TRANSPORT)) {
-            return Collections.EMPTY_LIST;
-        }
-
-        return opticalPorts;
-*/
         return ImmutableList.copyOf(opticalPorts);
     }
 
@@ -90,6 +77,7 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
         if (!startDriverHandshakeCalled) {
             throw new SwitchDriverSubHandshakeNotStarted();
         }
+
         if (driverHandshakeComplete.get()) {
             throw new SwitchDriverSubHandshakeCompleted(m);
         }
@@ -121,23 +109,10 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
             case STATS_REPLY:
                 OFStatsReply stats = (OFStatsReply) m;
                 if (stats.getStatsType() == OFStatsType.EXPERIMENTER) {
-                    log.warn("OPLK ROADM : Received stats reply message {}", m);
-                    OFExperimenterStatsReply sMsg = (OFExperimenterStatsReply) stats;
-                    if (sMsg.getExperimenter() == 0x748771) {
-                        //OTN extension 1.0 port-desc
-                        createOpticalPortList((OFCircuitPortsReply) m);
-                        driverHandshakeComplete.set(true);
-                    } else {
-                        //OFOplinkStatsReply statMsg
-                        OFOplinkStatsReply oMsg = (OFOplinkStatsReply) stats;
-                        if (oMsg.getSubtype() == 20) {
-                            //OFOplinkStatExpSubtype.PD_POWER)
-                            log.debug("OPLK ROADM : received port power reply");
-                        } else if (oMsg.getSubtype() == 21) {
-                            //OFOplinkStatExpSubtype.CH_POWER)
-                            log.debug("OPLK ROADM : received channel power reply");
-                        }
-                    }
+                    log.warn("OPLK ROADM : Received multipart (port desc) reply message {}", m);
+                    //OTN Optical extension 1.0 port-desc
+                    createOpticalPortList((OFCircuitPortsReply) m);
+                    driverHandshakeComplete.set(true);
                 }
                 break;
             default:
@@ -164,7 +139,7 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
 
         if (m.getType() == OFType.STATS_REQUEST) {
             OFStatsRequest sr = (OFStatsRequest) m;
-            log.debug("Rebuilding stats request type {}", sr.getStatsType());
+            log.debug("Oplink rebuilding stats request type {}", sr.getStatsType());
             switch (sr.getStatsType()) {
                 case FLOW:
                     OFOplinkChannelPowerRequest chRequest = this.factory().buildOplinkChannelPowerRequest()
@@ -201,38 +176,6 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
     }
 
     /**
-     * Creates an OpenFlow optical port based on the given port and transport type.
-     *
-     * @param port OpenFlow optical port
-     * @param type transport type
-     * @return OpenFlow optical port
-     */
-    private OFPortOptical createOpticalPort(OFPortOptical port, short type) {
-        List<OFPortDescPropOpticalTransport> descList = new ArrayList<>(port.getDesc().size());
-
-        for (OFPortDescPropOpticalTransport desc : port.getDesc()) {
-            OFPortDescPropOpticalTransport newDesc = desc.createBuilder()
-                    .setType(desc.getType())
-                    .setPortSignalType(type)
-                    .setPortType(desc.getPortType())
-                    .setReserved(desc.getReserved())
-                    .build();
-            descList.add(newDesc);
-        }
-
-        OFPortOptical newPort = port.createBuilder()
-                .setConfig(port.getConfig())
-                .setDesc(descList)
-                .setHwAddr(port.getHwAddr())
-                .setName(port.getName())
-                .setPortNo(port.getPortNo())
-                .setState(port.getState())
-                .build();
-
-        return newPort;
-    }
-
-    /**
      * Builds list of OFPortOptical ports based on the multi-part circuit ports reply.
      *
      * Ensure the optical transport port's signal type is configured correctly.
@@ -240,41 +183,7 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
      * @param wPorts OF reply with circuit ports
      */
     private void createOpticalPortList(OFCircuitPortsReply wPorts) {
-/*
-        opticalPorts = new ArrayList<>(wPorts.getEntries().size());
-
-        for (OFPortOptical p : wPorts.getEntries()) {
-            short signalType;
-
-            // FIXME: use constants once loxi has full optical extensions
-            if (hasPort(p.getPortNo())) {
-                signalType = 5;      // OCH port
-            } else {
-                signalType = 2;      // OMS port
-            }
-
-            opticalPorts.add(createOpticalPort(p, signalType));
-        }
-*/
         opticalPorts = new ArrayList<>();
         opticalPorts.addAll(wPorts.getEntries());
-    }
-
-    /**
-     * Checks if given port is also part of the regular port desc stats, i.e., is the port a tap port.
-     *
-     * @param port given OF port
-     * @return true if the port is a tap (OCh), false otherwise (OMS port)
-     */
-    private boolean hasPort(OFPort port) {
-        for (OFPortDescStatsReply reply : this.ports) {
-            for (OFPortDesc p : reply.getEntries()) {
-                if (p.getPortNo().equals(port)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 }

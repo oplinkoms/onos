@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
+
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
@@ -45,6 +46,7 @@ import org.projectfloodlight.openflow.protocol.OFCalientFlowStatsEntry;
 import org.projectfloodlight.openflow.protocol.OFCalientFlowStatsReply;
 import org.projectfloodlight.openflow.protocol.OFCircuitPortStatus;
 import org.projectfloodlight.openflow.protocol.OFExperimenter;
+import org.projectfloodlight.openflow.protocol.OFExperimenterStatsReply;
 import org.projectfloodlight.openflow.protocol.OFFactories;
 import org.projectfloodlight.openflow.protocol.OFFlowStatsEntry;
 import org.projectfloodlight.openflow.protocol.OFFlowStatsReply;
@@ -53,6 +55,7 @@ import org.projectfloodlight.openflow.protocol.OFGroupDescStatsReply;
 import org.projectfloodlight.openflow.protocol.OFGroupStatsEntry;
 import org.projectfloodlight.openflow.protocol.OFGroupStatsReply;
 import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFOplinkStatsReply;
 import org.projectfloodlight.openflow.protocol.OFPacketIn;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 import org.projectfloodlight.openflow.protocol.OFPortStatsEntry;
@@ -374,6 +377,11 @@ public class OpenFlowControllerImpl implements OpenFlowController {
                             rep.setEntries(Lists.newLinkedList(flowStats));
                             executorMsgs.submit(new OFMessageHandler(dpid, rep.build()));
                         }
+                    } else if (reply instanceof OFOplinkStatsReply) {
+                        OFExperimenterStatsReply eReply = (OFExperimenterStatsReply) reply;
+                        log.debug("Oplink stats reply, stats type : {}, experimentID: {}",
+                            reply.getStatsType(), eReply.getExperimenter());
+                        executorMsgs.submit(new OFMessageHandler(dpid, reply));
                     } else {
                         log.warn("Unsupported stats type : {}", reply.getStatsType());
                     }

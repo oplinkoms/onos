@@ -21,6 +21,7 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
@@ -55,10 +56,12 @@ import org.projectfloodlight.openflow.protocol.OFBadRequestCode;
 import org.projectfloodlight.openflow.protocol.OFBarrierRequest;
 import org.projectfloodlight.openflow.protocol.OFErrorMsg;
 import org.projectfloodlight.openflow.protocol.OFErrorType;
+import org.projectfloodlight.openflow.protocol.OFExperimenterStatsReply;
 import org.projectfloodlight.openflow.protocol.OFFlowMod;
 import org.projectfloodlight.openflow.protocol.OFFlowRemoved;
 import org.projectfloodlight.openflow.protocol.OFFlowStatsReply;
 import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFOplinkChannelPowerReply;
 import org.projectfloodlight.openflow.protocol.OFPortStatus;
 import org.projectfloodlight.openflow.protocol.OFStatsReply;
 import org.projectfloodlight.openflow.protocol.OFStatsType;
@@ -325,6 +328,14 @@ public class OpenFlowRuleProvider extends AbstractProvider
                 case STATS_REPLY:
                     if (((OFStatsReply) msg).getStatsType() == OFStatsType.FLOW) {
                         pushFlowMetrics(dpid, (OFFlowStatsReply) msg);
+                    } else if (((OFStatsReply) msg).getStatsType() == OFStatsType.EXPERIMENTER) {
+                        OFExperimenterStatsReply eReply = (OFExperimenterStatsReply) msg;
+                        log.debug("received experiment stats type, experimentID: {}",
+                                eReply.getExperimenter());
+                        if (msg instanceof OFOplinkChannelPowerReply) {
+                            OFOplinkChannelPowerReply oReply = (OFOplinkChannelPowerReply) msg;
+                            log.warn("received Oplink channel power reply, sub type: {}", oReply.getSubtype());
+                        }
                     }
                     break;
                 case BARRIER_REPLY:

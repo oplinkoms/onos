@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
@@ -64,8 +65,10 @@ import org.onosproject.openflow.controller.PortDescPropertyType;
 import org.onosproject.openflow.controller.RoleState;
 import org.osgi.service.component.ComponentContext;
 import org.projectfloodlight.openflow.protocol.OFCalientPortDescStatsEntry;
+import org.projectfloodlight.openflow.protocol.OFExperimenterStatsReply;
 import org.projectfloodlight.openflow.protocol.OFFactory;
 import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFOplinkPortPowerReply;
 import org.projectfloodlight.openflow.protocol.OFPortConfig;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 import org.projectfloodlight.openflow.protocol.OFPortDescPropOpticalTransport;
@@ -557,6 +560,14 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                         if (!portStatsReply.getFlags().contains(OFStatsReplyFlags.REPLY_MORE)) {
                             pushPortMetrics(dpid, portStatsReplies.get(dpid));
                             portStatsReplies.get(dpid).clear();
+                        }
+                    } else if (((OFStatsReply) msg).getStatsType() == OFStatsType.EXPERIMENTER) {
+                        OFExperimenterStatsReply eReply = (OFExperimenterStatsReply) msg;
+                        LOG.debug("received experiment stats type, experimentID: {}",
+                                eReply.getExperimenter());
+                        if (msg instanceof OFOplinkPortPowerReply) {
+                            OFOplinkPortPowerReply oReply = (OFOplinkPortPowerReply) msg;
+                            LOG.warn("received Oplink port power reply, sub type: {}", oReply.getSubtype());
                         }
                     }
                     break;
