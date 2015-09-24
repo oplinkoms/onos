@@ -32,8 +32,13 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.MoreObjects;
 
-/*
- *   ref : draft-zhao-pce-pcep-extension-for-pce-controller-01 , section : 7.4.
+/**
+ * Provides PCEP label object.
+ */
+public class PcepLabelObjectVer1 implements PcepLabelObject {
+
+    /*
+     *   ref : draft-zhao-pce-pcep-extension-for-pce-controller-01 , section : 7.4.
 
         0                   1                   2                   3
            0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -47,9 +52,7 @@ import com.google.common.base.MoreObjects;
        |                                                               |
        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
                      The LABEL Object format
- */
-public class PcepLabelObjectVer1 implements PcepLabelObject {
-
+     */
     protected static final Logger log = LoggerFactory.getLogger(PcepLspObjectVer1.class);
 
     public static final byte LABEL_OBJ_TYPE = 1;
@@ -135,14 +138,14 @@ public class PcepLabelObjectVer1 implements PcepLabelObject {
         int label;
 
         // Optional TLV
-        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<>();
         labelObjHeader = PcepObjectHeader.read(cb);
 
         //take only LspObject buffer.
         ChannelBuffer tempCb = cb.readBytes(labelObjHeader.getObjLen() - OBJECT_HEADER_LENGTH);
 
         int iTemp = tempCb.readInt();
-        bOFlag = (iTemp & (byte) 0x01) == 1 ? true : false;
+        bOFlag = (iTemp & (byte) 0x01) == 1;
         label = tempCb.readInt();
 
         // parse optional TLV
@@ -188,7 +191,7 @@ public class PcepLabelObjectVer1 implements PcepLabelObject {
      */
     protected static LinkedList<PcepValueType> parseOptionalTlv(ChannelBuffer cb) throws PcepParseException {
 
-        LinkedList<PcepValueType> llOutOptionalTlv = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llOutOptionalTlv = new LinkedList<>();
 
         while (MINIMUM_COMMON_HEADER_LENGTH <= cb.readableBytes()) {
 
@@ -247,7 +250,7 @@ public class PcepLabelObjectVer1 implements PcepLabelObject {
         while (listIterator.hasNext()) {
             PcepValueType tlv = listIterator.next();
 
-            if (null == tlv) {
+            if (tlv == null) {
                 log.debug("tlv is null from OptionalTlv list");
                 continue;
             }
@@ -269,7 +272,7 @@ public class PcepLabelObjectVer1 implements PcepLabelObject {
         private boolean bOFlag;
         private int label;
 
-        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<>();
 
         private boolean bIsPFlagSet = false;
         private boolean bPFlag;
@@ -358,7 +361,10 @@ public class PcepLabelObjectVer1 implements PcepLabelObject {
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(getClass()).add("OFlag", bOFlag).add("label", label)
-                .add("OptionalTlvList", llOptionalTlv).toString();
+        return MoreObjects.toStringHelper(getClass())
+                .add("OFlag", bOFlag)
+                .add("label", label)
+                .add("OptionalTlvList", llOptionalTlv)
+                .toString();
     }
 }

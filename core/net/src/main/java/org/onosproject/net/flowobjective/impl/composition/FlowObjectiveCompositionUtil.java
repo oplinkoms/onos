@@ -28,6 +28,7 @@ import org.onosproject.net.flow.criteria.VlanIdCriterion;
 import org.onosproject.net.flow.criteria.VlanPcpCriterion;
 import org.onosproject.net.flow.criteria.MplsCriterion;
 import org.onosproject.net.flow.criteria.IPCriterion;
+import org.onosproject.net.flow.criteria.IPv6FlowLabelCriterion;
 import org.onosproject.net.flow.criteria.Criteria;
 import org.onosproject.net.flow.instructions.Instruction;
 import org.onosproject.net.flow.instructions.L0ModificationInstruction;
@@ -252,7 +253,7 @@ public final class FlowObjectiveCompositionUtil {
                         case MPLS_LABEL:
                             if (criterionMap.containsKey(Criterion.Type.MPLS_LABEL)) {
                                 if (((MplsCriterion) criterionMap.get((Criterion.Type.MPLS_LABEL))).label()
-                                        .equals(((L2ModificationInstruction.ModMplsLabelInstruction) l2).label())) {
+                                        .equals(((L2ModificationInstruction.ModMplsLabelInstruction) l2).mplsLabel())) {
                                     criterionMap.remove(Criterion.Type.ETH_DST);
                                 } else {
                                     return null;
@@ -316,9 +317,8 @@ public final class FlowObjectiveCompositionUtil {
                             }
                         case IPV6_FLABEL:
                             if (criterionMap.containsKey(Criterion.Type.IPV6_FLABEL)) {
-                                if (((IPCriterion) criterionMap.get(Criterion.Type.IPV6_FLABEL)).ip()
-                                        .equals(((L3ModificationInstruction.ModIPv6FlowLabelInstruction) l3)
-                                                .flowLabel())) {
+                                if (((IPv6FlowLabelCriterion) criterionMap.get(Criterion.Type.IPV6_FLABEL)).flowLabel()
+                                        == (((L3ModificationInstruction.ModIPv6FlowLabelInstruction) l3).flowLabel())) {
                                     criterionMap.remove(Criterion.Type.IPV4_SRC);
                                 } else {
                                     return null;

@@ -35,6 +35,9 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.MoreObjects;
 
+/**
+ * Provides PCEP report message.
+ */
 class PcepReportMsgVer1 implements PcepReportMsg {
 
     // Pcep version: 1
@@ -71,6 +74,9 @@ class PcepReportMsgVer1 implements PcepReportMsg {
 
     public static final PcepReportMsgVer1.Reader READER = new Reader();
 
+    /**
+     * Reader class for reading PCEP report message from channel buffer.
+     */
     static class Reader implements PcepMessageReader<PcepReportMsg> {
 
         LinkedList<PcepStateReport> llStateReportList;
@@ -82,7 +88,7 @@ class PcepReportMsgVer1 implements PcepReportMsg {
                 throw new PcepParseException("Received packet size " + cb.readableBytes()
                         + " is less than the expected size: " + PACKET_MINIMUM_LENGTH);
             }
-            llStateReportList = new LinkedList<PcepStateReport>();
+            llStateReportList = new LinkedList<>();
             byte version = cb.readByte();
             version = (byte) (version >> PcepMessageVer1.SHIFT_FLAG);
 
@@ -217,6 +223,9 @@ class PcepReportMsgVer1 implements PcepReportMsg {
 
     static final Writer WRITER = new Writer();
 
+    /**
+     * Writer class for writing PCEP report message to channel buffer.
+     */
     static class Writer implements PcepMessageWriter<PcepReportMsgVer1> {
 
         @Override
@@ -244,7 +253,7 @@ class PcepReportMsgVer1 implements PcepReportMsg {
                 PcepSrpObject srpObj = stateRpt.getSrpObject();
 
                 //SRP object is optional
-                if (null != srpObj) {
+                if (srpObj != null) {
                     srpObj.write(cb);
                 }
 
@@ -293,6 +302,8 @@ class PcepReportMsgVer1 implements PcepReportMsg {
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(getClass()).add("StateReportList", llStateReportList).toString();
+        return MoreObjects.toStringHelper(getClass())
+                .add("StateReportList", llStateReportList)
+                .toString();
     }
 }

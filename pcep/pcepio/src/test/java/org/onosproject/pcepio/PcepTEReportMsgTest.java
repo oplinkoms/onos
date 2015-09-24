@@ -17,7 +17,6 @@ package org.onosproject.pcepio;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
-import org.junit.Assert;
 import org.junit.Test;
 import org.onosproject.pcepio.exceptions.PcepParseException;
 import org.onosproject.pcepio.protocol.PcepFactories;
@@ -25,26 +24,28 @@ import org.onosproject.pcepio.protocol.PcepMessage;
 import org.onosproject.pcepio.protocol.PcepMessageReader;
 import org.onosproject.pcepio.protocol.PcepTEReportMsg;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.core.Is.is;
+
 public class PcepTEReportMsgTest {
 
     /**
      * This test case checks for
      * TE Object (Routing Universe TLV, Local TE Node Descriptors TLV(AutonomousSystemTlv)).
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest1() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x28, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x28, // common header
                 0x0E, 0x10, 0x00, 0x24, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x0C, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x08, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystem Tlv
-                0x00, 0x00, 0x00, 0x11 };
+                0x00, 0x00, 0x00, 0x11};
 
         ChannelBuffer buffer = ChannelBuffers.dynamicBuffer();
         buffer.writeBytes(teReportMsg);
@@ -55,35 +56,34 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
      * This test case checks for
-     *T E Object (Routing Universe TLV, Local TE Node Descriptors TLV(AutonomousSystemTlv)) with different TE-ID.
+     * T E Object (Routing Universe TLV, Local TE Node Descriptors TLV(AutonomousSystemTlv)) with different TE-ID.
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest2() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x28, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x28, // common header
                 0x0E, 0x10, 0x00, 0x24, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x0C, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x08, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
-                0x00, 0x00, 0x00, 0x11 };
+                0x00, 0x00, 0x00, 0x11};
 
         ChannelBuffer buffer = ChannelBuffers.dynamicBuffer();
         buffer.writeBytes(teReportMsg);
@@ -94,31 +94,29 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
      * This test case checks for  TE Object (Routing Universe TLV)
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest3() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x1c, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x1c, // common header
                 0x0E, 0x10, 0x00, 0x18, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
 
         ChannelBuffer buffer = ChannelBuffers.dynamicBuffer();
         buffer.writeBytes(teReportMsg);
@@ -129,15 +127,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -145,19 +143,17 @@ public class PcepTEReportMsgTest {
      * TE Object (Routing Universe TLV,Local TE Node Descriptors TLV(AutonomousSystemTlv, BGPLSidentifierTlv.
      * OSPFareaIDsubTlv, RouterIDSubTlv)).
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest4() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x44, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x44, // common header
                 0x0E, 0x10, 0x00, 0x40, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -177,15 +173,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -193,19 +189,17 @@ public class PcepTEReportMsgTest {
      * TE Object (Routing Universe TLV,Local TE Node Descriptors TLV(BGPLSidentifierTlv
      * OSPFareaIDsubTlv, RouterIDSubTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest5() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x3C, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x3C, // common header
                 0x0E, 0x10, 0x00, 0x38, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x20, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x1C, // Local TE Node Descriptors TLV
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x02, 0x58, 0x00, 0x04, //OSPFareaIDsubTlv
@@ -223,34 +217,32 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
      * This test case checks for TE Object (Routing Universe TLV,Local TE Node Descriptors TLV(OSPFareaIDsubTlv,
      * RouterIDSubTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest6() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x34, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x34, // common header
                 0x0E, 0x10, 0x00, 0x30, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x18, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x14, // Local TE Node Descriptors TLV
                 0x02, 0x58, 0x00, 0x04, //OSPFareaIDsubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
@@ -266,33 +258,31 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
      * This test case checks for TE Object (Routing Universe TLV,Local TE Node Descriptors TLV(RouterIDSubTlv)).
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest7() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x2C, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x2C, // common header
                 0x0E, 0x10, 0x00, 0x28, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x10, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x0C, // Local TE Node Descriptors TLV
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11};
@@ -306,33 +296,31 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
      * This test case checks for TE Object (Routing Universe TLV,Local TE Node Descriptors TLV)
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest8() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x20, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x20, // common header
                 0x0E, 0x10, 0x00, 0x1C, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x04 // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x00 // Local TE Node Descriptors TLV
         };
 
         ChannelBuffer buffer = ChannelBuffers.dynamicBuffer();
@@ -344,15 +332,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -361,19 +349,17 @@ public class PcepTEReportMsgTest {
      * OSPFareaIDsubTlv, RouterIDSubTlv), RemoteTENodeDescriptorsTLV(AutonomousSystemTlv, BGPLSidentifierTlv.
      * OSPFareaIDsubTlv, RouterIDSubTlv)).
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest9() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x6C, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x6C, // common header
                 0x0E, 0x10, 0x00, 0x68, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -383,7 +369,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -404,15 +390,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -421,19 +407,17 @@ public class PcepTEReportMsgTest {
      * OSPFareaIDsubTlv, RouterIDSubTlv), RemoteTENodeDescriptorsTLV(BGPLSidentifierTlv
      * OSPFareaIDsubTlv, RouterIDSubTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest10() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x64, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x64, // common header
                 0x0E, 0x10, 0x00, 0x60, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -443,7 +427,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x20, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x1C, //RemoteTENodeDescriptorsTLV
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x02, 0x58, 0x00, 0x04, //OSPFareaIDsubTlv
@@ -462,15 +446,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -478,19 +462,17 @@ public class PcepTEReportMsgTest {
      * TE Object (Routing Universe TLV,Local TE Node Descriptors TLV(AutonomousSystemTlv, BGPLSidentifierTlv
      * OSPFareaIDsubTlv, RouterIDSubTlv), RemoteTENodeDescriptorsTLV(OSPFareaIDsubTlv, RouterIDSubTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest11() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x5C, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x5C, // common header
                 0x0E, 0x10, 0x00, 0x58, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -500,7 +482,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x18, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x14, //RemoteTENodeDescriptorsTLV
                 0x02, 0x58, 0x00, 0x04, //OSPFareaIDsubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
@@ -517,15 +499,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -533,19 +515,17 @@ public class PcepTEReportMsgTest {
      * TE Object (Routing Universe TLV,Local TE Node Descriptors TLV(AutonomousSystemTlv, BGPLSidentifierTlv
      * OSPFareaIDsubTlv, RouterIDSubTlv), RemoteTENodeDescriptorsTLV(RouterIDSubTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest12() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x54, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x54, // common header
                 0x0E, 0x10, 0x00, 0x50, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -555,7 +535,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x10, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x0c, //RemoteTENodeDescriptorsTLV
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11
@@ -570,15 +550,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -586,19 +566,17 @@ public class PcepTEReportMsgTest {
      * TE Object (Routing Universe TLV,Local TE Node Descriptors TLV(AutonomousSystemTlv, BGPLSidentifierTlv
      * OSPFareaIDsubTlv, RouterIDSubTlv), RemoteTENodeDescriptorsTLV)
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest13() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, 0x48, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, 0x48, // common header
                 0x0E, 0x10, 0x00, 0x44, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -608,7 +586,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x04, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x00, //RemoteTENodeDescriptorsTLV
         };
 
         ChannelBuffer buffer = ChannelBuffers.dynamicBuffer();
@@ -620,15 +598,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -638,19 +616,17 @@ public class PcepTEReportMsgTest {
      * OSPFareaIDsubTlv, RouterIDSubTlv), TELinkDescriptorsTLV(LinkLocalRemoteIdentifiersTlv
      * IPv4InterfaceAddressTlv, IPv4NeighborAddressTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest14() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, (byte) 0x8C, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, (byte) 0x8C, // common header
                 0x0E, 0x10, 0x00, (byte) 0x88, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -660,7 +636,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -670,7 +646,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x20, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x1C, //TELinkDescriptorsTLV
                 0x00, 0x04, 0x00, 0x08, //LinkLocalRemoteIdentifiersTlv
                 0x01, 0x11, 0x00, 0x09,
                 0x01, 0x21, 0x00, 0x09,
@@ -689,15 +665,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -707,19 +683,17 @@ public class PcepTEReportMsgTest {
      * OSPFareaIDsubTlv, RouterIDSubTlv), TELinkDescriptorsTLV(
      * IPv4InterfaceAddressTlv, IPv4NeighborAddressTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest15() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, (byte) 0x80, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, (byte) 0x80, // common header
                 0x0E, 0x10, 0x00, (byte) 0x7C, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -729,7 +703,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -739,7 +713,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x14, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x10, //TELinkDescriptorsTLV
                 0x00, 0x06, 0x00, 0x04, //IPv4InterfaceAddressTlv
                 0x01, 0x01, 0x01, 0x01,
                 0x00, 0x08, 0x00, 0x04, //IPv4NeighborAddressTlv
@@ -755,15 +729,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -772,19 +746,17 @@ public class PcepTEReportMsgTest {
      * OSPFareaIDsubTlv, RouterIDSubTlv), RemoteTENodeDescriptorsTLV(AutonomousSystemTlv, BGPLSidentifierTlv
      * OSPFareaIDsubTlv, RouterIDSubTlv), TELinkDescriptorsTLV(IPv4NeighborAddressTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest16() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, (byte) 0x78, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, (byte) 0x78, // common header
                 0x0E, 0x10, 0x00, (byte) 0x74, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -794,7 +766,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -804,7 +776,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x0C, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x08, //TELinkDescriptorsTLV
                 0x00, 0x08, 0x00, 0x04, //IPv4NeighborAddressTlv
                 0x01, 0x011, 0x01, 0x10
         };
@@ -818,15 +790,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -835,19 +807,17 @@ public class PcepTEReportMsgTest {
      * OSPFareaIDsubTlv, RouterIDSubTlv), RemoteTENodeDescriptorsTLV(AutonomousSystemTlv, BGPLSidentifierTlv
      * OSPFareaIDsubTlv, RouterIDSubTlv), TELinkDescriptorsTLV)
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest17() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, (byte) 0x70, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, (byte) 0x70, // common header
                 0x0E, 0x10, 0x00, (byte) 0x6C, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -857,7 +827,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -867,7 +837,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x04, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x00, //TELinkDescriptorsTLV
         };
 
         ChannelBuffer buffer = ChannelBuffers.dynamicBuffer();
@@ -879,15 +849,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -897,19 +867,17 @@ public class PcepTEReportMsgTest {
      * OSPFareaIDsubTlv, RouterIDSubTlv), TELinkDescriptorsTLV(LinkLocalRemoteIdentifiersTlv
      * IPv4InterfaceAddressTlv, IPv4NeighborAddressTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest18() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, (byte) 0xC0, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, (byte) 0xC0, // common header
                 0x0E, 0x10, 0x00, (byte) 0xbC, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -919,7 +887,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -929,7 +897,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x20, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x1C, //TELinkDescriptorsTLV
                 0x00, 0x04, 0x00, 0x08, //LinkLocalRemoteIdentifiersTlv
                 0x01, 0x11, 0x00, 0x09,
                 0x01, 0x21, 0x00, 0x09,
@@ -937,7 +905,7 @@ public class PcepTEReportMsgTest {
                 0x01, 0x01, 0x01, 0x01,
                 0x00, 0x08, 0x00, 0x04, //IPv4NeighborAddressTlv
                 0x01, 0x011, 0x01, 0x10,
-                0x04, (byte) 0xF3, 0x00, 0x34, //TENodeAttributesTlv
+                0x04, (byte) 0xF3, 0x00, 0x30, //TENodeAttributesTlv
                 0x00, 0x0E, 0x00, 0x01, //NodeFlagBitsTlv
                 (byte) 0x90, 0x00, 0x00, 0x00,
                 0x03, (byte) 0xE9, 0x00, 0x04, //OpaqueNodeAttributeTlv
@@ -961,15 +929,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -980,19 +948,17 @@ public class PcepTEReportMsgTest {
      * IPv4InterfaceAddressTlv, IPv4NeighborAddressTlv), TENodeAttributesTlv(NodeFlagBitsTlv
      * OpaqueNodeAttributeTlv, NodeNameTlv, ISISAreaIdentifierTlv, IPv4TERouterIdOfLocalNodeTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest19() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, (byte) 0xC0, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, (byte) 0xC0, // common header
                 0x0E, 0x10, 0x00, (byte) 0xBC, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1002,7 +968,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1012,7 +978,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x20, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x1C, //TELinkDescriptorsTLV
                 0x00, 0x04, 0x00, 0x08, //LinkLocalRemoteIdentifiersTlv
                 0x01, 0x11, 0x00, 0x09,
                 0x01, 0x21, 0x00, 0x09,
@@ -1020,7 +986,7 @@ public class PcepTEReportMsgTest {
                 0x01, 0x01, 0x01, 0x01,
                 0x00, 0x08, 0x00, 0x04, //IPv4NeighborAddressTlv
                 0x01, 0x011, 0x01, 0x10,
-                0x04, (byte) 0xF3, 0x00, 0x34, //TENodeAttributesTlv
+                0x04, (byte) 0xF3, 0x00, 0x30, //TENodeAttributesTlv
                 0x00, 0x0E, 0x00, 0x01, //NodeFlagBitsTlv
                 (byte) 0x90, 0x00, 0x00, 0x00,
                 0x03, (byte) 0xE9, 0x00, 0x04, //OpaqueNodeAttributeTlv
@@ -1044,15 +1010,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -1061,21 +1027,19 @@ public class PcepTEReportMsgTest {
      * OSPFareaIDsubTlv, RouterIDSubTlv), RemoteTENodeDescriptorsTLV(AutonomousSystemTlv, BGPLSidentifierTlv
      * OSPFareaIDsubTlv, RouterIDSubTlv), TELinkDescriptorsTLV(LinkLocalRemoteIdentifiersTlv
      * IPv4InterfaceAddressTlv, IPv4NeighborAddressTlv), TENodeAttributesTlv(OpaqueNodeAttributeTlv
-     *  NodeNameTlv, ISISAreaIdentifierTlv, IPv4TERouterIdOfLocalNodeTlv))
+     * NodeNameTlv, ISISAreaIdentifierTlv, IPv4TERouterIdOfLocalNodeTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest20() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, (byte) 0xB8, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, (byte) 0xB8, // common header
                 0x0E, 0x10, 0x00, (byte) 0xB4, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1085,7 +1049,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1095,7 +1059,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x20, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x1C, //TELinkDescriptorsTLV
                 0x00, 0x04, 0x00, 0x08, //LinkLocalRemoteIdentifiersTlv
                 0x01, 0x11, 0x00, 0x09,
                 0x01, 0x21, 0x00, 0x09,
@@ -1103,7 +1067,7 @@ public class PcepTEReportMsgTest {
                 0x01, 0x01, 0x01, 0x01,
                 0x00, 0x08, 0x00, 0x04, //IPv4NeighborAddressTlv
                 0x01, 0x011, 0x01, 0x10,
-                0x04, (byte) 0xF3, 0x00, 0x2C, //TENodeAttributesTlv
+                0x04, (byte) 0xF3, 0x00, 0x28, //TENodeAttributesTlv
                 0x03, (byte) 0xE9, 0x00, 0x04, //OpaqueNodeAttributeTlv
                 0x01, 0x011, 0x01, 0x10,
                 0x03, (byte) 0xEF, 0x00, 0x08, //NodeNameTlv
@@ -1125,15 +1089,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -1142,21 +1106,19 @@ public class PcepTEReportMsgTest {
      * OSPFareaIDsubTlv, RouterIDSubTlv), RemoteTENodeDescriptorsTLV(AutonomousSystemTlv, BGPLSidentifierTlv
      * OSPFareaIDsubTlv, RouterIDSubTlv), TELinkDescriptorsTLV(LinkLocalRemoteIdentifiersTlv.
      * IPv4InterfaceAddressTlv, IPv4NeighborAddressTlv), TENodeAttributesTlv(OpaqueNodeAttributeTlv
-     *  ISISAreaIdentifierTlv, IPv4TERouterIdOfLocalNodeTlv))
+     * ISISAreaIdentifierTlv, IPv4TERouterIdOfLocalNodeTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest21() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x00, (byte) 0xAC, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x00, (byte) 0xAC, // common header
                 0x0E, 0x10, 0x00, (byte) 0xA8, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1166,7 +1128,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1176,7 +1138,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x20, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x1C, //TELinkDescriptorsTLV
                 0x00, 0x04, 0x00, 0x08, //LinkLocalRemoteIdentifiersTlv
                 0x01, 0x11, 0x00, 0x09,
                 0x01, 0x21, 0x00, 0x09,
@@ -1184,7 +1146,7 @@ public class PcepTEReportMsgTest {
                 0x01, 0x01, 0x01, 0x01,
                 0x00, 0x08, 0x00, 0x04, //IPv4NeighborAddressTlv
                 0x01, 0x011, 0x01, 0x10,
-                0x04, (byte) 0xF3, 0x00, 0x20, //TENodeAttributesTlv
+                0x04, (byte) 0xF3, 0x00, 0x1C, //TENodeAttributesTlv
                 0x03, (byte) 0xE9, 0x00, 0x04, //OpaqueNodeAttributeTlv
                 0x01, 0x011, 0x01, 0x10,
                 0x00, 0x6B, 0x00, 0x08, //ISISAreaIdentifierTlv
@@ -1203,15 +1165,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -1226,19 +1188,17 @@ public class PcepTEReportMsgTest {
      * LinkProtectionTypeTlv, MPLSProtocolMaskTlv, IGPMetricTlv:, SharedRiskLinkGroupTlv.
      * OpaqueLinkAttributeTlv, LinkNameTlv)).
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest22() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x01, (byte) 0x20, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x01, (byte) 0x120, // common header
                 0x0E, 0x10, 0x01, (byte) 0x1C, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1248,7 +1208,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1258,7 +1218,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x20, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x1C, //TELinkDescriptorsTLV
                 0x00, 0x04, 0x00, 0x08, //LinkLocalRemoteIdentifiersTlv
                 0x01, 0x11, 0x00, 0x09,
                 0x01, 0x21, 0x00, 0x09,
@@ -1266,7 +1226,7 @@ public class PcepTEReportMsgTest {
                 0x01, 0x01, 0x01, 0x01,
                 0x00, 0x08, 0x00, 0x04, //IPv4NeighborAddressTlv
                 0x01, 0x011, 0x01, 0x10,
-                0x04, (byte) 0xF3, 0x00, 0x2C, //TENodeAttributesTlv
+                0x04, (byte) 0xF3, 0x00, 0x28, //TENodeAttributesTlv
                 0x03, (byte) 0xE9, 0x00, 0x04, //OpaqueNodeAttributeTlv
                 0x01, 0x011, 0x01, 0x10,
                 0x03, (byte) 0xEF, 0x00, 0x08, //NodeNameTlv
@@ -1277,7 +1237,7 @@ public class PcepTEReportMsgTest {
                 0x20, 0x01, 0x22, 0x01,
                 0x00, (byte) 0x86, 0x00, 0x04, //IPv4TERouterIdOfLocalNodeTlv
                 0x00, 0x01, 0x01, 0x02,
-                0x07, 0x69, 0x00, 0x68, //TELinkAttributesTlv
+                0x07, 0x69, 0x00, 0x64, //TELinkAttributesTlv
                 0x05, 0x3C, 0x00, 0x04, //IPv4TERouterIdOfRemoteNodeTlv
                 0x00, 0x07, 0x08, 0x00,
                 0x00, 0x03, 0x00, 0x04, //AdministrativeGroupTlv
@@ -1314,15 +1274,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -1337,19 +1297,17 @@ public class PcepTEReportMsgTest {
      * LinkProtectionTypeTlv, MPLSProtocolMaskTlv, IGPMetricTlv:, SharedRiskLinkGroupTlv
      * OpaqueLinkAttributeTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest23() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x01, (byte) 0x18, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x01, (byte) 0x118, // common header
                 0x0E, 0x10, 0x01, (byte) 0x14, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1359,7 +1317,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1369,7 +1327,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x20, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x1C, //TELinkDescriptorsTLV
                 0x00, 0x04, 0x00, 0x08, //LinkLocalRemoteIdentifiersTlv
                 0x01, 0x11, 0x00, 0x09,
                 0x01, 0x21, 0x00, 0x09,
@@ -1377,7 +1335,7 @@ public class PcepTEReportMsgTest {
                 0x01, 0x01, 0x01, 0x01,
                 0x00, 0x08, 0x00, 0x04, //IPv4NeighborAddressTlv
                 0x01, 0x011, 0x01, 0x10,
-                0x04, (byte) 0xF3, 0x00, 0x2C, //TENodeAttributesTlv
+                0x04, (byte) 0xF3, 0x00, 0x28, //TENodeAttributesTlv
                 0x03, (byte) 0xE9, 0x00, 0x04, //OpaqueNodeAttributeTlv
                 0x01, 0x011, 0x01, 0x10,
                 0x03, (byte) 0xEF, 0x00, 0x08, //NodeNameTlv
@@ -1388,7 +1346,7 @@ public class PcepTEReportMsgTest {
                 0x20, 0x01, 0x22, 0x01,
                 0x00, (byte) 0x86, 0x00, 0x04, //IPv4TERouterIdOfLocalNodeTlv
                 0x00, 0x01, 0x01, 0x02,
-                0x07, 0x69, 0x00, 0x60, //TELinkAttributesTlv
+                0x07, 0x69, 0x00, 0x5C, //TELinkAttributesTlv
                 0x05, 0x3C, 0x00, 0x04, //IPv4TERouterIdOfRemoteNodeTlv
                 0x00, 0x07, 0x08, 0x00,
                 0x00, 0x03, 0x00, 0x04, //AdministrativeGroupTlv
@@ -1423,15 +1381,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -1445,19 +1403,17 @@ public class PcepTEReportMsgTest {
      * MaximumLinkBandwidthTlv, MaximumReservableLinkBandwidthTlv, UnreservedBandwidthTlv, TEDefaultMetricTlv
      * LinkProtectionTypeTlv, MPLSProtocolMaskTlv, IGPMetricTlv:, SharedRiskLinkGroupTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest24() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x01, (byte) 0x10, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x01, (byte) 0x110, // common header
                 0x0E, 0x10, 0x01, (byte) 0x0C, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1467,7 +1423,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1477,7 +1433,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x20, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x1C, //TELinkDescriptorsTLV
                 0x00, 0x04, 0x00, 0x08, //LinkLocalRemoteIdentifiersTlv
                 0x01, 0x11, 0x00, 0x09,
                 0x01, 0x21, 0x00, 0x09,
@@ -1485,7 +1441,7 @@ public class PcepTEReportMsgTest {
                 0x01, 0x01, 0x01, 0x01,
                 0x00, 0x08, 0x00, 0x04, //IPv4NeighborAddressTlv
                 0x01, 0x011, 0x01, 0x10,
-                0x04, (byte) 0xF3, 0x00, 0x2C, //TENodeAttributesTlv
+                0x04, (byte) 0xF3, 0x00, 0x28, //TENodeAttributesTlv
                 0x03, (byte) 0xE9, 0x00, 0x04, //OpaqueNodeAttributeTlv
                 0x01, 0x011, 0x01, 0x10,
                 0x03, (byte) 0xEF, 0x00, 0x08, //NodeNameTlv
@@ -1496,7 +1452,7 @@ public class PcepTEReportMsgTest {
                 0x20, 0x01, 0x22, 0x01,
                 0x00, (byte) 0x86, 0x00, 0x04, //IPv4TERouterIdOfLocalNodeTlv
                 0x00, 0x01, 0x01, 0x02,
-                0x07, 0x69, 0x00, 0x58, //TELinkAttributesTlv
+                0x07, 0x69, 0x00, 0x54, //TELinkAttributesTlv
                 0x05, 0x3C, 0x00, 0x04, //IPv4TERouterIdOfRemoteNodeTlv
                 0x00, 0x07, 0x08, 0x00,
                 0x00, 0x03, 0x00, 0x04, //AdministrativeGroupTlv
@@ -1529,15 +1485,15 @@ public class PcepTEReportMsgTest {
         message = reader.readFrom(buffer);
 
         byte[] testReportMsg = {0};
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 
     /**
@@ -1551,19 +1507,17 @@ public class PcepTEReportMsgTest {
      * MaximumLinkBandwidthTlv, MaximumReservableLinkBandwidthTlv, UnreservedBandwidthTlv, TEDefaultMetricTlv
      * LinkProtectionTypeTlv, MPLSProtocolMaskTlv, IGPMetricTlv))
      * in PcTERpt message.
-     *
-     * @throws PcepParseException while parsing PCEP message
      */
     @Test
     public void teReportMessageTest25() throws PcepParseException {
 
-        byte[] teReportMsg = new byte[] {0x20, 0x0E, 0x01, 0x04, // common header
+        byte[] teReportMsg = new byte[]{0x20, 0x0E, 0x01, (byte) 0x104, // common header
                 0x0E, 0x10, 0x01, 0x00, // TE Object Header
                 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, // TE-ID
                 0x00, 0x0E, 0x00, 0x08, // Routing Universe TLV
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x01,
-                0x06, 0x65, 0x00, 0x28, // Local TE Node Descriptors TLV
+                0x06, 0x65, 0x00, 0x24, // Local TE Node Descriptors TLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1573,7 +1527,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x03, (byte) 0xEB, 0x00, 0x28, //RemoteTENodeDescriptorsTLV
+                0x03, (byte) 0xEB, 0x00, 0x24, //RemoteTENodeDescriptorsTLV
                 0x00, 0x64, 0x00, 0x04, //AutonomousSystemTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x11, 0x00, 0x04, //BGPLSidentifierTlv
@@ -1583,7 +1537,7 @@ public class PcepTEReportMsgTest {
                 0x03, (byte) 0xE8, 0x00, 0x08, //RouterIDSubTlv
                 0x00, 0x00, 0x00, 0x11,
                 0x00, 0x00, 0x00, 0x11,
-                0x04, 0x2E, 0x00, 0x20, //TELinkDescriptorsTLV
+                0x04, 0x2E, 0x00, 0x1C, //TELinkDescriptorsTLV
                 0x00, 0x04, 0x00, 0x08, //LinkLocalRemoteIdentifiersTlv
                 0x01, 0x11, 0x00, 0x09,
                 0x01, 0x21, 0x00, 0x09,
@@ -1591,7 +1545,7 @@ public class PcepTEReportMsgTest {
                 0x01, 0x01, 0x01, 0x01,
                 0x00, 0x08, 0x00, 0x04, //IPv4NeighborAddressTlv
                 0x01, 0x011, 0x01, 0x10,
-                0x04, (byte) 0xF3, 0x00, 0x2C, //TENodeAttributesTlv
+                0x04, (byte) 0xF3, 0x00, 0x28, //TENodeAttributesTlv
                 0x03, (byte) 0xE9, 0x00, 0x04, //OpaqueNodeAttributeTlv
                 0x01, 0x011, 0x01, 0x10,
                 0x03, (byte) 0xEF, 0x00, 0x08, //NodeNameTlv
@@ -1602,7 +1556,7 @@ public class PcepTEReportMsgTest {
                 0x20, 0x01, 0x22, 0x01,
                 0x00, (byte) 0x86, 0x00, 0x04, //IPv4TERouterIdOfLocalNodeTlv
                 0x00, 0x01, 0x01, 0x02,
-                0x07, 0x69, 0x00, 0x4C, //TELinkAttributesTlv
+                0x07, 0x69, 0x00, 0x48, //TELinkAttributesTlv
                 0x05, 0x3C, 0x00, 0x04, //IPv4TERouterIdOfRemoteNodeTlv
                 0x00, 0x07, 0x08, 0x00,
                 0x00, 0x03, 0x00, 0x04, //AdministrativeGroupTlv
@@ -1633,14 +1587,14 @@ public class PcepTEReportMsgTest {
 
         byte[] testReportMsg = {0};
 
-        Assert.assertTrue("PcepMessage is not instance of PcTERpt", message instanceof PcepTEReportMsg);
+        assertThat(message, instanceOf(PcepTEReportMsg.class));
         ChannelBuffer buf = ChannelBuffers.dynamicBuffer();
         message.writeTo(buf);
 
-        int readLen = buf.writerIndex() - 0;
+        int readLen = buf.writerIndex();
         testReportMsg = new byte[readLen];
         buf.readBytes(testReportMsg, 0, readLen);
 
-        Assert.assertArrayEquals("PcTERpt messages are not equal", teReportMsg, testReportMsg);
+        assertThat(testReportMsg, is(teReportMsg));
     }
 }

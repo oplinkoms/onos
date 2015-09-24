@@ -24,15 +24,18 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.MoreObjects;
 
-/*
- *      0                   1                   2                   3
-     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |    Reserved                                               |N|I|
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/**
+ * Provides PCEP inter layer object.
  */
 public class PcepInterLayerObjectVer1 implements PcepInterLayerObject {
 
+    /*
+     *      0                   1                   2                   3
+         0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        |    Reserved                                               |N|I|
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     */
     protected static final Logger log = LoggerFactory.getLogger(PcepInterLayerObjectVer1.class);
 
     public static final byte INTER_LAYER_OBJ_TYPE = 1;
@@ -44,7 +47,6 @@ public class PcepInterLayerObjectVer1 implements PcepInterLayerObject {
     public static final int OBJECT_HEADER_LENGTH = 4;
     public static final int NFLAG_SHIFT_VALUE = 0x02;
     public static final int IFLAG_SHIFT_VALUE = 0x01;
-    public static final int FLAGS_SET_VALUE = 1;
 
     static final PcepObjectHeader DEFAULT_INTER_LAYER_OBJECT_HEADER = new PcepObjectHeader(INTER_LAYER_OBJ_CLASS,
             INTER_LAYER_OBJ_TYPE, PcepObjectHeader.REQ_OBJ_OPTIONAL_PROCESS, PcepObjectHeader.RSP_OBJ_PROCESSED,
@@ -125,8 +127,8 @@ public class PcepInterLayerObjectVer1 implements PcepInterLayerObject {
         ChannelBuffer tempCb = cb.readBytes(interLayerObjHeader.getObjLen() - OBJECT_HEADER_LENGTH);
 
         int iTemp = tempCb.readInt();
-        bIFlag = ((iTemp & (byte) IFLAG_SHIFT_VALUE) == FLAGS_SET_VALUE) ? true : false;
-        bNFlag = ((iTemp & (byte) NFLAG_SHIFT_VALUE) == FLAGS_SET_VALUE) ? true : false;
+        bIFlag = ((iTemp & (byte) IFLAG_SHIFT_VALUE) == IFLAG_SHIFT_VALUE);
+        bNFlag = ((iTemp & (byte) NFLAG_SHIFT_VALUE) == NFLAG_SHIFT_VALUE);
 
         return new PcepInterLayerObjectVer1(interLayerObjHeader, bNFlag, bIFlag);
     }
@@ -254,6 +256,8 @@ public class PcepInterLayerObjectVer1 implements PcepInterLayerObject {
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(getClass()).add("IFlag", bIFlag).add("NFlag", bNFlag).toString();
+        return MoreObjects.toStringHelper(getClass())
+                .add("IFlag", bIFlag)
+                .add("NFlag", bNFlag).toString();
     }
 }

@@ -26,6 +26,7 @@ import org.onosproject.pcepio.types.PcepErrorDetailInfo;
 import org.onosproject.pcepio.types.PcepObjectHeader;
 import org.onosproject.pcepio.types.PcepValueType;
 import org.onosproject.pcepio.types.StatefulIPv4LspIdentidiersTlv;
+import org.onosproject.pcepio.types.StatefulLspDbVerTlv;
 import org.onosproject.pcepio.types.StatefulLspErrorCodeTlv;
 import org.onosproject.pcepio.types.StatefulRsvpErrorSpecTlv;
 import org.onosproject.pcepio.types.SymbolicPathNameTlv;
@@ -34,7 +35,12 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.MoreObjects;
 
-/*
+/**
+ * Provides PCEP lsp object.
+ */
+public class PcepLspObjectVer1 implements PcepLspObject {
+
+    /*
      message format.
      Reference : draft-ietf-pce-stateful-pce-11, section 7.3.
       0                   1                   2                   3
@@ -49,10 +55,7 @@ import com.google.common.base.MoreObjects;
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
                      The LSP Object format
- */
-
-public class PcepLspObjectVer1 implements PcepLspObject {
-
+     */
     protected static final Logger log = LoggerFactory.getLogger(PcepLspObjectVer1.class);
 
     public static final byte LSP_OBJ_TYPE = 1;
@@ -231,7 +234,7 @@ public class PcepLspObjectVer1 implements PcepLspObject {
         boolean bDFlag;
 
         // Optional TLV
-        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<>();
 
         lspObjHeader = PcepObjectHeader.read(cb);
 
@@ -246,13 +249,13 @@ public class PcepLspObjectVer1 implements PcepLspObject {
         Integer iX = (iTemp & OFLAG_TEMP_SHIFT_VALUE) >> OFLAG_SHIFT_VALUE;
         yOFlag = iX.byteValue();
         iX = (iTemp & AFLAG_TEMP_SHIFT_VALUE) >> AFLAG_SHIFT_VALUE;
-        bAFlag = (iX > 0) ? true : false;
+        bAFlag = iX > 0;
         iX = (iTemp & RFLAG_TEMP_SHIFT_VALUE) >> RFLAG_SHIFT_VALUE;
-        bRFlag = (iX > 0) ? true : false;
+        bRFlag = iX > 0;
         iX = (iTemp & SFLAG_TEMP_SHIFT_VALUE) >> SFLAG_SHIFT_VALUE;
-        bSFlag = (iX > 0) ? true : false;
+        bSFlag = iX > 0;
         iX = iTemp & DFLAG_TEMP_SHIFT_VALUE;
-        bDFlag = (iX > 0) ? true : false;
+        bDFlag = iX > 0;
 
         // parse optional TLV
         llOptionalTlv = parseOptionalTlv(tempCb);
@@ -311,7 +314,7 @@ public class PcepLspObjectVer1 implements PcepLspObject {
 
         LinkedList<PcepValueType> llOutOptionalTlv;
 
-        llOutOptionalTlv = new LinkedList<PcepValueType>();
+        llOutOptionalTlv = new LinkedList<>();
 
         while (MINIMUM_COMMON_HEADER_LENGTH <= cb.readableBytes()) {
 
@@ -334,6 +337,9 @@ public class PcepLspObjectVer1 implements PcepLspObject {
                 break;
             case SymbolicPathNameTlv.TYPE:
                 tlv = SymbolicPathNameTlv.read(cb, hLength);
+                break;
+            case StatefulLspDbVerTlv.TYPE:
+                tlv = StatefulLspDbVerTlv.read(cb);
                 break;
             default:
                 throw new PcepParseException("Received unsupported TLV type :" + hType);
@@ -371,7 +377,7 @@ public class PcepLspObjectVer1 implements PcepLspObject {
         while (listIterator.hasNext()) {
             PcepValueType tlv = listIterator.next();
 
-            if (null == tlv) {
+            if (tlv == null) {
                 log.debug("tlv is null from OptionalTlv list");
                 continue;
             }
@@ -556,8 +562,14 @@ public class PcepLspObjectVer1 implements PcepLspObject {
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(getClass()).add("PlspIDValue", iPlspId).add("OFlag", yOFlag)
-                .add("AFlag", bAFlag).add("RFlag", bRFlag).add("SFlag", bSFlag).add("DFlag", bDFlag)
-                .add("OptionalTlvList", llOptionalTlv).toString();
+        return MoreObjects.toStringHelper(getClass())
+                .add("PlspIDValue", iPlspId)
+                .add("OFlag", yOFlag)
+                .add("AFlag", bAFlag)
+                .add("RFlag", bRFlag)
+                .add("SFlag", bSFlag)
+                .add("DFlag", bDFlag)
+                .add("OptionalTlvList", llOptionalTlv)
+                .toString();
     }
 }

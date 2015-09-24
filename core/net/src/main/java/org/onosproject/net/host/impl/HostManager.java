@@ -24,12 +24,13 @@ import org.apache.felix.scr.annotations.Service;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
+import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.net.edge.EdgePortService;
 import org.onosproject.net.provider.AbstractListenerProviderRegistry;
-import org.onosproject.core.Permission;
 import org.onosproject.net.config.NetworkConfigEvent;
 import org.onosproject.net.config.NetworkConfigListener;
 import org.onosproject.net.config.NetworkConfigService;
-import org.onosproject.incubator.net.config.basics.BasicHostConfig;
+import org.onosproject.net.config.basics.BasicHostConfig;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Host;
@@ -45,7 +46,6 @@ import org.onosproject.net.host.HostProviderService;
 import org.onosproject.net.host.HostService;
 import org.onosproject.net.host.HostStore;
 import org.onosproject.net.host.HostStoreDelegate;
-import org.onosproject.net.host.PortAddresses;
 import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.provider.AbstractProviderService;
 import org.slf4j.Logger;
@@ -56,6 +56,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static org.onosproject.security.AppGuard.checkPermission;
 import static org.slf4j.LoggerFactory.getLogger;
+import static org.onosproject.security.AppPermission.Type.*;
 
 /**
  * Provides basic implementation of the host SB &amp; NB APIs.
@@ -86,6 +87,12 @@ public class HostManager
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected NetworkConfigService networkConfigService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected InterfaceService interfaceService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected EdgePortService edgePortService;
+
     private HostMonitor monitor;
 
     @Activate
@@ -93,7 +100,7 @@ public class HostManager
         store.setDelegate(delegate);
         eventDispatcher.addSink(HostEvent.class, listenerRegistry);
         networkConfigService.addListener(networkConfigListener);
-        monitor = new HostMonitor(deviceService, packetService, this);
+        monitor = new HostMonitor(packetService, this, interfaceService, edgePortService);
         monitor.start();
         log.info("Started");
     }
@@ -114,66 +121,66 @@ public class HostManager
 
     @Override
     public int getHostCount() {
-        checkPermission(Permission.HOST_READ);
+        checkPermission(HOST_READ);
         return store.getHostCount();
     }
 
     @Override
     public Iterable<Host> getHosts() {
-        checkPermission(Permission.HOST_READ);
+        checkPermission(HOST_READ);
         return store.getHosts();
     }
 
     @Override
     public Host getHost(HostId hostId) {
-        checkPermission(Permission.HOST_READ);
+        checkPermission(HOST_READ);
         checkNotNull(hostId, HOST_ID_NULL);
         return store.getHost(hostId);
     }
 
     @Override
     public Set<Host> getHostsByVlan(VlanId vlanId) {
-        checkPermission(Permission.HOST_READ);
+        checkPermission(HOST_READ);
         return store.getHosts(vlanId);
     }
 
     @Override
     public Set<Host> getHostsByMac(MacAddress mac) {
-        checkPermission(Permission.HOST_READ);
+        checkPermission(HOST_READ);
         checkNotNull(mac, "MAC address cannot be null");
         return store.getHosts(mac);
     }
 
     @Override
     public Set<Host> getHostsByIp(IpAddress ip) {
-        checkPermission(Permission.HOST_READ);
+        checkPermission(HOST_READ);
         checkNotNull(ip, "IP address cannot be null");
         return store.getHosts(ip);
     }
 
     @Override
     public Set<Host> getConnectedHosts(ConnectPoint connectPoint) {
-        checkPermission(Permission.HOST_READ);
+        checkPermission(HOST_READ);
         checkNotNull(connectPoint, "Connection point cannot be null");
         return store.getConnectedHosts(connectPoint);
     }
 
     @Override
     public Set<Host> getConnectedHosts(DeviceId deviceId) {
-        checkPermission(Permission.HOST_READ);
+        checkPermission(HOST_READ);
         checkNotNull(deviceId, "Device ID cannot be null");
         return store.getConnectedHosts(deviceId);
     }
 
     @Override
     public void startMonitoringIp(IpAddress ip) {
-        checkPermission(Permission.HOST_EVENT);
+        checkPermission(HOST_EVENT);
         monitor.addMonitoringFor(ip);
     }
 
     @Override
     public void stopMonitoringIp(IpAddress ip) {
-        checkPermission(Permission.HOST_EVENT);
+        checkPermission(HOST_EVENT);
         monitor.stopMonitoring(ip);
     }
 
@@ -191,33 +198,6 @@ public class HostManager
         }
     }
 
-    @Override
-    public void bindAddressesToPort(PortAddresses addresses) {
-        store.updateAddressBindings(addresses);
-    }
-
-    @Override
-    public void unbindAddressesFromPort(PortAddresses portAddresses) {
-        store.removeAddressBindings(portAddresses);
-    }
-
-    @Override
-    public void clearAddresses(ConnectPoint connectPoint) {
-        store.clearAddressBindings(connectPoint);
-    }
-
-    @Override
-    public Set<PortAddresses> getAddressBindings() {
-        checkPermission(Permission.HOST_READ);
-        return store.getAddressBindings();
-    }
-
-    @Override
-    public Set<PortAddresses> getAddressBindingsForPort(ConnectPoint connectPoint) {
-        checkPermission(Permission.HOST_READ);
-        return store.getAddressBindingsForPort(connectPoint);
-    }
-
     // Personalized host provider service issued to the supplied provider.
     private class InternalHostProviderService
             extends AbstractProviderService<HostProvider>
@@ -227,12 +207,12 @@ public class HostManager
         }
 
         @Override
-        public void hostDetected(HostId hostId, HostDescription hostDescription) {
+        public void hostDetected(HostId hostId, HostDescription hostDescription, boolean replaceIps) {
             checkNotNull(hostId, HOST_ID_NULL);
             checkValidity();
             hostDescription = validateHost(hostDescription, hostId);
             HostEvent event = store.createOrUpdateHost(provider().id(), hostId,
-                                                       hostDescription);
+                                                       hostDescription, replaceIps);
             if (event != null) {
                 post(event);
             }

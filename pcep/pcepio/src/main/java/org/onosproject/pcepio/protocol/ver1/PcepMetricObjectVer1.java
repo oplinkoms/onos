@@ -25,7 +25,12 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.MoreObjects;
 
-/*
+/**
+ * Provides PCEP metric object.
+ */
+public class PcepMetricObjectVer1 implements PcepMetricObject {
+
+    /*
      METRIC Object Body Format.
 
     0                   1                   2                   3
@@ -35,9 +40,7 @@ import com.google.common.base.MoreObjects;
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |                          metric-value                         |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- */
-
-public class PcepMetricObjectVer1 implements PcepMetricObject {
+     */
 
     protected static final Logger log = LoggerFactory.getLogger(PcepMetricObjectVer1.class);
 
@@ -199,8 +202,8 @@ public class PcepMetricObjectVer1 implements PcepMetricObject {
         tempCb.readShort();
         yFlag = tempCb.readByte();
         bType = tempCb.readByte();
-        bCFlag = (yFlag & CFLAG_CHECK) == CFLAG_CHECK ? true : false;
-        bBFlag = (yFlag & BFLAG_SET) == BFLAG_SET ? true : false;
+        bCFlag = (yFlag & CFLAG_CHECK) == CFLAG_CHECK;
+        bBFlag = (yFlag & BFLAG_SET) == BFLAG_SET;
         iMetricVal = tempCb.readInt();
 
         return new PcepMetricObjectVer1(metricObjHeader, iMetricVal, yFlag, bCFlag, bBFlag, bType);
@@ -363,7 +366,11 @@ public class PcepMetricObjectVer1 implements PcepMetricObject {
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(getClass()).add("MetricValue", iMetricVal).add("BFlag", bBFlag)
-                .add("CFlag", bCFlag).add("BType", bType).toString();
+        return MoreObjects.toStringHelper(getClass())
+                .add("MetricValue", iMetricVal)
+                .add("BFlag", bBFlag)
+                .add("CFlag", bCFlag)
+                .add("BType", bType)
+                .toString();
     }
 }

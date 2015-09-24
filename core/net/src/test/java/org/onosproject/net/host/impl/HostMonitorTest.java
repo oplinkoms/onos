@@ -19,6 +19,7 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.onlab.packet.ARP;
 import org.onlab.packet.Ethernet;
@@ -26,6 +27,8 @@ import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
+import org.onosproject.incubator.net.intf.Interface;
+import org.onosproject.incubator.net.intf.InterfaceService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
@@ -35,11 +38,11 @@ import org.onosproject.net.Port;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceServiceAdapter;
+import org.onosproject.net.edge.EdgePortService;
 import org.onosproject.net.flow.instructions.Instruction;
 import org.onosproject.net.flow.instructions.Instructions.OutputInstruction;
 import org.onosproject.net.host.HostProvider;
 import org.onosproject.net.host.InterfaceIpAddress;
-import org.onosproject.net.host.PortAddresses;
 import org.onosproject.net.packet.OutboundPacket;
 import org.onosproject.net.packet.PacketServiceAdapter;
 import org.onosproject.net.provider.ProviderId;
@@ -49,6 +52,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.createMock;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
@@ -68,7 +72,17 @@ public class HostMonitorTest {
             new InterfaceIpAddress(SOURCE_ADDR, IpPrefix.valueOf("10.0.0.0/24"));
     private MacAddress sourceMac = MacAddress.valueOf(1L);
 
+    private EdgePortService edgePortService;
+
     private HostMonitor hostMonitor;
+
+    @Before
+    public void setUp() {
+        edgePortService = createMock(EdgePortService.class);
+        expect(edgePortService.isEdgePoint(anyObject(ConnectPoint.class)))
+                .andReturn(true).anyTimes();
+        replay(edgePortService);
+    }
 
     @After
     public void shutdown() {
@@ -94,7 +108,7 @@ public class HostMonitorTest {
         expectLastCall().once();
         replay(hostProvider);
 
-        hostMonitor = new HostMonitor(null, null, hostManager);
+        hostMonitor = new HostMonitor(null, hostManager, null, edgePortService);
 
         hostMonitor.registerHostProvider(hostProvider);
         hostMonitor.addMonitoringFor(TARGET_IP_ADDR);
@@ -125,20 +139,22 @@ public class HostMonitorTest {
         deviceService.addDevice(device, Collections.singleton(port));
 
         ConnectPoint cp = new ConnectPoint(devId, portNum);
-        PortAddresses pa =
-                new PortAddresses(cp, Collections.singleton(IA1), sourceMac, VlanId.NONE);
 
         expect(hostManager.getHostsByIp(TARGET_IP_ADDR))
-                .andReturn(Collections.<Host>emptySet()).anyTimes();
-        expect(hostManager.getAddressBindingsForPort(cp))
-                .andReturn(Collections.singleton(pa)).anyTimes();
+                .andReturn(Collections.emptySet()).anyTimes();
         replay(hostManager);
+
+        InterfaceService interfaceService = createMock(InterfaceService.class);
+        expect(interfaceService.getMatchingInterface(TARGET_IP_ADDR))
+                .andReturn(new Interface(cp, Collections.singleton(IA1), sourceMac, VlanId.NONE))
+                .anyTimes();
+        replay(interfaceService);
 
         TestPacketService packetService = new TestPacketService();
 
 
         // Run the test
-        hostMonitor = new HostMonitor(deviceService, packetService, hostManager);
+        hostMonitor = new HostMonitor(packetService, hostManager, interfaceService, edgePortService);
 
         hostMonitor.addMonitoringFor(TARGET_IP_ADDR);
         hostMonitor.run(null);
@@ -192,21 +208,22 @@ public class HostMonitorTest {
         deviceService.addDevice(device, Collections.singleton(port));
 
         ConnectPoint cp = new ConnectPoint(devId, portNum);
-        PortAddresses pa =
-                new PortAddresses(cp, Collections.singleton(IA1), sourceMac,
-                                  VlanId.vlanId(vlan));
 
         expect(hostManager.getHostsByIp(TARGET_IP_ADDR))
-                .andReturn(Collections.<Host>emptySet()).anyTimes();
-        expect(hostManager.getAddressBindingsForPort(cp))
-                .andReturn(Collections.singleton(pa)).anyTimes();
+                .andReturn(Collections.emptySet()).anyTimes();
         replay(hostManager);
+
+        InterfaceService interfaceService = createMock(InterfaceService.class);
+        expect(interfaceService.getMatchingInterface(TARGET_IP_ADDR))
+                .andReturn(new Interface(cp, Collections.singleton(IA1), sourceMac, VlanId.vlanId(vlan)))
+                .anyTimes();
+        replay(interfaceService);
 
         TestPacketService packetService = new TestPacketService();
 
 
         // Run the test
-        hostMonitor = new HostMonitor(deviceService, packetService, hostManager);
+        hostMonitor = new HostMonitor(packetService, hostManager, interfaceService, edgePortService);
 
         hostMonitor.addMonitoringFor(TARGET_IP_ADDR);
         hostMonitor.run(null);

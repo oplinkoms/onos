@@ -1,7 +1,7 @@
 /*
  * Copyright 2015 Open Networking Laboratory
  * Originally created by Pengfei Lu, Network and Cloud Computing Laboratory, Dalian University of Technology, China
- * Advisers: Keqiu Li and Heng Qi
+ * Advisers: Keqiu Li, Heng Qi and Haisheng Yu
  * This work is supported by the State Key Program of National Natural Science of China(Grant No. 61432002)
  * and Prospective Research Project on Future Networks in Jiangsu Future Networks Innovation Institute.
  *
@@ -234,7 +234,7 @@ public class DistributedAclStore extends AbstractStore implements AclStore {
         ruleToDevice.computeIf(ruleId,
                                deviceIdSet -> (deviceIdSet == null || !deviceIdSet.contains(deviceId)),
                                (id, deviceIdSet) -> {
-                                   Set<DeviceId> newSet = new HashSet<DeviceId>();
+                                   Set<DeviceId> newSet = new HashSet<>();
                                    if (deviceIdSet != null) {
                                        newSet.addAll(deviceIdSet);
                                    }

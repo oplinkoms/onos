@@ -20,7 +20,9 @@ package org.onosproject.ui.impl;
 import com.google.common.collect.ImmutableList;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.ElementId;
 import org.onosproject.net.Host;
+import org.onosproject.net.HostId;
 import org.onosproject.net.Link;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.FlowEntry;
@@ -37,10 +39,15 @@ import org.onosproject.net.statistic.Load;
 import org.onosproject.ui.impl.topo.IntentSelection;
 import org.onosproject.ui.impl.topo.ServicesBundle;
 import org.onosproject.ui.impl.topo.TopoIntentFilter;
-import org.onosproject.ui.impl.topo.TrafficClass;
 import org.onosproject.ui.impl.topo.TrafficLink;
+import org.onosproject.ui.impl.topo.TrafficLink.StatsType;
 import org.onosproject.ui.impl.topo.TrafficLinkMap;
+import org.onosproject.ui.topo.DeviceHighlight;
 import org.onosproject.ui.topo.Highlights;
+import org.onosproject.ui.topo.Highlights.Amount;
+import org.onosproject.ui.topo.HostHighlight;
+import org.onosproject.ui.topo.LinkHighlight.Flavor;
+import org.onosproject.ui.topo.NodeHighlight;
 import org.onosproject.ui.topo.NodeSelection;
 import org.onosproject.ui.topo.TopoUtils;
 import org.slf4j.Logger;
@@ -58,10 +65,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import static org.onosproject.net.DefaultEdgeLink.createEdgeLink;
-import static org.onosproject.ui.impl.TrafficMonitor.Mode.IDLE;
-import static org.onosproject.ui.impl.TrafficMonitor.Mode.SELECTED_INTENT;
-import static org.onosproject.ui.topo.LinkHighlight.Flavor.PRIMARY_HIGHLIGHT;
-import static org.onosproject.ui.topo.LinkHighlight.Flavor.SECONDARY_HIGHLIGHT;
+import static org.onosproject.ui.impl.TrafficMonitor.Mode.*;
 
 /**
  * Encapsulates the behavior of monitoring specific traffic patterns.
@@ -177,6 +181,7 @@ public class TrafficMonitor {
      * </ul>
      *
      * @param mode monitoring mode
+     * @param nodeSelection how to select a node
      */
     public synchronized void monitor(Mode mode, NodeSelection nodeSelection) {
         log.debug("monitor: {} -- {}", mode, nodeSelection);
@@ -239,6 +244,9 @@ public class TrafficMonitor {
         if (selectedIntents != null) {
             selectedIntents.next();
             sendSelectedIntents();
+            if (mode == SELECTED_INTENT) {
+                mode = RELATED_INTENTS;
+            }
         }
     }
 
@@ -251,6 +259,9 @@ public class TrafficMonitor {
         if (selectedIntents != null) {
             selectedIntents.prev();
             sendSelectedIntents();
+            if (mode == SELECTED_INTENT) {
+                mode = RELATED_INTENTS;
+            }
         }
     }
 
@@ -300,7 +311,6 @@ public class TrafficMonitor {
             trafficTask = new TrafficUpdateTask();
             timer.schedule(trafficTask, trafficPeriod, trafficPeriod);
         } else {
-            // TEMPORARY until we are sure this is working correctly
             log.debug("(traffic task already running)");
         }
     }
@@ -314,12 +324,12 @@ public class TrafficMonitor {
 
     private void sendAllFlowTraffic() {
         log.debug("sendAllFlowTraffic");
-        msgHandler.sendHighlights(trafficSummary(TrafficLink.StatsType.FLOW_STATS));
+        msgHandler.sendHighlights(trafficSummary(StatsType.FLOW_STATS));
     }
 
     private void sendAllPortTraffic() {
         log.debug("sendAllPortTraffic");
-        msgHandler.sendHighlights(trafficSummary(TrafficLink.StatsType.PORT_STATS));
+        msgHandler.sendHighlights(trafficSummary(StatsType.PORT_STATS));
     }
 
     private void sendDeviceLinkFlows() {
@@ -345,7 +355,7 @@ public class TrafficMonitor {
     // =======================================================================
     // === Generate messages in JSON object node format
 
-    private Highlights trafficSummary(TrafficLink.StatsType type) {
+    private Highlights trafficSummary(StatsType type) {
         Highlights highlights = new Highlights();
 
         TrafficLinkMap linkMap = new TrafficLinkMap();
@@ -353,9 +363,9 @@ public class TrafficMonitor {
         addEdgeLinks(linkMap);
 
         for (TrafficLink tlink : linkMap.biLinks()) {
-            if (type == TrafficLink.StatsType.FLOW_STATS) {
+            if (type == StatsType.FLOW_STATS) {
                 attachFlowLoad(tlink);
-            } else if (type == TrafficLink.StatsType.PORT_STATS) {
+            } else if (type == StatsType.PORT_STATS) {
                 attachPortLoad(tlink);
             }
 
@@ -385,7 +395,7 @@ public class TrafficMonitor {
 
             // now report on our collated links
             for (TrafficLink tlink : linkMap.biLinks()) {
-                highlights.add(tlink.highlight(TrafficLink.StatsType.FLOW_COUNT));
+                highlights.add(tlink.highlight(StatsType.FLOW_COUNT));
             }
 
         }
@@ -420,10 +430,8 @@ public class TrafficMonitor {
                 log.debug("Highlight intent: {} ([{}] of {})",
                           current.id(), selectedIntents.index(), count);
             }
-            TrafficClass tc1 = new TrafficClass(PRIMARY_HIGHLIGHT, primary);
-            TrafficClass tc2 = new TrafficClass(SECONDARY_HIGHLIGHT, secondary);
-            // classify primary links after secondary (last man wins)
-            highlightIntents(highlights, tc2, tc1);
+
+            highlightIntentLinks(highlights, primary, secondary);
         }
         return highlights;
     }
@@ -437,8 +445,9 @@ public class TrafficMonitor {
             primary.add(current);
             log.debug("Highlight traffic for intent: {} ([{}] of {})",
                       current.id(), selectedIntents.index(), selectedIntents.size());
-            TrafficClass tc1 = new TrafficClass(PRIMARY_HIGHLIGHT, primary, true);
-            highlightIntents(highlights, tc1);
+
+            highlightIntentLinksWithTraffic(highlights, primary);
+            highlights.subdueAllElse(Amount.MINIMALLY);
         }
         return highlights;
     }
@@ -532,27 +541,30 @@ public class TrafficMonitor {
         return count;
     }
 
-    private void highlightIntents(Highlights highlights,
-                                  TrafficClass... trafficClasses) {
+    private void highlightIntentLinks(Highlights highlights,
+                                      Set<Intent> primary, Set<Intent> secondary) {
         TrafficLinkMap linkMap = new TrafficLinkMap();
-
-        for (TrafficClass trafficClass : trafficClasses) {
-            classifyLinkTraffic(linkMap, trafficClass);
-        }
-
-        for (TrafficLink tlink : linkMap.biLinks()) {
-            highlights.add(tlink.highlight(TrafficLink.StatsType.TAGGED));
-        }
+        // NOTE: highlight secondary first, then primary, so that links shared
+        //       by intents are colored correctly ("last man wins")
+        createTrafficLinks(highlights, linkMap, secondary, Flavor.SECONDARY_HIGHLIGHT, false);
+        createTrafficLinks(highlights, linkMap, primary, Flavor.PRIMARY_HIGHLIGHT, false);
+        colorLinks(highlights, linkMap);
     }
 
-    private void classifyLinkTraffic(TrafficLinkMap linkMap,
-                                     TrafficClass trafficClass) {
-        for (Intent intent : trafficClass.intents()) {
-            boolean isOptical = intent instanceof OpticalConnectivityIntent;
+    private void highlightIntentLinksWithTraffic(Highlights highlights,
+                                                 Set<Intent> primary) {
+        TrafficLinkMap linkMap = new TrafficLinkMap();
+        createTrafficLinks(highlights, linkMap, primary, Flavor.PRIMARY_HIGHLIGHT, true);
+        colorLinks(highlights, linkMap);
+    }
+
+    private void createTrafficLinks(Highlights highlights,
+                                    TrafficLinkMap linkMap, Set<Intent> intents,
+                                    Flavor flavor, boolean showTraffic) {
+        for (Intent intent : intents) {
             List<Intent> installables = servicesBundle.intentService()
                     .getInstallableIntents(intent.key());
             Iterable<Link> links = null;
-
             if (installables != null) {
                 for (Intent installable : installables) {
 
@@ -566,24 +578,31 @@ public class TrafficMonitor {
                         links = ((OpticalPathIntent) installable).path().links();
                     }
 
-                    classifyLinks(trafficClass, isOptical, linkMap, links);
+                    boolean isOptical = intent instanceof OpticalConnectivityIntent;
+                    processLinks(linkMap, links, flavor, isOptical, showTraffic);
+                    updateHighlights(highlights, links);
                 }
             }
         }
     }
 
-    private void classifyLinks(TrafficClass trafficClass, boolean isOptical,
-                               TrafficLinkMap linkMap,
-                               Iterable<Link> links) {
-        if (links != null) {
-            for (Link link : links) {
-                TrafficLink tlink = linkMap.add(link);
-                if (trafficClass.showTraffic()) {
-                    tlink.addLoad(getLinkFlowLoad(link));
-                    tlink.antMarch(true);
-                }
-                tlink.optical(isOptical);
-                tlink.tagFlavor(trafficClass.flavor());
+    private void updateHighlights(Highlights highlights, Iterable<Link> links) {
+        for (Link link : links) {
+            ensureNodePresent(highlights, link.src().elementId());
+            ensureNodePresent(highlights, link.dst().elementId());
+        }
+    }
+
+    private void ensureNodePresent(Highlights highlights, ElementId eid) {
+        String id = eid.toString();
+        NodeHighlight nh = highlights.getNode(id);
+        if (nh == null) {
+            if (eid instanceof DeviceId) {
+                nh = new DeviceHighlight(id);
+                highlights.add((DeviceHighlight) nh);
+            } else if (eid instanceof HostId) {
+                nh = new HostHighlight(id);
+                highlights.add((HostHighlight) nh);
             }
         }
     }
@@ -594,6 +613,28 @@ public class TrafficMonitor {
         installable.resources().stream().filter(r -> r instanceof Link)
                 .forEach(r -> builder.add((Link) r));
         return builder.build();
+    }
+
+    private void processLinks(TrafficLinkMap linkMap, Iterable<Link> links,
+                              Flavor flavor, boolean isOptical,
+                              boolean showTraffic) {
+        if (links != null) {
+            for (Link link : links) {
+                TrafficLink tlink = linkMap.add(link);
+                tlink.tagFlavor(flavor);
+                tlink.optical(isOptical);
+                if (showTraffic) {
+                    tlink.addLoad(getLinkFlowLoad(link));
+                    tlink.antMarch(true);
+                }
+            }
+        }
+    }
+
+    private void colorLinks(Highlights highlights, TrafficLinkMap linkMap) {
+        for (TrafficLink tlink : linkMap.biLinks()) {
+            highlights.add(tlink.highlight(StatsType.TAGGED));
+        }
     }
 
     // =======================================================================

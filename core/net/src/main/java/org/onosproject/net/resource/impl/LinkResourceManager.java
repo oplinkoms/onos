@@ -23,7 +23,6 @@ import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
 import org.onosproject.event.AbstractListenerManager;
-import org.onosproject.core.Permission;
 import org.onosproject.net.Link;
 import org.onosproject.net.intent.IntentId;
 import org.onosproject.net.resource.ResourceAllocation;
@@ -58,6 +57,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.security.AppGuard.checkPermission;
 import static org.slf4j.LoggerFactory.getLogger;
+import static org.onosproject.security.AppPermission.Type.*;
 
 
 /**
@@ -150,7 +150,7 @@ public class LinkResourceManager
 
     @Override
     public LinkResourceAllocations requestResources(LinkResourceRequest req) {
-        checkPermission(Permission.LINK_WRITE);
+        checkPermission(LINK_WRITE);
 
         // TODO Concatenate multiple bandwidth requests.
         // TODO Support multiple lambda resource requests.
@@ -176,8 +176,7 @@ public class LinkResourceManager
             case MPLS_LABEL:
                 for (Link link : req.links()) {
                     if (allocsPerLink.get(link) == null) {
-                        allocsPerLink.put(link,
-                                          new HashSet<ResourceAllocation>());
+                        allocsPerLink.put(link, new HashSet<>());
                     }
                     Iterator<MplsLabel> mplsIter = getAvailableMplsLabels(link)
                             .iterator();
@@ -198,7 +197,7 @@ public class LinkResourceManager
 
         Map<Link, Set<ResourceAllocation>> allocations = new HashMap<>();
         for (Link link : req.links()) {
-            allocations.put(link, new HashSet<ResourceAllocation>(allocs));
+            allocations.put(link, new HashSet<>(allocs));
             Set<ResourceAllocation> linkAllocs = allocsPerLink.get(link);
             if (linkAllocs != null) {
                 allocations.get(link).addAll(linkAllocs);
@@ -213,7 +212,7 @@ public class LinkResourceManager
 
     @Override
     public void releaseResources(LinkResourceAllocations allocations) {
-        checkPermission(Permission.LINK_WRITE);
+        checkPermission(LINK_WRITE);
         final LinkResourceEvent event = store.releaseResources(allocations);
         if (event != null) {
             post(event);
@@ -223,32 +222,32 @@ public class LinkResourceManager
     @Override
     public LinkResourceAllocations updateResources(LinkResourceRequest req,
             LinkResourceAllocations oldAllocations) {
-        checkPermission(Permission.LINK_WRITE);
+        checkPermission(LINK_WRITE);
         releaseResources(oldAllocations);
          return requestResources(req);
     }
 
     @Override
     public Iterable<LinkResourceAllocations> getAllocations() {
-        checkPermission(Permission.LINK_READ);
+        checkPermission(LINK_READ);
         return store.getAllocations();
     }
 
     @Override
     public Iterable<LinkResourceAllocations> getAllocations(Link link) {
-        checkPermission(Permission.LINK_READ);
+        checkPermission(LINK_READ);
         return store.getAllocations(link);
     }
 
     @Override
     public LinkResourceAllocations getAllocations(IntentId intentId) {
-        checkPermission(Permission.LINK_READ);
+        checkPermission(LINK_READ);
         return store.getAllocations(intentId);
     }
 
     @Override
     public Iterable<ResourceRequest> getAvailableResources(Link link) {
-        checkPermission(Permission.LINK_READ);
+        checkPermission(LINK_READ);
 
         Set<ResourceAllocation> freeRes = store.getFreeResources(link);
         Set<ResourceRequest> result = new HashSet<>();
@@ -274,7 +273,7 @@ public class LinkResourceManager
     @Override
     public Iterable<ResourceRequest> getAvailableResources(Link link,
             LinkResourceAllocations allocations) {
-        checkPermission(Permission.LINK_READ);
+        checkPermission(LINK_READ);
 
         Set<ResourceAllocation> allocatedRes = allocations.getResourceAllocation(link);
         Set<ResourceRequest> result = Sets.newHashSet(getAvailableResources(link));

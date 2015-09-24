@@ -17,9 +17,11 @@ package org.onosproject.vtnrsc.virtualport.impl;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
@@ -27,8 +29,19 @@ import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
+import org.onlab.packet.IpAddress;
+import org.onosproject.core.ApplicationId;
+import org.onosproject.core.CoreService;
 import org.onosproject.net.DeviceId;
+import org.onosproject.store.serializers.KryoNamespaces;
+import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
+import org.onosproject.vtnrsc.AllowedAddressPair;
+import org.onosproject.vtnrsc.BindingHostId;
+import org.onosproject.vtnrsc.DefaultVirtualPort;
+import org.onosproject.vtnrsc.FixedIp;
+import org.onosproject.vtnrsc.SecurityGroup;
+import org.onosproject.vtnrsc.SubnetId;
 import org.onosproject.vtnrsc.TenantId;
 import org.onosproject.vtnrsc.TenantNetworkId;
 import org.onosproject.vtnrsc.VirtualPort;
@@ -47,21 +60,49 @@ public class VirtualPortManager implements VirtualPortService {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private static final String VIRTUALPORT = "vtn-virtual-port";
+    private static final String VTNRSC_APP = "org.onosproject.vtnrsc";
+
     private static final String VIRTUALPORT_ID_NULL = "VirtualPort ID cannot be null";
     private static final String VIRTUALPORT_NOT_NULL = "VirtualPort  cannot be null";
     private static final String TENANTID_NOT_NULL = "TenantId  cannot be null";
     private static final String NETWORKID_NOT_NULL = "NetworkId  cannot be null";
     private static final String DEVICEID_NOT_NULL = "DeviceId  cannot be null";
 
-    protected ConcurrentHashMap<VirtualPortId, VirtualPort> vPortStore =
-            new ConcurrentHashMap<>();
+    protected Map<VirtualPortId, VirtualPort> vPortStore;
+    protected ApplicationId appId;
+
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
+
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected TenantNetworkService networkService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected CoreService coreService;
+
     @Activate
     public void activate() {
+
+        appId = coreService.registerApplication(VTNRSC_APP);
+
+        vPortStore = storageService.<VirtualPortId, VirtualPort>consistentMapBuilder()
+                .withName(VIRTUALPORT)
+                .withApplicationId(appId)
+                .withPurgeOnUninstall()
+                .withSerializer(Serializer.using(Arrays.asList(KryoNamespaces.API),
+                                                 VirtualPortId.class,
+                                                 TenantNetworkId.class,
+                                                 VirtualPort.State.class,
+                                                 TenantId.class,
+                                                 AllowedAddressPair.class,
+                                                 FixedIp.class,
+                                                 BindingHostId.class,
+                                                 SecurityGroup.class,
+                                                 SubnetId.class,
+                                                 IpAddress.class,
+                                                 DefaultVirtualPort.class))
+                .build().asJavaMap();
         log.info("Started");
     }
 
@@ -91,37 +132,22 @@ public class VirtualPortManager implements VirtualPortService {
     @Override
     public Collection<VirtualPort> getPorts(TenantNetworkId networkId) {
         checkNotNull(networkId, NETWORKID_NOT_NULL);
-        Collection<VirtualPort> vPortWithNetworkIds = vPortStore.values();
-        for (VirtualPort vPort : vPortWithNetworkIds) {
-            if (!vPort.networkId().equals(networkId)) {
-                vPortWithNetworkIds.remove(vPort);
-            }
-        }
-        return vPortWithNetworkIds;
+        return vPortStore.values().stream().filter(d -> d.networkId().equals(networkId))
+                .collect(Collectors.toList());
     }
 
     @Override
     public Collection<VirtualPort> getPorts(TenantId tenantId) {
         checkNotNull(tenantId, TENANTID_NOT_NULL);
-        Collection<VirtualPort> vPortWithTenantIds = vPortStore.values();
-        for (VirtualPort vPort : vPortWithTenantIds) {
-            if (!vPort.tenantId().equals(tenantId)) {
-                vPortWithTenantIds.remove(vPort);
-            }
-        }
-        return vPortWithTenantIds;
+        return vPortStore.values().stream().filter(d -> d.tenantId().equals(tenantId))
+                .collect(Collectors.toList());
     }
 
     @Override
     public Collection<VirtualPort> getPorts(DeviceId deviceId) {
         checkNotNull(deviceId, DEVICEID_NOT_NULL);
-        Collection<VirtualPort> vPortWithDeviceIds = vPortStore.values();
-        for (VirtualPort vPort : vPortWithDeviceIds) {
-            if (!vPort.deviceId().equals(deviceId)) {
-                vPortWithDeviceIds.remove(vPort);
-            }
-        }
-        return vPortWithDeviceIds;
+        return vPortStore.values().stream().filter(d -> d.deviceId().equals(deviceId))
+                .collect(Collectors.toList());
     }
 
     @Override

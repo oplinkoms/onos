@@ -29,7 +29,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 
 /**
  * Provides PcepError list which contains RP or TE objects.
@@ -111,14 +110,14 @@ public class PcepErrorVer1 implements PcepError {
     /**
      * Parse RP List from the channel buffer.
      *
-     * @throws PcepParseException if mandatory fields are missing
      * @param cb of type channel buffer
+     * @throws PcepParseException if mandatory fields are missing
      */
     public void parseRPList(ChannelBuffer cb) throws PcepParseException {
         byte yObjClass;
         byte yObjType;
 
-        llRPObjList = new LinkedList<PcepRPObject>();
+        llRPObjList = new LinkedList<>();
 
         // caller should verify for RP object
         if (cb.readableBytes() < OBJECT_HEADER_LENGTH) {
@@ -158,7 +157,7 @@ public class PcepErrorVer1 implements PcepError {
         byte yObjClass;
         byte yObjType;
 
-        llTEObjList = new LinkedList<PcepTEObject>();
+        llTEObjList = new LinkedList<>();
 
         // caller should verify for TE object
         if (cb.readableBytes() < OBJECT_HEADER_LENGTH) {
@@ -200,7 +199,7 @@ public class PcepErrorVer1 implements PcepError {
         byte yObjType;
         boolean bIsErrorObjFound = false;
 
-        llErrObjList = new LinkedList<PcepErrorObject>();
+        llErrObjList = new LinkedList<>();
 
         // caller should verify for RP object
         if (cb.readableBytes() < OBJECT_HEADER_LENGTH) {
@@ -390,19 +389,11 @@ public class PcepErrorVer1 implements PcepError {
 
     @Override
     public String toString() {
-        ToStringHelper toStrHelper = MoreObjects.toStringHelper(getClass());
-
-        //RP Object list is optional
-        if (null != llRPObjList) {
-            toStrHelper.add("RpObjectList", llRPObjList);
-        }
-
-        //TE Object list is optional
-        if (null != llTEObjList) {
-            toStrHelper.add("TeObjectList", llTEObjList);
-        }
-
-        //Error Object List is mandatory
-        return toStrHelper.add("ErrorObjectList", llErrObjList).toString();
+        return MoreObjects.toStringHelper(getClass())
+                .omitNullValues()
+                .add("RpObjectList", llRPObjList)
+                .add("TeObjectList", llTEObjList)
+                .add("ErrorObjectList", llErrObjList)
+                .toString();
     }
 }

@@ -16,11 +16,13 @@
 
 package org.onosproject.security;
 
-import org.onosproject.core.Permission;
+
+import com.google.common.annotations.Beta;
 
 /**
  * Aids SM-ONOS to perform API-level permission checking.
  */
+@Beta
 public final class AppGuard {
 
     private AppGuard() {
@@ -30,10 +32,10 @@ public final class AppGuard {
      * Checks if the caller has the required permission only when security-mode is enabled.
      * @param permission permission to be checked
      */
-    public static void checkPermission(Permission permission) {
+    public static void checkPermission(AppPermission.Type permission) {
         SecurityManager sm = System.getSecurityManager();
         if (sm != null) {
-            System.getSecurityManager().checkPermission(new AppPermission(permission.name()));
+            System.getSecurityManager().checkPermission(new AppPermission(permission));
         }
     }
 }

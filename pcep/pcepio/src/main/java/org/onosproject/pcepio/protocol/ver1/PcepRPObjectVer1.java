@@ -28,6 +28,9 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.MoreObjects;
 
+/**
+ * Provides PCEP RP object.
+ */
 public class PcepRPObjectVer1 implements PcepRPObject {
 
     /*
@@ -186,7 +189,7 @@ public class PcepRPObjectVer1 implements PcepRPObject {
         boolean bBFlag;
         boolean bRFlag;
         byte yPriFlag; // 3bytes
-        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<>();
 
         rpObjHeader = PcepObjectHeader.read(cb);
 
@@ -195,9 +198,9 @@ public class PcepRPObjectVer1 implements PcepRPObject {
 
         int iTemp = tempCb.readInt();
         yPriFlag = (byte) (iTemp & PRIFLAG_TEMP_SHIFT_VALUE);
-        bOFlag = (iTemp & OFLAG_TEMP_SHIFT_VALUE) == OFLAG_TEMP_SHIFT_VALUE ? true : false;
-        bBFlag = (iTemp & BFLAG_TEMP_SHIFT_VALUE) == BFLAG_TEMP_SHIFT_VALUE ? true : false;
-        bRFlag = (iTemp & RFLAG_TEMP_SHIFT_VALUE) == RFLAG_TEMP_SHIFT_VALUE ? true : false;
+        bOFlag = (iTemp & OFLAG_TEMP_SHIFT_VALUE) == OFLAG_TEMP_SHIFT_VALUE;
+        bBFlag = (iTemp & BFLAG_TEMP_SHIFT_VALUE) == BFLAG_TEMP_SHIFT_VALUE;
+        bRFlag = (iTemp & RFLAG_TEMP_SHIFT_VALUE) == RFLAG_TEMP_SHIFT_VALUE;
 
         iRequestIdNum = tempCb.readInt();
 
@@ -250,7 +253,7 @@ public class PcepRPObjectVer1 implements PcepRPObject {
      */
     protected static LinkedList<PcepValueType> parseOptionalTlv(ChannelBuffer cb) throws PcepParseException {
 
-        LinkedList<PcepValueType> llOutOptionalTlv = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llOutOptionalTlv = new LinkedList<>();
         //Currently no optional TLvs, will be added based on requirements.
         return llOutOptionalTlv;
     }
@@ -271,6 +274,9 @@ public class PcepRPObjectVer1 implements PcepRPObject {
         return cb.writerIndex();
     }
 
+    /**
+     * Builder class for PCEP rp object.
+     */
     public static class Builder implements PcepRPObject.Builder {
 
         private boolean bIsHeaderSet = false;
@@ -286,7 +292,7 @@ public class PcepRPObjectVer1 implements PcepRPObject {
         private boolean bBFlag;
         private boolean bRFlag;
         private byte yPriFlag;
-        private LinkedList<PcepValueType> llOptionalTlv = new LinkedList<PcepValueType>();
+        private LinkedList<PcepValueType> llOptionalTlv = new LinkedList<>();
 
         private boolean bIsPFlagSet = false;
         private boolean bPFlag;
@@ -426,8 +432,14 @@ public class PcepRPObjectVer1 implements PcepRPObject {
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(getClass()).add("ObjectHeader", rpObjHeader).add("OFlag", (bOFlag) ? 1 : 0)
-                .add("BFlag", (bBFlag) ? 1 : 0).add("RFlag", (bRFlag) ? 1 : 0).add("PriFlag", yPriFlag)
-                .add("RequestIdNumber", iRequestIdNum).add("OptionalTlv", llOptionalTlv).toString();
+        return MoreObjects.toStringHelper(getClass())
+                .add("ObjectHeader", rpObjHeader)
+                .add("OFlag", (bOFlag) ? 1 : 0)
+                .add("BFlag", (bBFlag) ? 1 : 0)
+                .add("RFlag", (bRFlag) ? 1 : 0)
+                .add("PriFlag", yPriFlag)
+                .add("RequestIdNumber", iRequestIdNum)
+                .add("OptionalTlv", llOptionalTlv)
+                .toString();
     }
 }

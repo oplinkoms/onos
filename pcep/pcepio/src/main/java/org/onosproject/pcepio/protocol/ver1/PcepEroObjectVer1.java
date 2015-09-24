@@ -35,8 +35,12 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.MoreObjects;
 
-/*
- * rfc3209
+/**
+ * Provides PCEP Ero Object.
+ */
+public class PcepEroObjectVer1 implements PcepEroObject {
+    /*
+     * rfc3209
       0                   1                   2                   3
       0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -130,8 +134,7 @@ import com.google.common.base.MoreObjects;
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      //                        NAI (variable)                       //
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- */
-public class PcepEroObjectVer1 implements PcepEroObject {
+     */
 
     protected static final Logger log = LoggerFactory.getLogger(PcepEroObjectVer1.class);
 
@@ -150,7 +153,7 @@ public class PcepEroObjectVer1 implements PcepEroObject {
             PcepObjectHeader.REQ_OBJ_OPTIONAL_PROCESS, PcepObjectHeader.RSP_OBJ_PROCESSED, ERO_OBJ_MINIMUM_LENGTH);
 
     private PcepObjectHeader eroObjHeader;
-    private LinkedList<PcepValueType> llSubObjects = new LinkedList<PcepValueType>();
+    private LinkedList<PcepValueType> llSubObjects = new LinkedList<>();
 
     /**
      * reset variables.
@@ -210,7 +213,7 @@ public class PcepEroObjectVer1 implements PcepEroObject {
     public static PcepEroObject read(ChannelBuffer cb) throws PcepParseException {
 
         PcepObjectHeader eroObjHeader;
-        LinkedList<PcepValueType> llSubObjects = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llSubObjects = new LinkedList<>();
 
         eroObjHeader = PcepObjectHeader.read(cb);
 
@@ -236,7 +239,7 @@ public class PcepEroObjectVer1 implements PcepEroObject {
      */
     protected static LinkedList<PcepValueType> parseSubObjects(ChannelBuffer cb) throws PcepParseException {
 
-        LinkedList<PcepValueType> llSubObjects = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llSubObjects = new LinkedList<>();
 
         while (0 < cb.readableBytes()) {
 
@@ -339,7 +342,7 @@ public class PcepEroObjectVer1 implements PcepEroObject {
         private boolean bIFlag;
 
         private PcepObjectHeader eroObjHeader;
-        LinkedList<PcepValueType> llSubObjects = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llSubObjects = new LinkedList<>();
 
         @Override
         public PcepEroObject build() {
@@ -397,7 +400,8 @@ public class PcepEroObjectVer1 implements PcepEroObject {
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(getClass()).add("EroObjHeader", eroObjHeader).add("SubObjects", llSubObjects)
+        return MoreObjects.toStringHelper(getClass())
+                .add("EroObjHeader", eroObjHeader).add("SubObjects", llSubObjects)
                 .toString();
     }
 }

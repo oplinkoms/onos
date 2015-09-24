@@ -24,10 +24,11 @@ import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
-import org.onosproject.core.Permission;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DefaultEdgeLink;
 import org.onosproject.net.DefaultPath;
+import org.onosproject.net.DisjointPath;
+import org.onosproject.net.DefaultDisjointPath;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.EdgeLink;
 import org.onosproject.net.ElementId;
@@ -47,10 +48,13 @@ import org.slf4j.Logger;
 
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
+
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.slf4j.LoggerFactory.getLogger;
 import static org.onosproject.security.AppGuard.checkPermission;
+import static org.onosproject.security.AppPermission.Type.*;
 
 
 /**
@@ -88,14 +92,14 @@ public class PathManager implements PathService {
 
     @Override
     public Set<Path> getPaths(ElementId src, ElementId dst) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
 
         return getPaths(src, dst, null);
     }
 
     @Override
     public Set<Path> getPaths(ElementId src, ElementId dst, LinkWeight weight) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
 
         checkNotNull(src, ELEMENT_ID_NULL);
         checkNotNull(dst, ELEMENT_ID_NULL);
@@ -126,6 +130,84 @@ public class PathManager implements PathService {
                 topologyService.getPaths(topology, srcDevice, dstDevice, weight);
 
         return edgeToEdgePaths(srcEdge, dstEdge, paths);
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst) {
+        return getDisjointPaths(src, dst, (LinkWeight) null);
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst, LinkWeight weight) {
+        checkNotNull(src, ELEMENT_ID_NULL);
+        checkNotNull(dst, ELEMENT_ID_NULL);
+
+        // Get the source and destination edge locations
+        EdgeLink srcEdge = getEdgeLink(src, true);
+        EdgeLink dstEdge = getEdgeLink(dst, false);
+
+        // If either edge is null, bail with no paths.
+        if (srcEdge == null || dstEdge == null) {
+            return ImmutableSet.of();
+        }
+
+        DeviceId srcDevice = srcEdge != NOT_HOST ? srcEdge.dst().deviceId() : (DeviceId) src;
+        DeviceId dstDevice = dstEdge != NOT_HOST ? dstEdge.src().deviceId() : (DeviceId) dst;
+
+        // If the source and destination are on the same edge device, there
+        // is just one path, so build it and return it.
+        if (srcDevice.equals(dstDevice)) {
+            return edgeToEdgePathsDisjoint(srcEdge, dstEdge);
+        }
+
+        // Otherwise get all paths between the source and destination edge
+        // devices.
+        Topology topology = topologyService.currentTopology();
+        Set<DisjointPath> paths = weight == null ?
+                topologyService.getDisjointPaths(topology, srcDevice, dstDevice) :
+                topologyService.getDisjointPaths(topology, srcDevice, dstDevice, weight);
+
+        return edgeToEdgePathsDisjoint(srcEdge, dstEdge, paths);
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst,
+                                              Map<Link, Object> riskProfile) {
+        return getDisjointPaths(src, dst, null, riskProfile);
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst, LinkWeight weight,
+                                              Map<Link, Object> riskProfile) {
+        checkNotNull(src, ELEMENT_ID_NULL);
+        checkNotNull(dst, ELEMENT_ID_NULL);
+
+        // Get the source and destination edge locations
+        EdgeLink srcEdge = getEdgeLink(src, true);
+        EdgeLink dstEdge = getEdgeLink(dst, false);
+
+        // If either edge is null, bail with no paths.
+        if (srcEdge == null || dstEdge == null) {
+            return ImmutableSet.of();
+        }
+
+        DeviceId srcDevice = srcEdge != NOT_HOST ? srcEdge.dst().deviceId() : (DeviceId) src;
+        DeviceId dstDevice = dstEdge != NOT_HOST ? dstEdge.src().deviceId() : (DeviceId) dst;
+
+        // If the source and destination are on the same edge device, there
+        // is just one path, so build it and return it.
+        if (srcDevice.equals(dstDevice)) {
+            return edgeToEdgePathsDisjoint(srcEdge, dstEdge);
+        }
+
+        // Otherwise get all paths between the source and destination edge
+        // devices.
+        Topology topology = topologyService.currentTopology();
+        Set<DisjointPath> paths = weight == null ?
+                topologyService.getDisjointPaths(topology, srcDevice, dstDevice, riskProfile) :
+                topologyService.getDisjointPaths(topology, srcDevice, dstDevice, weight, riskProfile);
+
+        return edgeToEdgePathsDisjoint(srcEdge, dstEdge, paths);
     }
 
     // Finds the host edge link if the element ID is a host id of an existing
@@ -162,6 +244,20 @@ public class PathManager implements PathService {
         return endToEndPaths;
     }
 
+    private Set<DisjointPath> edgeToEdgePathsDisjoint(EdgeLink srcLink, EdgeLink dstLink) {
+        Set<DisjointPath> endToEndPaths = Sets.newHashSetWithExpectedSize(1);
+        endToEndPaths.add(edgeToEdgePathD(srcLink, dstLink, null));
+        return endToEndPaths;
+    }
+
+    private Set<DisjointPath> edgeToEdgePathsDisjoint(EdgeLink srcLink, EdgeLink dstLink, Set<DisjointPath> paths) {
+        Set<DisjointPath> endToEndPaths = Sets.newHashSetWithExpectedSize(paths.size());
+        for (DisjointPath path : paths) {
+            endToEndPaths.add(edgeToEdgePathD(srcLink, dstLink, path));
+        }
+        return endToEndPaths;
+    }
+
     // Produces a direct edge-to-edge path.
     private Path edgeToEdgePath(EdgeLink srcLink, EdgeLink dstLink, Path path) {
         List<Link> links = Lists.newArrayListWithCapacity(2);
@@ -178,6 +274,13 @@ public class PathManager implements PathService {
         }
         return new DefaultPath(PID, links, 2);
     }
+
+    // Produces a direct edge-to-edge path.
+    private DisjointPath edgeToEdgePathD(EdgeLink srcLink, EdgeLink dstLink, DisjointPath path) {
+        return new DefaultDisjointPath(PID, (DefaultPath) edgeToEdgePath(srcLink, dstLink, path.primary()),
+                                       (DefaultPath) edgeToEdgePath(srcLink, dstLink, path.backup()));
+    }
+
 
     // Special value for edge link to represent that this is really not an
     // edge link since the src or dst are really an infrastructure device.

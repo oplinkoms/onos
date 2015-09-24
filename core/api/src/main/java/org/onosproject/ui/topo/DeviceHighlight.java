@@ -12,7 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 package org.onosproject.ui.topo;
@@ -20,7 +19,7 @@ package org.onosproject.ui.topo;
 /**
  * Denotes the highlighting to apply to a device.
  */
-public class DeviceHighlight extends AbstractHighlight {
+public class DeviceHighlight extends NodeHighlight {
 
     public DeviceHighlight(String deviceId) {
         super(TopoElementType.DEVICE, deviceId);

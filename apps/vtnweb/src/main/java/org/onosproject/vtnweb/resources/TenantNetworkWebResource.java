@@ -19,6 +19,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkArgument;
 import static javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
 import static javax.ws.rs.core.Response.Status.OK;
+import static javax.ws.rs.core.Response.Status.NOT_FOUND;
 
 import java.io.InputStream;
 import java.util.Collections;
@@ -95,8 +96,7 @@ public class TenantNetworkWebResource extends AbstractWebResource {
         while (networkors.hasNext()) {
             TenantNetwork network = networkors.next();
             if ((queryId == null || queryId.equals(network.id().toString()))
-                    && (queryName == null || queryName.equals(network.name()
-                            .toString()))
+                    && (queryName == null || queryName.equals(network.name()))
                     && (queryadminStateUp == null || queryadminStateUp
                             .equals(network.adminStateUp()))
                     && (querystate == null || querystate.equals(network.state()
@@ -151,7 +151,8 @@ public class TenantNetworkWebResource extends AbstractWebResource {
 
         if (!get(TenantNetworkService.class).exists(TenantNetworkId
                                                             .networkId(id))) {
-            return ok("The tenantNetwork does not exists").build();
+            return Response.status(NOT_FOUND)
+                    .entity(NETWORK_NOT_FOUND).build();
         }
         TenantNetwork network = nullIsNotFound(get(TenantNetworkService.class)
                 .getNetwork(TenantNetworkId.networkId(id)), NETWORK_NOT_FOUND);
@@ -241,7 +242,7 @@ public class TenantNetworkWebResource extends AbstractWebResource {
     @Path("{id}")
     public Response deleteNetworks(@PathParam("id") String id) {
         log.debug("Deletes network by identifier {}.", id);
-        Set<TenantNetworkId> networkSet = new HashSet<TenantNetworkId>();
+        Set<TenantNetworkId> networkSet = new HashSet<>();
         networkSet.add(TenantNetworkId.networkId(id));
         Boolean issuccess = nullIsNotFound(get(TenantNetworkService.class)
                 .removeNetworks(networkSet), NETWORK_NOT_FOUND);
@@ -269,9 +270,9 @@ public class TenantNetworkWebResource extends AbstractWebResource {
         ConcurrentMap<TenantNetworkId, TenantNetwork> networksMap = Maps
                 .newConcurrentMap();
         if (node != null) {
-            checkArgument(!node.get("admin_state_up").isBoolean(), "admin_state_up should be boolean");
-            checkArgument(!node.get("shared").isBoolean(), "shared should be boolean");
-            checkArgument(!node.get("router:external").isBoolean(), "router:external should be boolean");
+            checkArgument(node.get("admin_state_up").isBoolean(), "admin_state_up should be boolean");
+            checkArgument(node.get("shared").isBoolean(), "shared should be boolean");
+            checkArgument(node.get("router:external").isBoolean(), "router:external should be boolean");
             String name = node.get("name").asText();
             boolean adminStateUp = node.get("admin_state_up").asBoolean();
             String state = node.get("status").asText();

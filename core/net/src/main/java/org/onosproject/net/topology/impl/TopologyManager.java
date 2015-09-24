@@ -21,8 +21,8 @@ import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
+import org.onosproject.net.DisjointPath;
 import org.onosproject.net.provider.AbstractListenerProviderRegistry;
-import org.onosproject.core.Permission;
 import org.onosproject.event.Event;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
@@ -47,10 +47,13 @@ import org.slf4j.Logger;
 
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.security.AppGuard.checkPermission;
 import static org.slf4j.LoggerFactory.getLogger;
+import static org.onosproject.security.AppPermission.Type.*;
+
 
 /**
  * Provides basic implementation of the topology SB &amp; NB APIs.
@@ -59,7 +62,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 @Service
 public class TopologyManager
         extends AbstractListenerProviderRegistry<TopologyEvent, TopologyListener,
-                                                 TopologyProvider, TopologyProviderService>
+        TopologyProvider, TopologyProviderService>
         implements TopologyService, TopologyProviderRegistry {
 
     public static final String TOPOLOGY_NULL = "Topology cannot be null";
@@ -67,6 +70,7 @@ public class TopologyManager
     private static final String CLUSTER_ID_NULL = "Cluster ID cannot be null";
     private static final String CLUSTER_NULL = "Topology cluster cannot be null";
     public static final String CONNECTION_POINT_NULL = "Connection point cannot be null";
+    public static final String LINK_WEIGHT_NULL = "Link weight cannot be null";
 
     private final Logger log = getLogger(getClass());
 
@@ -91,27 +95,27 @@ public class TopologyManager
 
     @Override
     public Topology currentTopology() {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
         return store.currentTopology();
     }
 
     @Override
     public boolean isLatest(Topology topology) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
         checkNotNull(topology, TOPOLOGY_NULL);
         return store.isLatest(topology);
     }
 
     @Override
     public Set<TopologyCluster> getClusters(Topology topology) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
         checkNotNull(topology, TOPOLOGY_NULL);
         return store.getClusters(topology);
     }
 
     @Override
     public TopologyCluster getCluster(Topology topology, ClusterId clusterId) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
         checkNotNull(topology, TOPOLOGY_NULL);
         checkNotNull(topology, CLUSTER_ID_NULL);
         return store.getCluster(topology, clusterId);
@@ -119,7 +123,7 @@ public class TopologyManager
 
     @Override
     public Set<DeviceId> getClusterDevices(Topology topology, TopologyCluster cluster) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
         checkNotNull(topology, TOPOLOGY_NULL);
         checkNotNull(topology, CLUSTER_NULL);
         return store.getClusterDevices(topology, cluster);
@@ -127,7 +131,7 @@ public class TopologyManager
 
     @Override
     public Set<Link> getClusterLinks(Topology topology, TopologyCluster cluster) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
         checkNotNull(topology, TOPOLOGY_NULL);
         checkNotNull(topology, CLUSTER_NULL);
         return store.getClusterLinks(topology, cluster);
@@ -135,14 +139,14 @@ public class TopologyManager
 
     @Override
     public TopologyGraph getGraph(Topology topology) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
         checkNotNull(topology, TOPOLOGY_NULL);
         return store.getGraph(topology);
     }
 
     @Override
     public Set<Path> getPaths(Topology topology, DeviceId src, DeviceId dst) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
         checkNotNull(topology, TOPOLOGY_NULL);
         checkNotNull(src, DEVICE_ID_NULL);
         checkNotNull(dst, DEVICE_ID_NULL);
@@ -151,7 +155,7 @@ public class TopologyManager
 
     @Override
     public Set<Path> getPaths(Topology topology, DeviceId src, DeviceId dst, LinkWeight weight) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
 
         checkNotNull(topology, TOPOLOGY_NULL);
         checkNotNull(src, DEVICE_ID_NULL);
@@ -161,8 +165,46 @@ public class TopologyManager
     }
 
     @Override
+    public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src, DeviceId dst) {
+        checkNotNull(topology, TOPOLOGY_NULL);
+        checkNotNull(src, DEVICE_ID_NULL);
+        checkNotNull(dst, DEVICE_ID_NULL);
+        return store.getDisjointPaths(topology, src, dst);
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src,
+                                              DeviceId dst, LinkWeight weight) {
+        checkNotNull(topology, TOPOLOGY_NULL);
+        checkNotNull(src, DEVICE_ID_NULL);
+        checkNotNull(dst, DEVICE_ID_NULL);
+        checkNotNull(weight, LINK_WEIGHT_NULL);
+        return store.getDisjointPaths(topology, src, dst, weight);
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src, DeviceId dst,
+                                              Map<Link, Object> riskProfile) {
+        checkNotNull(topology, TOPOLOGY_NULL);
+        checkNotNull(src, DEVICE_ID_NULL);
+        checkNotNull(dst, DEVICE_ID_NULL);
+        return store.getDisjointPaths(topology, src, dst, riskProfile);
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src,
+                                              DeviceId dst, LinkWeight weight,
+                                              Map<Link, Object> riskProfile) {
+        checkNotNull(topology, TOPOLOGY_NULL);
+        checkNotNull(src, DEVICE_ID_NULL);
+        checkNotNull(dst, DEVICE_ID_NULL);
+        checkNotNull(weight, LINK_WEIGHT_NULL);
+        return store.getDisjointPaths(topology, src, dst, weight, riskProfile);
+    }
+
+    @Override
     public boolean isInfrastructure(Topology topology, ConnectPoint connectPoint) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
         checkNotNull(topology, TOPOLOGY_NULL);
         checkNotNull(connectPoint, CONNECTION_POINT_NULL);
         return store.isInfrastructure(topology, connectPoint);
@@ -170,7 +212,7 @@ public class TopologyManager
 
     @Override
     public boolean isBroadcastPoint(Topology topology, ConnectPoint connectPoint) {
-        checkPermission(Permission.TOPOLOGY_READ);
+        checkPermission(TOPOLOGY_READ);
         checkNotNull(topology, TOPOLOGY_NULL);
         checkNotNull(connectPoint, CONNECTION_POINT_NULL);
         return store.isBroadcastPoint(topology, connectPoint);

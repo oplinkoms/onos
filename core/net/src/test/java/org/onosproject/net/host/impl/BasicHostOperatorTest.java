@@ -22,9 +22,8 @@ import org.junit.Test;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
-import org.onosproject.net.config.Config;
 import org.onosproject.net.config.ConfigApplyDelegate;
-import org.onosproject.incubator.net.config.basics.BasicHostConfig;
+import org.onosproject.net.config.basics.BasicHostConfig;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.HostId;
@@ -49,11 +48,7 @@ public class BasicHostOperatorTest {
     );
     private static final HostDescription HOST = new DefaultHostDescription(MAC, VLAN, LOC, IP);
 
-    private final ConfigApplyDelegate delegate = new ConfigApplyDelegate() {
-        @Override
-        public void onApply(Config config) {
-        }
-    };
+    private final ConfigApplyDelegate delegate = config -> { };
     private final ObjectMapper mapper = new ObjectMapper();
 
     private static final BasicHostConfig BHC = new BasicHostConfig();

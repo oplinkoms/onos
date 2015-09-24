@@ -86,7 +86,7 @@ public class CordFabricManager implements FabricService {
 
     private short radiusPort = 1812;
 
-    private short ofPort = 6633;
+    private short ofPort = 6653;
 
     private DeviceId fabricDeviceId = DeviceId.deviceId("of:5e3e486e73000187");
 
@@ -338,8 +338,7 @@ public class CordFabricManager implements FabricService {
         List<FabricVlan> fVlans = new ArrayList<>();
         vlans.keySet().forEach(vlan -> fVlans.add(
                 //FIXME: Very aweful but will fo for now
-                new FabricVlan(vlan, vlans.get(vlan),
-                               vlan.toShort() == 201 ? true : false)));
+                new FabricVlan(vlan, vlans.get(vlan), vlan.toShort() == 201)));
         return fVlans;
     }
 

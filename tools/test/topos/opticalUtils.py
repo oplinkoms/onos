@@ -149,6 +149,17 @@ class LINCSwitch(OpticalSwitch):
             error('Please set ONOS_ROOT environment variable!\n')
         else:
             os.environ[ 'ONOS_ROOT' ] = onosDir
+    ### REST USER/PASS ###
+    try:
+        restUser = os.environ[ 'ONOS_WEB_USER' ]
+        restPass = os.environ[ 'ONOS_WEB_PASS' ]
+    except:
+        error('***WARNING: $ONOS_WEB_USER and $ONOS_WEB_PASS aren\'t set!\n')
+        error('***WARNING: Setting (probably) sane WEB user/pass values\n')
+        restUser = 'onos'
+        restPass = 'rocks'
+        os.environ[ 'ONOS_WEB_USER' ] = restUser
+        os.environ[ 'ONOS_WEB_PASS' ] = restPass
     ### LINC-directory
     lincDir = findDir.__func__('linc-oe', user)
     if not lincDir:
@@ -280,7 +291,7 @@ class LINCSwitch(OpticalSwitch):
             json.dump(crossConnectJSON, fd, indent=4, separators=(',', ': '))
         info('*** Pushing crossConnect.json to ONOS\n')
         output = quietRun('%s/tools/test/bin/onos-topo-cfg %s\
-         Topology.json' % (self.onosDir, self.controllers[ 0 ].ip), shell=True)
+         Topology.json network/configuration/' % (self.onosDir, self.controllers[ 0 ].ip), shell=True)
 
     def stop_oe(self):
         '''
@@ -363,16 +374,17 @@ class LINCSwitch(OpticalSwitch):
         LINCSwitch.opticalJSON[ 'links' ] = linkConfig
 
         info('*** Writing Topology.json file\n')
+        topoJSON = LINCSwitch.makeTopoJSON()
         with open('Topology.json', 'w') as outfile:
-            json.dump(LINCSwitch.opticalJSON, outfile, indent=4, separators=(',', ': '))
+            json.dump(topoJSON, outfile, indent=4, separators=(',', ': '))
 
         info('*** Converting Topology.json to linc-oe format (TopoConfig.json) file (no oecfg) \n')
         
-        topoConfigJson = {};
-        dpIdToName = {};
+        topoConfigJson = {}
+        dpIdToName = {}
 
-        topoConfigJson["switchConfig"] = LINCSwitch.getSwitchConfig(dpIdToName);
-        topoConfigJson["linkConfig"] = LINCSwitch.getLinkConfig(dpIdToName);
+        topoConfigJson["switchConfig"] = LINCSwitch.getSwitchConfig(dpIdToName)
+        topoConfigJson["linkConfig"] = LINCSwitch.getLinkConfig(dpIdToName)
 
         #Writing to TopoConfig.json
         with open( 'TopoConfig.json', 'w' ) as outfile:
@@ -428,6 +440,13 @@ class LINCSwitch(OpticalSwitch):
         info('*** Waiting for all devices to be available in ONOS...\n')
         url = 'http://%s:8181/onos/v1/devices' % LINCSwitch.controllers[0].ip
         time = 0
+        # Set up password authentication
+        pw_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
+        pw_mgr.add_password(None, url, LINCSwitch.restUser, LINCSwitch.restPass)
+        handler = urllib2.HTTPBasicAuthHandler(pw_mgr)
+        opener = urllib2.build_opener(handler)
+        opener.open(url)
+        urllib2.install_opener(opener)
         while True:
             response = json.load(urllib2.urlopen(url))
             devs = response.get('devices')
@@ -452,7 +471,8 @@ class LINCSwitch(OpticalSwitch):
 
         info('*** Pushing Topology.json to ONOS\n')
         for index in range(len(LINCSwitch.controllers)):
-            output = quietRun('%s/tools/test/bin/onos-topo-cfg %s Topology.json &' % (LINCSwitch.onosDir, LINCSwitch.controllers[ index ].ip), shell=True)
+            output = quietRun('%s/tools/test/bin/onos-topo-cfg %s Topology.json network/configuration/ &'\
+                               % (LINCSwitch.onosDir, LINCSwitch.controllers[ index ].ip), shell=True)
             # successful output contains the two characters '{}'
             # if there is more output than this, there is an issue
             if output.strip('{}'):
@@ -466,6 +486,48 @@ class LINCSwitch(OpticalSwitch):
         for i in range(3, len(id) - 1, 2):
             nodeDpid += (id[i:(i + 2):]) + ":"
         return nodeDpid[0:-1];
+
+    @staticmethod
+    def makeTopoJSON():
+        """
+        Builds ONOS network conifg system compatible dicts to be written as Topology.json file.
+        """
+        topology = {}
+        links = {}
+        devices = {}
+        ports = {}
+
+        for switch in LINCSwitch.opticalJSON[ 'devices' ]:
+            # build device entries - keyed on uri (DPID) and config key 'basic'
+            devDict = {}
+            devDict[ 'driver' ] = switch[ 'hw' ]
+            devDict[ 'mfr' ] = switch[ 'mfr' ]
+            devDict[ 'mac' ] = switch[ 'mac' ]
+            devDict[ 'type' ] = switch[ 'type' ]
+            devDict.update(switch[ 'annotations' ])
+
+            devSubj = switch[ 'uri' ]
+            devices[ devSubj ] = { 'basic': devDict }
+
+            # build port entries - keyed on "uri/port" and config key 'optical'
+            for port in switch[ 'ports' ]:
+                portSubj = devSubj + '/' + str(port[ 'port' ])
+                ports[ portSubj ] = { 'optical': port }
+
+        # build link entries - keyed on "uri/port-uri/port" and config key 'basic'
+        for link in LINCSwitch.opticalJSON[ 'links' ]:
+            linkDict = {}
+            linkDict[ 'type' ] = link[ 'type' ]
+            linkDict.update(link[ 'annotations' ])
+
+            linkSubj = link[ 'src' ] + '-' + link[ 'dst' ]
+            links[ linkSubj ] = { 'basic': linkDict }
+
+        topology[ 'links' ] = links
+        topology[ 'devices' ] = devices
+        topology[ 'ports' ] = ports
+
+        return topology
 
     @staticmethod
     def getSwitchConfig (dpIdToName):

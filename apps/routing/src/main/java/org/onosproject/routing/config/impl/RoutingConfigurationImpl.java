@@ -30,16 +30,21 @@ import org.onlab.packet.Ip6Address;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
+import org.onosproject.core.ApplicationId;
+import org.onosproject.core.CoreService;
+import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.config.ConfigFactory;
 import org.onosproject.net.config.NetworkConfigRegistry;
-import org.onosproject.incubator.net.config.basics.SubjectFactories;
-import org.onosproject.net.ConnectPoint;
-import org.onosproject.net.host.HostService;
+import org.onosproject.net.config.NetworkConfigService;
+import org.onosproject.net.config.basics.SubjectFactories;
+import org.onosproject.routing.config.BgpConfig;
 import org.onosproject.routing.config.BgpPeer;
 import org.onosproject.routing.config.BgpSpeaker;
 import org.onosproject.routing.config.Interface;
 import org.onosproject.routing.config.LocalIpPrefixEntry;
 import org.onosproject.routing.config.RoutingConfigurationService;
+import org.onosproject.routing.impl.Router;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +56,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static org.onosproject.routing.RouteEntry.createBinaryString;
 
@@ -69,10 +75,16 @@ public class RoutingConfigurationImpl implements RoutingConfigurationService {
     private String configFileName = DEFAULT_CONFIG_FILE;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected HostService hostService;
+    protected NetworkConfigRegistry registry;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected NetworkConfigRegistry registry;
+    protected NetworkConfigService configService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected CoreService coreService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected InterfaceService interfaceService;
 
     private Map<String, BgpSpeaker> bgpSpeakers = new ConcurrentHashMap<>();
     private Map<IpAddress, BgpPeer> bgpPeers = new ConcurrentHashMap<>();
@@ -87,7 +99,6 @@ public class RoutingConfigurationImpl implements RoutingConfigurationService {
                     new DefaultByteArrayNodeFactory());
 
     private MacAddress virtualGatewayMacAddress;
-    private HostToInterfaceAdaptor hostAdaptor;
 
     private ConfigFactory configFactory =
             new ConfigFactory(SubjectFactories.APP_SUBJECT_FACTORY, BgpConfig.class, "bgp") {
@@ -101,7 +112,6 @@ public class RoutingConfigurationImpl implements RoutingConfigurationService {
     public void activate() {
         registry.registerConfigFactory(configFactory);
         readConfiguration();
-        hostAdaptor = new HostToInterfaceAdaptor(hostService);
         log.info("Routing configuration service started");
     }
 
@@ -173,27 +183,40 @@ public class RoutingConfigurationImpl implements RoutingConfigurationService {
 
     @Override
     public Set<Interface> getInterfaces() {
-        return hostAdaptor.getInterfaces();
+        return Collections.emptySet();
     }
 
     @Override
     public Set<ConnectPoint> getBgpPeerConnectPoints() {
-        return Collections.unmodifiableSet(bgpPeerConnectPoints);
+        // TODO perhaps cache this result in future
+        ApplicationId routerAppId = coreService.getAppId(Router.ROUTER_APP_ID);
+        if (routerAppId == null) {
+            return Collections.emptySet();
+        }
+
+        BgpConfig bgpConfig = configService.getConfig(routerAppId, BgpConfig.class);
+
+        return bgpConfig.bgpSpeakers().stream()
+                .flatMap(speaker -> speaker.peers().stream())
+                .map(peer -> interfaceService.getMatchingInterface(peer))
+                .filter(intf -> intf != null)
+                .map(intf -> intf.connectPoint())
+                .collect(Collectors.toSet());
     }
 
     @Override
     public Interface getInterface(ConnectPoint connectPoint) {
-        return hostAdaptor.getInterface(connectPoint);
+        return null;
     }
 
     @Override
     public Interface getInterface(IpAddress ip) {
-        return hostAdaptor.getInterface(ip);
+        return null;
     }
 
     @Override
     public Interface getMatchingInterface(IpAddress ipAddress) {
-        return hostAdaptor.getMatchingInterface(ipAddress);
+        return null;
     }
 
     @Override

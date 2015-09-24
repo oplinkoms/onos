@@ -30,6 +30,9 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.MoreObjects;
 
+/**
+ * Provides PCEP SRP obejct.
+ */
 public class PcepSrpObjectVer1 implements PcepSrpObject {
 
     /*
@@ -152,18 +155,18 @@ public class PcepSrpObjectVer1 implements PcepSrpObject {
 
         int srpID;
         int flags;
-        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<>();
 
         srpObjHeader = PcepObjectHeader.read(cb);
 
-        if (SRP_OBJ_CLASS != srpObjHeader.getObjClass()) {
+        if (srpObjHeader.getObjClass() != SRP_OBJ_CLASS) {
             throw new PcepParseException("SRP object expected. But received " + srpObjHeader.getObjClass());
         }
 
         //take only SrpObject buffer.
         ChannelBuffer tempCb = cb.readBytes(srpObjHeader.getObjLen() - MINIMUM_COMMON_HEADER_LENGTH);
         flags = tempCb.readInt();
-        bRFlag = (0 < flags) ? true : false;
+        bRFlag = 0 < flags;
         srpID = tempCb.readInt();
 
         llOptionalTlv = parseOptionalTlv(tempCb);
@@ -209,7 +212,7 @@ public class PcepSrpObjectVer1 implements PcepSrpObject {
      */
     public static LinkedList<PcepValueType> parseOptionalTlv(ChannelBuffer cb) throws PcepParseException {
 
-        LinkedList<PcepValueType> llOutOptionalTlv = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llOutOptionalTlv = new LinkedList<>();
 
         while (MINIMUM_COMMON_HEADER_LENGTH <= cb.readableBytes()) {
 
@@ -255,7 +258,7 @@ public class PcepSrpObjectVer1 implements PcepSrpObject {
         while (listIterator.hasNext()) {
             PcepValueType tlv = listIterator.next();
 
-            if (null == tlv) {
+            if (tlv == null) {
                 log.debug("tlv is null from OptionalTlv list");
                 continue;
             }
@@ -276,7 +279,7 @@ public class PcepSrpObjectVer1 implements PcepSrpObject {
     }
 
     /**
-     * builder class for PCEP srp Object.
+     * Builder class for PCEP srp Object.
      */
     public static class Builder implements PcepSrpObject.Builder {
         private boolean bIsHeaderSet = false;
@@ -286,7 +289,7 @@ public class PcepSrpObjectVer1 implements PcepSrpObject {
         private PcepObjectHeader srpObjHeader;
         private int srpId;
         private boolean bRFlag;
-        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<PcepValueType>();
+        LinkedList<PcepValueType> llOptionalTlv = new LinkedList<>();
 
         private boolean bIsPFlagSet = false;
         private boolean bPFlag;
@@ -380,7 +383,10 @@ public class PcepSrpObjectVer1 implements PcepSrpObject {
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(getClass()).add("RFlag", bRFlag).add("SRPID", srpId)
-                .add("OptionalTlvList", llOptionalTlv).toString();
+        return MoreObjects.toStringHelper(getClass())
+                .add("RFlag", bRFlag)
+                .add("SRPID", srpId)
+                .add("OptionalTlvList", llOptionalTlv)
+                .toString();
     }
 }

@@ -12,7 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 package org.onosproject.ui.topo;
@@ -26,6 +25,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public abstract class AbstractHighlight {
     private final TopoElementType type;
     private final String elementId;
+    private boolean keepSubdued = false;
 
     /**
      * Constructs the highlight.
@@ -36,6 +36,13 @@ public abstract class AbstractHighlight {
     public AbstractHighlight(TopoElementType type, String elementId) {
         this.type = checkNotNull(type);
         this.elementId = checkNotNull(elementId);
+    }
+
+    /**
+     * Sets a flag to tell the renderer to keep this element subdued.
+     */
+    public void keepSubdued() {
+        keepSubdued = true;
     }
 
     /**
@@ -54,5 +61,14 @@ public abstract class AbstractHighlight {
      */
     public String elementId() {
         return elementId;
+    }
+
+    /**
+     * Returns the subdued flag.
+     *
+     * @return subdued flag
+     */
+    public boolean subdued() {
+        return keepSubdued;
     }
 }

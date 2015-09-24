@@ -33,7 +33,8 @@ import org.onlab.packet.VlanId;
 import org.onlab.packet.ndp.NeighborAdvertisement;
 import org.onlab.packet.ndp.NeighborDiscoveryOptions;
 import org.onlab.packet.ndp.NeighborSolicitation;
-import org.onosproject.core.Permission;
+import org.onosproject.incubator.net.intf.Interface;
+import org.onosproject.incubator.net.intf.InterfaceService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Host;
 import org.onosproject.net.device.DeviceService;
@@ -41,8 +42,6 @@ import org.onosproject.net.edge.EdgePortService;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.host.HostService;
-import org.onosproject.net.host.InterfaceIpAddress;
-import org.onosproject.net.host.PortAddresses;
 import org.onosproject.net.link.LinkService;
 import org.onosproject.net.packet.DefaultOutboundPacket;
 import org.onosproject.net.packet.InboundPacket;
@@ -53,9 +52,7 @@ import org.onosproject.net.proxyarp.ProxyArpStore;
 import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
-import java.util.HashSet;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -63,6 +60,7 @@ import static org.onlab.packet.VlanId.vlanId;
 import static org.onosproject.net.HostId.hostId;
 import static org.onosproject.security.AppGuard.checkPermission;
 import static org.slf4j.LoggerFactory.getLogger;
+import static org.onosproject.security.AppPermission.Type.*;
 
 
 @Component(immediate = true)
@@ -71,11 +69,9 @@ public class ProxyArpManager implements ProxyArpService {
 
     private final Logger log = getLogger(getClass());
 
-    private static final String MAC_ADDR_NULL = "Mac address cannot be null.";
+    private static final String MAC_ADDR_NULL = "MAC address cannot be null.";
     private static final String REQUEST_NULL = "ARP or NDP request cannot be null.";
-    private static final String REQUEST_NOT_ARP = "Ethernet frame does not contain ARP request.";
-    private static final String NOT_ARP_REQUEST = "ARP is not a request.";
-    private static final String NOT_ARP_REPLY = "ARP is not a reply.";
+    private static final String MSG_NOT_REQUEST = "Message is not an ARP or NDP request";
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected EdgePortService edgeService;
@@ -95,16 +91,22 @@ public class ProxyArpManager implements ProxyArpService {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ProxyArpStore store;
 
-    /**
-     * Listens to both device service and link service to determine
-     * whether a port is internal or external.
-     */
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected InterfaceService interfaceService;
+
+    private enum Protocol {
+        ARP, NDP
+    }
+
+    private enum MessageType {
+        REQUEST, REPLY
+    }
+
     @Activate
     public void activate() {
         store.setDelegate(this::sendTo);
         log.info("Started");
     }
-
 
     @Deactivate
     public void deactivate() {
@@ -114,7 +116,8 @@ public class ProxyArpManager implements ProxyArpService {
 
     @Override
     public boolean isKnown(IpAddress addr) {
-        checkPermission(Permission.PACKET_READ);
+        checkPermission(PACKET_READ);
+
         checkNotNull(addr, MAC_ADDR_NULL);
         Set<Host> hosts = hostService.getHostsByIp(addr);
         return !hosts.isEmpty();
@@ -122,52 +125,52 @@ public class ProxyArpManager implements ProxyArpService {
 
     @Override
     public void reply(Ethernet eth, ConnectPoint inPort) {
-        checkPermission(Permission.PACKET_WRITE);
+        checkPermission(PACKET_WRITE);
+
         checkNotNull(eth, REQUEST_NULL);
 
-        if (eth.getEtherType() == Ethernet.TYPE_ARP) {
-            replyArp(eth, inPort);
-        } else if (eth.getEtherType() == Ethernet.TYPE_IPV6) {
-            replyNdp(eth, inPort);
+        MessageContext context = createContext(eth, inPort);
+        if (context != null) {
+            replyInternal(context);
         }
     }
 
-    private void replyArp(Ethernet eth, ConnectPoint inPort) {
-        ARP arp = (ARP) eth.getPayload();
-        checkArgument(arp.getOpCode() == ARP.OP_REQUEST, NOT_ARP_REQUEST);
-        checkNotNull(inPort);
-        Ip4Address targetAddress = Ip4Address.valueOf(arp.getTargetProtocolAddress());
+    /**
+     * Handles a request message.
+     *
+     * If the MAC address of the target is known, we can reply directly to the
+     * requestor. Otherwise, we forward the request out other ports in an
+     * attempt to find the correct host.
+     *
+     * @param context request message context to process
+     */
+    private void replyInternal(MessageContext context) {
+        checkNotNull(context);
+        checkArgument(context.type() == MessageType.REQUEST, MSG_NOT_REQUEST);
 
-        VlanId vlan = vlanId(eth.getVlanID());
-
-        if (isOutsidePort(inPort)) {
+        if (hasIpAddress(context.inPort())) {
             // If the request came from outside the network, only reply if it was
             // for one of our external addresses.
-            Set<PortAddresses> addressSet =
-                    hostService.getAddressBindingsForPort(inPort);
 
-            for (PortAddresses addresses : addressSet) {
-                for (InterfaceIpAddress ia : addresses.ipAddresses()) {
-                    if (ia.ipAddress().equals(targetAddress)) {
-                        Ethernet arpReply =
-                                ARP.buildArpReply(targetAddress, addresses.mac(), eth);
-                        sendTo(arpReply, inPort);
-                    }
-                }
-            }
+            interfaceService.getInterfacesByPort(context.inPort())
+                    .stream()
+                    .filter(intf -> intf.ipAddresses()
+                            .stream()
+                            .anyMatch(ia -> ia.ipAddress().equals(context.target())))
+                    .forEach(intf -> buildAndSendReply(context, intf.mac()));
+
+            // Stop here and don't proxy ARPs if the port has an IP address
             return;
         }
 
         // See if we have the target host in the host store
-
-        Set<Host> hosts = hostService.getHostsByIp(targetAddress);
+        Set<Host> hosts = hostService.getHostsByIp(context.target());
 
         Host dst = null;
-        Host src = hostService.getHost(hostId(eth.getSourceMAC(),
-                                              vlanId(eth.getVlanID())));
+        Host src = hostService.getHost(hostId(context.srcMac(), context.vlan()));
 
         for (Host host : hosts) {
-            if (host.vlan().equals(vlan)) {
+            if (host.vlan().equals(context.vlan())) {
                 dst = host;
                 break;
             }
@@ -175,26 +178,20 @@ public class ProxyArpManager implements ProxyArpService {
 
         if (src != null && dst != null) {
             // We know the target host so we can respond
-            Ethernet arpReply = ARP.buildArpReply(targetAddress, dst.mac(), eth);
-            sendTo(arpReply, inPort);
+            buildAndSendReply(context, dst.mac());
             return;
         }
 
         // If the source address matches one of our external addresses
         // it could be a request from an internal host to an external
         // address. Forward it over to the correct port.
-        Ip4Address source =
-                Ip4Address.valueOf(arp.getSenderProtocolAddress());
-        Set<PortAddresses> sourceAddresses = findPortsInSubnet(source);
         boolean matched = false;
-        for (PortAddresses pa : sourceAddresses) {
-            for (InterfaceIpAddress ia : pa.ipAddresses()) {
-                if (ia.ipAddress().equals(source) &&
-                        pa.vlan().equals(vlan)) {
-                    matched = true;
-                    sendTo(eth, pa.connectPoint());
-                    break;
-                }
+        Set<Interface> interfaces = interfaceService.getInterfacesByIp(context.sender());
+        for (Interface intf : interfaces) {
+            if (intf.vlan().equals(context.vlan())) {
+                matched = true;
+                sendTo(context.packet(), intf.connectPoint());
+                break;
             }
         }
 
@@ -202,95 +199,35 @@ public class ProxyArpManager implements ProxyArpService {
             return;
         }
 
-        //
         // The request couldn't be resolved.
         // Flood the request on all ports except the incoming port.
-        //
-        flood(eth, inPort);
+        flood(context.packet(), context.inPort());
     }
-
-    private void replyNdp(Ethernet eth, ConnectPoint inPort) {
-        IPv6 ipv6 = (IPv6) eth.getPayload();
-        ICMP6 icmpv6 = (ICMP6) ipv6.getPayload();
-        NeighborSolicitation nsol = (NeighborSolicitation) icmpv6.getPayload();
-        Ip6Address targetAddress = Ip6Address.valueOf(nsol.getTargetAddress());
-
-        VlanId vlan = vlanId(eth.getVlanID());
-
-        // If the request came from outside the network, only reply if it was
-        // for one of our external addresses.
-        if (isOutsidePort(inPort)) {
-            Set<PortAddresses> addressSet =
-                    hostService.getAddressBindingsForPort(inPort);
-
-            for (PortAddresses addresses : addressSet) {
-                for (InterfaceIpAddress ia : addresses.ipAddresses()) {
-                    if (ia.ipAddress().equals(targetAddress)) {
-                        Ethernet ndpReply =
-                                buildNdpReply(targetAddress, addresses.mac(), eth);
-                        sendTo(ndpReply, inPort);
-                    }
-                }
-            }
-            return;
-        } else {
-            // If the source address matches one of our external addresses
-            // it could be a request from an internal host to an external
-            // address. Forward it over to the correct ports.
-            Ip6Address source =
-                    Ip6Address.valueOf(ipv6.getSourceAddress());
-            Set<PortAddresses> sourceAddresses = findPortsInSubnet(source);
-            boolean matched = false;
-            for (PortAddresses pa : sourceAddresses) {
-                for (InterfaceIpAddress ia : pa.ipAddresses()) {
-                    if (ia.ipAddress().equals(source) &&
-                            pa.vlan().equals(vlan)) {
-                        matched = true;
-                        sendTo(eth, pa.connectPoint());
-                        break;
-                    }
-                }
-            }
-
-            if (matched) {
-                return;
-            }
-        }
-
-        // Continue with normal proxy ARP case
-
-        Set<Host> hosts = hostService.getHostsByIp(targetAddress);
-
-        Host dst = null;
-        Host src = hostService.getHost(hostId(eth.getSourceMAC(),
-                                              vlanId(eth.getVlanID())));
-
-        for (Host host : hosts) {
-            if (host.vlan().equals(vlan)) {
-                dst = host;
-                break;
-            }
-        }
-
-        if (src == null || dst == null) {
-            //
-            // The request couldn't be resolved.
-            // Flood the request on all ports except the incoming ports.
-            //
-            flood(eth, inPort);
-            return;
-        }
-
-        //
-        // Reply on the port the request was received on
-        //
-        Ethernet ndpReply = buildNdpReply(targetAddress, dst.mac(), eth);
-        sendTo(ndpReply, inPort);
-    }
-    //TODO checkpoint
 
     /**
-     * Outputs the given packet out the given port.
+     * Builds and sends a reply message given a request context and the resolved
+     * MAC address to answer with.
+     *
+     * @param context message context of request
+     * @param targetMac MAC address to be given in the response
+     */
+    private void buildAndSendReply(MessageContext context, MacAddress targetMac) {
+        switch (context.protocol()) {
+        case ARP:
+            sendTo(ARP.buildArpReply((Ip4Address) context.target(),
+                    targetMac, context.packet()), context.inPort());
+            break;
+        case NDP:
+            sendTo(buildNdpReply((Ip6Address) context.target(), targetMac,
+                    context.packet()), context.inPort());
+            break;
+        default:
+            break;
+        }
+    }
+
+    /**
+     * Outputs a packet out a specific port.
      *
      * @param packet  the packet to send
      * @param outPort the port to send it out
@@ -299,6 +236,12 @@ public class ProxyArpManager implements ProxyArpService {
         sendTo(outPort, ByteBuffer.wrap(packet.serialize()));
     }
 
+    /**
+     * Outputs a packet out a specific port.
+     *
+     * @param outPort port to send it out
+     * @param packet packet to send
+     */
     private void sendTo(ConnectPoint outPort, ByteBuffer packet) {
         if (!edgeService.isEdgePoint(outPort)) {
             // Sanity check to make sure we don't send the packet out an
@@ -310,43 +253,32 @@ public class ProxyArpManager implements ProxyArpService {
         TrafficTreatment.Builder builder = DefaultTrafficTreatment.builder();
         builder.setOutput(outPort.port());
         packetService.emit(new DefaultOutboundPacket(outPort.deviceId(),
-                                                     builder.build(), packet));
+                builder.build(), packet));
     }
 
     /**
-     * Finds ports with an address in the subnet of the target address.
-     *
-     * @param target the target address to find a matching port for
-     * @return a set of PortAddresses describing ports in the subnet
-     */
-    private Set<PortAddresses> findPortsInSubnet(IpAddress target) {
-        Set<PortAddresses> result = new HashSet<>();
-        for (PortAddresses addresses : hostService.getAddressBindings()) {
-            result.addAll(addresses.ipAddresses().stream().filter(ia -> ia.subnetAddress().contains(target)).
-                    map(ia -> addresses).collect(Collectors.toList()));
-        }
-        return result;
-    }
-
-    /**
-     * Returns whether the given port is an outside-facing port with an IP
-     * address configured.
+     * Returns whether the given port has any IP addresses configured or not.
      *
      * @param port the port to check
-     * @return true if the port is an outside-facing port, otherwise false
+     * @return true if the port has at least one IP address configured,
+     * otherwise false
      */
-    private boolean isOutsidePort(ConnectPoint port) {
-        // TODO: Is this sufficient to identify outside-facing ports: just having IP addresses on a port?
-        return !hostService.getAddressBindingsForPort(port).isEmpty();
+    private boolean hasIpAddress(ConnectPoint port) {
+        return interfaceService.getInterfacesByPort(port)
+                .stream()
+                .map(intf -> intf.ipAddresses())
+                .findAny()
+                .isPresent();
     }
 
     @Override
     public void forward(Ethernet eth, ConnectPoint inPort) {
-        checkPermission(Permission.PACKET_WRITE);
+        checkPermission(PACKET_WRITE);
+
         checkNotNull(eth, REQUEST_NULL);
 
         Host h = hostService.getHost(hostId(eth.getDestinationMAC(),
-                                            vlanId(eth.getVlanID())));
+                vlanId(eth.getVlanID())));
 
         if (h == null) {
             flood(eth, inPort);
@@ -359,7 +291,7 @@ public class ProxyArpManager implements ProxyArpService {
 
     @Override
     public boolean handlePacket(PacketContext context) {
-        checkPermission(Permission.PACKET_WRITE);
+        checkPermission(PACKET_WRITE);
 
         InboundPacket pkt = context.inPacket();
         Ethernet ethPkt = pkt.parsed();
@@ -367,42 +299,24 @@ public class ProxyArpManager implements ProxyArpService {
         if (ethPkt == null) {
             return false;
         }
-        if (ethPkt.getEtherType() == Ethernet.TYPE_ARP) {
-            return handleArp(context, ethPkt);
-        } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6) {
-            return handleNdp(context, ethPkt);
-        }
-        return false;
-    }
 
-    private boolean handleArp(PacketContext context, Ethernet ethPkt) {
-        ARP arp = (ARP) ethPkt.getPayload();
+        MessageContext msgContext = createContext(ethPkt, pkt.receivedFrom());
 
-        if (arp.getOpCode() == ARP.OP_REPLY) {
-            forward(ethPkt, context.inPacket().receivedFrom());
-        } else if (arp.getOpCode() == ARP.OP_REQUEST) {
-            reply(ethPkt, context.inPacket().receivedFrom());
-        } else {
+        if (msgContext == null) {
             return false;
         }
-        context.block();
-        return true;
-    }
 
-    private boolean handleNdp(PacketContext context, Ethernet ethPkt) {
-        IPv6 ipv6 = (IPv6) ethPkt.getPayload();
-
-        if (ipv6.getNextHeader() != IPv6.PROTOCOL_ICMP6) {
+        switch (msgContext.type()) {
+        case REPLY:
+            forward(msgContext.packet(), msgContext.inPort());
+            break;
+        case REQUEST:
+            replyInternal(msgContext);
+            break;
+        default:
             return false;
         }
-        ICMP6 icmpv6 = (ICMP6) ipv6.getPayload();
-        if (icmpv6.getIcmpType() == ICMP6.NEIGHBOR_ADVERTISEMENT) {
-            forward(ethPkt, context.inPacket().receivedFrom());
-        } else if (icmpv6.getIcmpType() == ICMP6.NEIGHBOR_SOLICITATION) {
-            reply(ethPkt, context.inPacket().receivedFrom());
-        } else {
-            return false;
-        }
+
         context.block();
         return true;
     }
@@ -418,7 +332,7 @@ public class ProxyArpManager implements ProxyArpService {
         ByteBuffer buf = ByteBuffer.wrap(request.serialize());
 
         for (ConnectPoint connectPoint : edgeService.getEdgePoints()) {
-            if (isOutsidePort(connectPoint) || connectPoint.equals(inPort)) {
+            if (hasIpAddress(connectPoint) || connectPoint.equals(inPort)) {
                 continue;
             }
 
@@ -427,7 +341,6 @@ public class ProxyArpManager implements ProxyArpService {
             packetService.emit(new DefaultOutboundPacket(connectPoint.deviceId(),
                                                          builder.build(), buf));
         }
-
     }
 
     /**
@@ -467,5 +380,149 @@ public class ProxyArpManager implements ProxyArpService {
         ipv6.setPayload(icmp6);
         eth.setPayload(ipv6);
         return eth;
+    }
+
+    /**
+     * Attempts to create a MessageContext for the given Ethernet frame. If the
+     * frame is a valid ARP or NDP request or response, a context will be
+     * created.
+     *
+     * @param eth input Ethernet frame
+     * @param inPort in port
+     * @return MessageContext if the packet was ARP or NDP, otherwise null
+     */
+    private MessageContext createContext(Ethernet eth, ConnectPoint inPort) {
+        if (eth.getEtherType() == Ethernet.TYPE_ARP) {
+            return createArpContext(eth, inPort);
+        } else if (eth.getEtherType() == Ethernet.TYPE_IPV6) {
+            return createNdpContext(eth, inPort);
+        }
+
+        return null;
+    }
+
+    /**
+     * Extracts context information from ARP packets.
+     *
+     * @param eth input Ethernet frame that is thought to be ARP
+     * @param inPort in port
+     * @return MessageContext object if the packet was a valid ARP packet,
+     * otherwise null
+     */
+    private MessageContext createArpContext(Ethernet eth, ConnectPoint inPort) {
+        if (eth.getEtherType() != Ethernet.TYPE_ARP) {
+            return null;
+        }
+
+        ARP arp = (ARP) eth.getPayload();
+
+        IpAddress target = Ip4Address.valueOf(arp.getTargetProtocolAddress());
+        IpAddress sender = Ip4Address.valueOf(arp.getSenderProtocolAddress());
+
+        MessageType type;
+        if (arp.getOpCode() == ARP.OP_REQUEST) {
+            type = MessageType.REQUEST;
+        } else if (arp.getOpCode() == ARP.OP_REPLY) {
+            type = MessageType.REPLY;
+        } else {
+            return null;
+        }
+
+        return new MessageContext(eth, inPort, Protocol.ARP, type, target, sender);
+    }
+
+    /**
+     * Extracts context information from NDP packets.
+     *
+     * @param eth input Ethernet frame that is thought to be NDP
+     * @param inPort in port
+     * @return MessageContext object if the packet was a valid NDP packet,
+     * otherwise null
+     */
+    private MessageContext createNdpContext(Ethernet eth, ConnectPoint inPort) {
+        if (eth.getEtherType() != Ethernet.TYPE_IPV6) {
+            return null;
+        }
+        IPv6 ipv6 = (IPv6) eth.getPayload();
+
+        if (ipv6.getNextHeader() != IPv6.PROTOCOL_ICMP6) {
+            return null;
+        }
+        ICMP6 icmpv6 = (ICMP6) ipv6.getPayload();
+
+        IpAddress sender = Ip6Address.valueOf(ipv6.getSourceAddress());
+        IpAddress target = null;
+
+        MessageType type;
+        if (icmpv6.getIcmpType() == ICMP6.NEIGHBOR_SOLICITATION) {
+            type = MessageType.REQUEST;
+            NeighborSolicitation nsol = (NeighborSolicitation) icmpv6.getPayload();
+            target = Ip6Address.valueOf(nsol.getTargetAddress());
+        } else if (icmpv6.getIcmpType() == ICMP6.NEIGHBOR_ADVERTISEMENT) {
+            type = MessageType.REPLY;
+        } else {
+            return null;
+        }
+
+        return new MessageContext(eth, inPort, Protocol.NDP, type, target, sender);
+    }
+
+    /**
+     * Provides context information for a particular ARP or NDP message, with
+     * a unified interface to access data regardless of protocol.
+     */
+    private class MessageContext {
+        private Protocol protocol;
+        private MessageType type;
+
+        private IpAddress target;
+        private IpAddress sender;
+
+        private Ethernet eth;
+        private ConnectPoint inPort;
+
+
+        public MessageContext(Ethernet eth, ConnectPoint inPort,
+                              Protocol protocol, MessageType type,
+                              IpAddress target, IpAddress sender) {
+            this.eth = eth;
+            this.inPort = inPort;
+            this.protocol = protocol;
+            this.type = type;
+            this.target = target;
+            this.sender = sender;
+        }
+
+        public ConnectPoint inPort() {
+            return inPort;
+        }
+
+        public Ethernet packet() {
+            return eth;
+        }
+
+        public Protocol protocol() {
+            return protocol;
+        }
+
+        public MessageType type() {
+            return type;
+        }
+
+        public VlanId vlan() {
+            return VlanId.vlanId(eth.getVlanID());
+        }
+
+        public MacAddress srcMac() {
+            return MacAddress.valueOf(eth.getSourceMACAddress());
+        }
+
+        public IpAddress target() {
+            return target;
+        }
+
+        public IpAddress sender() {
+            return sender;
+        }
     }
 }
