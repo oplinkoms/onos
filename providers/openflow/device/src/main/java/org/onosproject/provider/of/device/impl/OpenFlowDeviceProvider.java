@@ -60,6 +60,7 @@ import org.onosproject.net.SparseAnnotations;
 import org.onosproject.net.device.DefaultDeviceDescription;
 import org.onosproject.net.device.DefaultPortDescription;
 import org.onosproject.net.device.DefaultPortStatistics;
+import org.onosproject.net.device.DefaultPortPower;
 import org.onosproject.net.device.DeviceDescription;
 import org.onosproject.net.device.DeviceProvider;
 import org.onosproject.net.device.DeviceProviderRegistry;
@@ -69,6 +70,7 @@ import org.onosproject.net.device.OduCltPortDescription;
 import org.onosproject.net.device.OmsPortDescription;
 import org.onosproject.net.device.PortDescription;
 import org.onosproject.net.device.PortStatistics;
+import org.onosproject.net.device.PortPower;
 import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.openflow.controller.Dpid;
@@ -83,6 +85,7 @@ import org.osgi.service.component.ComponentContext;
 import org.projectfloodlight.openflow.protocol.OFCalientPortDescStatsEntry;
 import org.projectfloodlight.openflow.protocol.OFExperimenterStatsReply;
 import org.projectfloodlight.openflow.protocol.OFOplinkPortPowerReply;
+import org.projectfloodlight.openflow.protocol.OFOplinkPortPower;
 import org.projectfloodlight.openflow.protocol.OFExpPort;
 import org.projectfloodlight.openflow.protocol.OFExpPortDescPropOpticalTransport;
 import org.projectfloodlight.openflow.protocol.OFExpPortOpticalTransportLayerEntry;
@@ -409,11 +412,12 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
             switch (sw.deviceType()) {
                 case ROADM:
                     opsw = (OpenFlowOpticalSwitch) sw;
+/*
                     List<OFPortDesc> ports = opsw.getPorts();
                     LOG.debug("SW ID {} , ETH- ODU CLT Ports {}", opsw.getId(), ports);
                     // ODU client ports are reported as ETH
                     ports.forEach(port -> portDescs.add(buildOduCltPortDescription(port)));
-
+*/
                     opsw.getPortTypes().forEach(type -> {
                     List<? extends OFObject> portsOf = opsw.getPortsOf(type);
                     LOG.debug("Ports Of{}", portsOf);
@@ -665,6 +669,85 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
             return portSpeed.getSpeedBps() / MBPS;
         }
 
+        private void updatePortPower(Dpid dpid, List<OFOplinkPortPower> portPower) {
+            if (providerService == null) {
+                return;
+            }
+            final DeviceId did = deviceId(uri(dpid));
+            providerService.updatePorts(did, buildPortPowerDescroptions(
+                    buildPortDescriptions(controller.getSwitch(dpid)),
+                    buildPortPowers(did, portPower)));
+            return;
+        }
+
+        private List<PortDescription> buildPortPowerDescroptions(List<PortDescription> oldDescs,
+                List<PortPower> powers) {
+            final List<PortDescription> newDescs = new ArrayList<>(oldDescs.size());
+            oldDescs.forEach(pd -> newDescs.add(buildPortPowerDescription(pd, powers)));
+            return newDescs;
+        }
+
+        private PortDescription buildPortPowerDescription(PortDescription portDesc, List<PortPower> portPowers) {
+            final SparseAnnotations annotations = makePortPowerAnnotation(portDesc, portPowers);
+            if (annotations == null) {
+                return portDesc;
+            }
+            // Now only process och type port, it'll be updated later.
+            OchPortDescription ochPortDesc = (OchPortDescription) portDesc;
+            return new OchPortDescription(portDesc, ochPortDesc.signalType(),
+                ochPortDesc.isTunable(), ochPortDesc.lambda(), annotations);
+        }
+
+        private SparseAnnotations makePortPowerAnnotation(PortDescription portDesc, List<PortPower> portPowers) {
+            for (PortPower power : portPowers) {
+                if (power != null && power.port() == portDesc.portNumber().toLong()) {
+                    Float value = new Float((float) power.power() / 100);
+                    String powerName = value.toString() + "dBm";
+                    // Just for testing in webUI, it will be reset later
+                    String portName = portDesc.annotations().value(AnnotationKeys.PORT_NAME)
+                        + ", power is " + powerName;
+                    return DefaultAnnotations.builder()
+                            .set(AnnotationKeys.PORT_NAME, portName)
+                            .set("power", powerName)
+                            .build();
+/*
+                    return DefaultAnnotations.merge(
+                            DefaultAnnotations.builder()
+                                .set("power", powerName)
+                                .build(),
+                            portDesc.annotations());
+*/
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Build a list of portPower from a given port power data.
+         *
+         * @param did device ID.
+         * @param portPower list of all port power data.
+         */
+        private List<PortPower> buildPortPowers(DeviceId did, List<OFOplinkPortPower> portPower) {
+            final List<PortPower> powerList = new ArrayList<>(portPower.size());
+            for (OFOplinkPortPower power : portPower) {
+                try {
+                    if (power == null || power.getPort() < 0) {
+                        continue;
+                    }
+                    DefaultPortPower dpp = DefaultPortPower.builder()
+                            .setDeviceId(did)
+                            .setPort(power.getPort())
+                            .setPower(power.getPowerValue())
+                            .build();
+                    powerList.add(dpp);
+                } catch (Exception e) {
+                    LOG.warn("Unable to process port power", e);
+                }
+            }
+            return powerList;
+        }
+
         @Override
         public void handleMessage(Dpid dpid, OFMessage msg) {
             switch (msg.getType()) {
@@ -687,7 +770,8 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                                 eReply.getExperimenter());
                         if (msg instanceof OFOplinkPortPowerReply) {
                             OFOplinkPortPowerReply oReply = (OFOplinkPortPowerReply) msg;
-                            LOG.warn("received Oplink port power reply, sub type: {}", oReply.getSubtype());
+                            LOG.info("received Oplink port power reply, sub type: {}", oReply.getSubtype());
+                            updatePortPower(dpid, oReply.getEntries());
                         }
                     }
                     break;
