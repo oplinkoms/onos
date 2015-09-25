@@ -22,7 +22,7 @@
     <version>${version}</version>
     <packaging>bundle</packaging>
 
-    <description>ONOS OSGi UI bundle archetype</description>
+    <description>ONOS OSGi UI Custom-View bundle archetype</description>
     <url>http://onosproject.org</url>
 
     <properties>

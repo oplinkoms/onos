@@ -33,18 +33,17 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Skeletal ONOS UI message handler.
- * <p>
- * This example specifically supporting a "table" view.
+ * Skeletal ONOS UI Custom-View message handler.
  */
 public class AppUiMessageHandler extends UiMessageHandler {
+    // TODO: reduce the code down to just the custom view example
 
-    private static final String SAMPLE_DATA_REQ = "sampleDataRequest";
-    private static final String SAMPLE_DATA_RESP = "sampleDataResponse";
-    private static final String SAMPLES = "samples";
+    private static final String SAMPLE_CUSTOM_DATA_REQ = "sampleCustomDataRequest";
+    private static final String SAMPLE_CUSTOM_DATA_RESP = "sampleCustomDataResponse";
+    private static final String SAMPLE_CUSTOMS = "sampleCustoms";
 
-    private static final String SAMPLE_DETAIL_REQ = "sampleDetailsRequest";
-    private static final String SAMPLE_DETAIL_RESP = "sampleDetailsResponse";
+    private static final String SAMPLE_CUSTOM_DETAIL_REQ = "sampleCustomDetailsRequest";
+    private static final String SAMPLE_CUSTOM_DETAIL_RESP = "sampleCustomDetailsResponse";
     private static final String DETAILS = "details";
 
     private static final String ID = "id";
@@ -61,19 +60,17 @@ public class AppUiMessageHandler extends UiMessageHandler {
     @Override
     protected Collection<RequestHandler> createRequestHandlers() {
         return ImmutableSet.of(
-                new SampleDataRequestHandler(),
-                new SampleDetailRequestHandler()
+                new SampleCustomDataRequestHandler(),
+                new SampleCustomDetailRequestHandler()
         );
     }
 
     // handler for sample table requests
-    private final class SampleDataRequestHandler extends TableRequestHandler {
+    private final class SampleCustomDataRequestHandler extends TableRequestHandler {
 
-        private SampleDataRequestHandler() {
-            super(SAMPLE_DATA_REQ, SAMPLE_DATA_RESP, SAMPLES);
+        private SampleCustomDataRequestHandler() {
+            super(SAMPLE_CUSTOM_DATA_REQ, SAMPLE_CUSTOM_DATA_RESP, SAMPLE_CUSTOMS);
         }
-
-        // if necessary, override defaultColumnId() -- if it isn't "id"
 
         @Override
         protected String[] getColumnIds() {
@@ -106,10 +103,10 @@ public class AppUiMessageHandler extends UiMessageHandler {
 
 
     // handler for sample item details requests
-    private final class SampleDetailRequestHandler extends RequestHandler {
+    private final class SampleCustomDetailRequestHandler extends RequestHandler {
 
-        private SampleDetailRequestHandler() {
-            super(SAMPLE_DETAIL_REQ);
+        private SampleCustomDetailRequestHandler() {
+            super(SAMPLE_CUSTOM_DETAIL_REQ);
         }
 
         @Override
@@ -139,7 +136,7 @@ public class AppUiMessageHandler extends UiMessageHandler {
                 data.put(COMMENT, "Some arbitrary comment");
             }
 
-            sendMessage(SAMPLE_DETAIL_RESP, 0, rootNode);
+            sendMessage(SAMPLE_CUSTOM_DETAIL_RESP, 0, rootNode);
         }
     }
 

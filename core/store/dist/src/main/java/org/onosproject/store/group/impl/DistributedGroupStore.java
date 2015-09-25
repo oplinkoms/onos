@@ -36,7 +36,6 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
-import org.onosproject.net.flow.FlowRule;
 import org.onosproject.net.flow.instructions.Instructions;
 import org.onosproject.net.flow.instructions.L0ModificationInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction;
@@ -168,7 +167,6 @@ public class DistributedGroupStore
                       Instructions.OutputInstruction.class,
                       Instructions.GroupInstruction.class,
                       Instructions.TableTypeTransition.class,
-                      FlowRule.Type.class,
                       L0ModificationInstruction.class,
                       L0ModificationInstruction.L0SubType.class,
                       L0ModificationInstruction.ModLambdaInstruction.class,
@@ -313,8 +311,6 @@ public class DistributedGroupStore
     @Override
     public Iterable<Group> getGroups(DeviceId deviceId) {
         // flatten and make iterator unmodifiable
-        log.debug("getGroups: for device {} total number of groups {}",
-                  deviceId, getGroupStoreKeyMap().values().size());
         return FluentIterable.from(getGroupStoreKeyMap().values())
                 .filter(input -> input.deviceId().equals(deviceId))
                 .transform(input -> input);
@@ -322,8 +318,6 @@ public class DistributedGroupStore
 
     private Iterable<StoredGroupEntry> getStoredGroups(DeviceId deviceId) {
         // flatten and make iterator unmodifiable
-        log.debug("getGroups: for device {} total number of groups {}",
-                  deviceId, getGroupStoreKeyMap().values().size());
         return FluentIterable.from(getGroupStoreKeyMap().values())
                 .filter(input -> input.deviceId().equals(deviceId));
     }
