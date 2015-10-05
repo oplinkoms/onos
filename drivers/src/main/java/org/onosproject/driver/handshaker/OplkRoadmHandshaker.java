@@ -132,7 +132,7 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
     public Device.Type deviceType() {
         return Device.Type.ROADM;
     }
-
+/*
     @Override
     public final void sendMsg(OFMessage m) {
         OFMessage newMsg = m;
@@ -142,6 +142,10 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
             log.debug("Oplink rebuilding stats request type {}", sr.getStatsType());
             switch (sr.getStatsType()) {
                 case FLOW:
+                    //send the original message first
+                    super.sendMsg(m);
+
+                    //Then create Oplink experiment stats message
                     OFOplinkChannelPowerRequest chRequest = this.factory().buildOplinkChannelPowerRequest()
                             .setXid(sr.getXid())
                             .setFlags(sr.getFlags())
@@ -162,7 +166,7 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
 
         super.sendMsg(newMsg);
     }
-
+*/
     private void sendHandshakeOFExperimenterPortDescRequest() throws IOException {
         // send multi part message for port description for optical switches
         OFCircuitPortsRequest circuitPortsRequest = factory()
