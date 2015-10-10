@@ -52,6 +52,7 @@ import org.projectfloodlight.openflow.protocol.OFFlowRemoved;
 import org.projectfloodlight.openflow.protocol.OFFlowStatsEntry;
 import org.projectfloodlight.openflow.protocol.action.OFAction;
 import org.projectfloodlight.openflow.protocol.action.OFActionCircuit;
+import org.projectfloodlight.openflow.protocol.action.OFActionOplinkAtt;
 import org.projectfloodlight.openflow.protocol.action.OFActionExperimenter;
 import org.projectfloodlight.openflow.protocol.action.OFActionGroup;
 import org.projectfloodlight.openflow.protocol.action.OFActionOutput;
@@ -72,6 +73,7 @@ import org.projectfloodlight.openflow.protocol.match.Match;
 import org.projectfloodlight.openflow.protocol.match.MatchField;
 import org.projectfloodlight.openflow.protocol.oxm.OFOxm;
 import org.projectfloodlight.openflow.protocol.oxm.OFOxmOchSigidBasic;
+import org.projectfloodlight.openflow.protocol.oxm.OFOxmOchSigatt;
 import org.projectfloodlight.openflow.protocol.ver13.OFFactoryVer13;
 import org.projectfloodlight.openflow.types.CircuitSignalID;
 import org.projectfloodlight.openflow.types.EthType;
@@ -307,6 +309,10 @@ public class FlowEntryBuilder {
                         OFActionCircuit ct = (OFActionCircuit) exp;
                         short lambda = ((OFOxmOchSigidBasic) ct.getField()).getValue().getChannelNumber();
                         builder.add(Instructions.modL0Lambda(Lambda.indexedLambda(lambda)));
+                    } else if (exp.getExperimenter() == 0xff000088L) {
+                        OFActionOplinkAtt ct = (OFActionOplinkAtt) exp;
+                        int attenuation = ((OFOxmOchSigatt) ct.getField()).getValue().getRaw();
+                        builder.add(Instructions.modL0Attenuation(attenuation));
                     } else {
                         log.warn("Unsupported OFActionExperimenter {}", exp.getExperimenter());
                     }

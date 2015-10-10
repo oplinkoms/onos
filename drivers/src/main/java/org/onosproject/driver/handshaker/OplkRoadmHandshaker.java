@@ -24,8 +24,8 @@ import org.projectfloodlight.openflow.protocol.OFObject;
 import org.projectfloodlight.openflow.protocol.OFOplinkChannelPowerRequest;
 import org.projectfloodlight.openflow.protocol.OFOplinkPortPowerRequest;
 import org.projectfloodlight.openflow.protocol.OFPortOptical;
-import org.projectfloodlight.openflow.protocol.OFStatsReply;
 import org.projectfloodlight.openflow.protocol.OFStatsRequest;
+import org.projectfloodlight.openflow.protocol.OFStatsReply;
 import org.projectfloodlight.openflow.protocol.OFStatsType;
 import org.projectfloodlight.openflow.protocol.OFType;
 
@@ -132,7 +132,7 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
     public Device.Type deviceType() {
         return Device.Type.ROADM;
     }
-/*
+
     @Override
     public final void sendMsg(OFMessage m) {
         OFMessage newMsg = m;
@@ -166,7 +166,7 @@ public class OplkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenF
 
         super.sendMsg(newMsg);
     }
-*/
+
     private void sendHandshakeOFExperimenterPortDescRequest() throws IOException {
         // send multi part message for port description for optical switches
         OFCircuitPortsRequest circuitPortsRequest = factory()
