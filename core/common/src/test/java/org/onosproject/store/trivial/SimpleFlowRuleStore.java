@@ -165,6 +165,16 @@ public class SimpleFlowRuleStore
     }
 
     @Override
+    public float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
+        return -100.0f;
+    }
+
+    @Override
+    public void setFlowOuputPower(DeviceId deviceId, int inPort, int channel, float power) {
+
+    }
+
+    @Override
     public void storeFlowRule(FlowRule rule) {
         storeFlowRuleInternal(rule);
     }

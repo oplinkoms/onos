@@ -38,6 +38,7 @@ import org.onosproject.core.CoreService;
 import org.onosproject.core.IdGenerator;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.flow.FlowId;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.CompletedBatchOperation;
 import org.onosproject.net.flow.DefaultFlowEntry;
@@ -174,6 +175,12 @@ public class FlowRuleManager
     public Iterable<FlowEntry> getFlowEntries(DeviceId deviceId) {
         checkPermission(FLOWRULE_READ);
         return store.getFlowEntries(deviceId);
+    }
+
+    @Override
+    public float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
+        checkPermission(FLOWRULE_READ);
+        return store.getFlowOuputPower(deviceId, flowId);
     }
 
     @Override
@@ -447,6 +454,12 @@ public class FlowRuleManager
                     new FlowRuleBatchRequest(batchId, Collections.emptySet()),
                     operation
             ));
+        }
+
+        @Override
+        public void setFlowOuputPower(DeviceId deviceId, int inPort, int channel, float power) {
+            store.setFlowOuputPower(deviceId, inPort, channel, power);
+            return;
         }
     }
 

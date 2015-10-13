@@ -62,6 +62,7 @@ import org.projectfloodlight.openflow.protocol.OFFlowRemoved;
 import org.projectfloodlight.openflow.protocol.OFFlowStatsReply;
 import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFOplinkChannelPowerReply;
+import org.projectfloodlight.openflow.protocol.OFOplinkChannelPower;
 import org.projectfloodlight.openflow.protocol.OFPortStatus;
 import org.projectfloodlight.openflow.protocol.OFStatsReply;
 import org.projectfloodlight.openflow.protocol.OFStatsType;
@@ -422,7 +423,7 @@ public class OpenFlowRuleProvider extends AbstractProvider
                                 eReply.getExperimenter());
                         if (msg instanceof OFOplinkChannelPowerReply) {
                             OFOplinkChannelPowerReply oReply = (OFOplinkChannelPowerReply) msg;
-                            log.warn("received Oplink channel power reply, sub type: {}", oReply.getSubtype());
+                            storeChannelPower(dpid, oReply.getEntries());
                         }
                     }
                     break;
@@ -522,6 +523,19 @@ public class OpenFlowRuleProvider extends AbstractProvider
                 // call existing entire flow stats update with flowMissing synchronization
                 providerService.pushFlowMetrics(did, flowEntries);
             }
+        }
+
+        private void storeChannelPower(Dpid dpid, List<OFOplinkChannelPower> powers) {
+            if (powers == null || powers.isEmpty()) {
+                return;
+            }
+            DeviceId did = DeviceId.deviceId(Dpid.uri(dpid));
+            for (OFOplinkChannelPower power : powers) {
+                float value = (float) power.getPowerValue() / 100;
+                providerService.setFlowOuputPower(did,
+                    power.getPort(), power.getChannel(), value);
+            }
+            return;
         }
     }
 

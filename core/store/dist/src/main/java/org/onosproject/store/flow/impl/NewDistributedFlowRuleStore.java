@@ -57,6 +57,10 @@ import org.onosproject.net.flow.FlowRuleService;
 import org.onosproject.net.flow.FlowRuleStore;
 import org.onosproject.net.flow.FlowRuleStoreDelegate;
 import org.onosproject.net.flow.StoredFlowEntry;
+import org.onosproject.net.flow.TrafficSelector;
+import org.onosproject.net.flow.criteria.Criterion;
+import org.onosproject.net.flow.criteria.PortCriterion;
+import org.onosproject.net.flow.criteria.OchSignalCriterion;
 import org.onosproject.store.AbstractStore;
 import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.cluster.messaging.ClusterMessage;
@@ -367,6 +371,28 @@ public class NewDistributedFlowRuleStore
     }
 
     @Override
+    public float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
+        return flowTable.getFlowOuputPower(deviceId, flowId);
+    }
+
+    @Override
+    public void setFlowOuputPower(DeviceId deviceId, int inPort, int channel, float power) {
+        final Iterable<FlowEntry> flowEntries = getFlowEntries(deviceId);
+        for (FlowEntry entry : flowEntries) {
+            TrafficSelector sel = entry.selector();
+            PortCriterion pc =
+                (PortCriterion) sel.getCriterion(Criterion.Type.IN_PORT);
+            OchSignalCriterion osc =
+                (OchSignalCriterion) sel.getCriterion(Criterion.Type.OCH_SIGID);
+            if (pc.port().toLong() == inPort &&
+                osc.lambda().spacingMultiplier() == channel) {
+                flowTable.setFlowOuputPower(deviceId, entry.id(), power);
+                return;
+            }
+        }
+    }
+
+    @Override
     public void storeFlowRule(FlowRule rule) {
         storeBatch(new FlowRuleBatchOperation(
                 Collections.singletonList(new FlowRuleBatchEntry(FlowRuleOperation.ADD, rule)),
@@ -601,6 +627,10 @@ public class NewDistributedFlowRuleStore
         private final Map<DeviceId, Long> lastUpdateTimes = Maps.newConcurrentMap();
         private final Map<DeviceId, NodeId> lastBackupNodes = Maps.newConcurrentMap();
 
+        //Add channel power storage
+        private final Map<DeviceId, Map<FlowId, Float>>
+                flowOutputPower = Maps.newConcurrentMap();
+
         @Override
         public void event(ReplicaInfoEvent event) {
             if (!backupEnabled) {
@@ -730,6 +760,17 @@ public class NewDistributedFlowRuleStore
             List<NodeId> deviceStandbys = replicaInfoManager.getReplicaInfoFor(deviceId).backups();
             // pick the standby which is most likely to become next master
             return deviceStandbys.isEmpty() ? null : deviceStandbys.get(0);
+        }
+
+        public float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
+            return flowOutputPower.computeIfAbsent(deviceId,
+                    id -> Maps.newConcurrentMap()).get(flowId);
+        }
+
+        public void setFlowOuputPower(DeviceId deviceId, FlowId flowId, float power) {
+            flowOutputPower.computeIfAbsent(deviceId,
+                    id -> Maps.newConcurrentMap()).put(flowId, power);
+            return;
         }
 
         private void backup() {

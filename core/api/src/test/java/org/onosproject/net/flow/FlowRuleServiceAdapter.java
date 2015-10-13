@@ -34,6 +34,11 @@ public class FlowRuleServiceAdapter implements FlowRuleService {
     }
 
     @Override
+    public float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
+        return -100.0f;
+    }
+
+    @Override
     public void applyFlowRules(FlowRule... flowRules) {
 
     }

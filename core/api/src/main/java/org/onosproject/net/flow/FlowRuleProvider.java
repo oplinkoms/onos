@@ -54,5 +54,4 @@ public interface FlowRuleProvider extends Provider {
      * @param batch a batch of flow rules
      */
     void executeBatch(FlowRuleBatchOperation batch);
-
 }

@@ -46,6 +46,10 @@ public interface FlowRuleStore extends Store<FlowRuleBatchEvent, FlowRuleStoreDe
      */
     Iterable<FlowEntry> getFlowEntries(DeviceId deviceId);
 
+    // Interface for acquiring channel power, for test, Maolu @OPLINK
+    float getFlowOuputPower(DeviceId deviceId, FlowId flowId);
+    void setFlowOuputPower(DeviceId deviceId, int inPort, int channel, float power);
+
     /**
      * // TODO: Better description of method behavior.
      * Stores a new flow rule without generating events.
