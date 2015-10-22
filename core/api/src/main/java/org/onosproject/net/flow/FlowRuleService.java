@@ -52,7 +52,7 @@ public interface FlowRuleService
     Iterable<FlowEntry> getFlowEntries(DeviceId deviceId);
 
     // Interface for acquiring channel power, for test, Maolu @OPLINK
-    float getFlowOuputPower(DeviceId deviceId, FlowId flowId);
+    Float getFlowOuputPower(DeviceId deviceId, FlowId flowId);
     // void setFlowOuputPower(DeviceId deviceId, FlowId flowId, Float power);
 
     // TODO: add createFlowRule factory method and execute operations method

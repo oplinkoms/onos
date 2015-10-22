@@ -16,6 +16,7 @@
 package org.onosproject.net.device;
 
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.provider.Provider;
 
@@ -54,4 +55,6 @@ public interface DeviceProvider extends Provider {
      * @return true if reachable, false otherwise
      */
     boolean isReachable(DeviceId deviceId);
+
+    void setPortPower(DeviceId deviceId, PortNumber portNumber, float power);
 }

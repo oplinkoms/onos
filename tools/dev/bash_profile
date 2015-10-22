@@ -16,9 +16,9 @@ if [ -z "${JAVA_HOME}" ]; then
     fi
 fi
 
-export MAVEN=${MAVEN:-~/Applications/apache-maven-3.3.1}
+export MAVEN=${MAVEN:-~/Applications/apache-maven-3.3.3}
 
-export KARAF_VERSION=${KARAF_VERSION:-3.0.3}
+export KARAF_VERSION=${KARAF_VERSION:-3.0.4}
 export KARAF_ROOT=${KARAF_ROOT:-~/Applications/apache-karaf-$KARAF_VERSION}
 export KARAF_LOG=$KARAF_ROOT/data/log/karaf.log
 

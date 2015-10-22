@@ -165,12 +165,13 @@ public class SimpleFlowRuleStore
     }
 
     @Override
-    public float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
-        return -100.0f;
+    public Float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
+        return null;
     }
 
     @Override
-    public void setFlowOuputPower(DeviceId deviceId, int inPort, int channel, float power) {
+    public void setFlowOuputPower(DeviceId deviceId, int inPort,
+            int outPort, int channel, float power) {
 
     }
 

@@ -371,4 +371,8 @@ public class OpticalConfigProvider extends AbstractProvider implements DevicePro
     public boolean isReachable(DeviceId device) {
         return false;
     }
+
+    @Override
+    public void setPortPower(DeviceId deviceId, PortNumber portNumber, float power) {
+    }
 }

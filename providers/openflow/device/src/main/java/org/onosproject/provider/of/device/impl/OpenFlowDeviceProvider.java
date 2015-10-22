@@ -219,6 +219,27 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
     }
 
     @Override
+    public void setPortPower(DeviceId deviceId, PortNumber portNumber, float power) {
+        final Dpid dpid = dpid(deviceId.uri());
+        OpenFlowSwitch sw = controller.getSwitch(dpid);
+        if (sw == null || !sw.isConnected()) {
+            return;
+        }
+        OFFactory fact = sw.factory();
+        switch (fact.getVersion()) {
+            case OF_13:
+                sw.sendMsg(fact.buildOplinkPortPowerSet()
+                        .setXid(0)
+                        .setPort((int) portNumber.toLong())
+                        .setPowerValue((int) (power * 100))
+                        .build());
+                break;
+            default:
+                LOG.warn("Unhandled protocol version");
+        }
+    }
+
+    @Override
     public void triggerProbe(DeviceId deviceId) {
         LOG.debug("Triggering probe on device {}", deviceId);
 
@@ -738,7 +759,7 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                     DefaultPortPower dpp = DefaultPortPower.builder()
                             .setDeviceId(did)
                             .setPort(power.getPort())
-                            .setPower(power.getPowerValue())
+                            .setPower((short) power.getPowerValue())
                             .build();
                     powerList.add(dpp);
                 } catch (Exception e) {

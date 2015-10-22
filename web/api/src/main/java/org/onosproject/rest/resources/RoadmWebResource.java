@@ -2,14 +2,21 @@ package org.onosproject.rest.resources;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onlab.util.Tools.nullIsNotFound;
+import static org.onlab.util.Tools.nullIsIllegal;
 import static org.onosproject.net.DeviceId.deviceId;
+import static javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
 
+// import java.io.IOException;
 import java.io.InputStream;
+// import java.net.URI;
+// import java.net.URISyntaxException;
 
 import javax.ws.rs.GET;
+import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
+import javax.ws.rs.Consumes;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
@@ -125,16 +132,23 @@ public class RoadmWebResource extends AbstractWebResource {
      * @param id device identifier
      * @return 200 OK
      */
-    @PUT
-    @Path("{id}/port")
-    public Response setRoadmPortPower(@PathParam("id") String id,  InputStream stream) {
-
-        Device device = nullIsNotFound(
-            deviceService.getDevice(deviceId(id)), DEVICE_NOT_FOUND);
-
-        ObjectNode result = codec(Device.class).encode(device, this);
-
-        return ok(result).build();
+    @POST
+    @Path("{id}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response setRoadmPortPower(@PathParam("id") String id,
+                                      InputStream input) {
+        try {
+            ObjectNode jsonTree = (ObjectNode) mapper().readTree(input);
+            deviceService.setPortPower(deviceId(id),
+                    PortNumber.portNumber(nullIsIllegal(jsonTree.get("port"),
+                        "port member is required").asInt()),
+                    (float) nullIsIllegal(jsonTree.get("power"),
+                        "power member is required").asDouble());
+            return Response.ok().build();
+        } catch (Exception e) {
+            return Response.status(INTERNAL_SERVER_ERROR).entity(e.toString()).build();
+        }
     }
 
     /**
@@ -145,7 +159,7 @@ public class RoadmWebResource extends AbstractWebResource {
      * @return 200 OK
      */
     @GET
-    @Path("{did}/power")
+    @Path("{did}/channels")
     public Response getRoadmAllChannelPower(@PathParam("did") String did) {
 
         final Iterable<FlowEntry> flowEntries =

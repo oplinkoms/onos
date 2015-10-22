@@ -129,4 +129,5 @@ public interface DeviceService
      */
     boolean isAvailable(DeviceId deviceId);
 
+    void setPortPower(DeviceId deviceId, PortNumber portNumber, float power);
 }

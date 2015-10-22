@@ -244,6 +244,10 @@ public class OLTPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         public boolean isReachable(DeviceId deviceId) {
             return false;
         }
+
+        @Override
+        public void setPortPower(DeviceId deviceId, PortNumber portNumber, float power) {
+        }
     }
 
 }

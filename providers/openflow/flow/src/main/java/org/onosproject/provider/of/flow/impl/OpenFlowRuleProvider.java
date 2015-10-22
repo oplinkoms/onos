@@ -531,9 +531,9 @@ public class OpenFlowRuleProvider extends AbstractProvider
             }
             DeviceId did = DeviceId.deviceId(Dpid.uri(dpid));
             for (OFOplinkChannelPower power : powers) {
-                float value = (float) power.getPowerValue() / 100;
-                providerService.setFlowOuputPower(did,
-                    power.getPort(), power.getChannel(), value);
+                float value = (float) ((short) power.getPowerValue()) / 100;
+                providerService.setFlowOuputPower(did, power.getInPort(),
+                    power.getOutPort(), power.getChannel(), value);
             }
             return;
         }

@@ -178,7 +178,7 @@ public class FlowRuleManager
     }
 
     @Override
-    public float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
+    public Float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
         checkPermission(FLOWRULE_READ);
         return store.getFlowOuputPower(deviceId, flowId);
     }
@@ -457,8 +457,9 @@ public class FlowRuleManager
         }
 
         @Override
-        public void setFlowOuputPower(DeviceId deviceId, int inPort, int channel, float power) {
-            store.setFlowOuputPower(deviceId, inPort, channel, power);
+        public void setFlowOuputPower(DeviceId deviceId, int inPort,
+                int outPort, int channel, float power) {
+            store.setFlowOuputPower(deviceId, inPort, outPort, channel, power);
             return;
         }
     }

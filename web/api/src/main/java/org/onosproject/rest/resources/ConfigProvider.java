@@ -574,6 +574,10 @@ class ConfigProvider implements DeviceProvider, LinkProvider, HostProvider {
         return true;
     }
 
+    @Override
+    public void setPortPower(DeviceId deviceId, PortNumber portNumber, float power) {
+    }
+
     /**
      * Prepares to count device added/available/removed events.
      *

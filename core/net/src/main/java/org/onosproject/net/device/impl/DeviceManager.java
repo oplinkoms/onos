@@ -221,6 +221,19 @@ public class DeviceManager
         return store.isAvailable(deviceId);
     }
 
+    @Override
+    public void setPortPower(DeviceId deviceId, PortNumber portNumber, float power) {
+        if (deviceId == null) {
+            return;
+        }
+        DeviceProvider provider = getProvider(deviceId);
+        if (provider == null) {
+            log.debug("Provider not found for {}", deviceId);
+            return;
+        }
+        provider.setPortPower(deviceId, portNumber, power);
+    }
+
     // Check a device for control channel connectivity.
     private boolean isReachable(DeviceId deviceId) {
         if (deviceId == null) {

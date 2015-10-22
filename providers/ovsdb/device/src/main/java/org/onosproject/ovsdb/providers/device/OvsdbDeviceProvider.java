@@ -30,6 +30,7 @@ import org.onlab.packet.ChassisId;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.SparseAnnotations;
 import org.onosproject.net.device.DefaultDeviceDescription;
@@ -99,6 +100,10 @@ public class OvsdbDeviceProvider extends AbstractProvider
     @Override
     public boolean isReachable(DeviceId deviceId) {
         return true;
+    }
+
+    @Override
+    public void setPortPower(DeviceId deviceId, PortNumber portNumber, float power) {
     }
 
     private class InnerOvsdbNodeListener implements OvsdbNodeListener {

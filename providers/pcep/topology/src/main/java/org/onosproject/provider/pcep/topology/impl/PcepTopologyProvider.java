@@ -28,6 +28,7 @@ import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.Link.Type;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.OchPort;
@@ -317,5 +318,9 @@ public class PcepTopologyProvider extends AbstractProvider
     public boolean isReachable(DeviceId deviceId) {
         // TODO Auto-generated method stub
         return true;
+    }
+
+    @Override
+    public void setPortPower(DeviceId deviceId, PortNumber portNumber, float power) {
     }
 }

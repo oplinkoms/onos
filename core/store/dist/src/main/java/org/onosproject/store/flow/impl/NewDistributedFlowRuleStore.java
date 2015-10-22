@@ -61,6 +61,8 @@ import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.PortCriterion;
 import org.onosproject.net.flow.criteria.OchSignalCriterion;
+import org.onosproject.net.flow.instructions.Instruction;
+import org.onosproject.net.flow.instructions.Instructions.OutputInstruction;
 import org.onosproject.store.AbstractStore;
 import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.cluster.messaging.ClusterMessage;
@@ -371,24 +373,38 @@ public class NewDistributedFlowRuleStore
     }
 
     @Override
-    public float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
+    public Float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
         return flowTable.getFlowOuputPower(deviceId, flowId);
     }
 
     @Override
-    public void setFlowOuputPower(DeviceId deviceId, int inPort, int channel, float power) {
+    public void setFlowOuputPower(DeviceId deviceId, int inPort,
+            int outPort, int channel, float power) {
         final Iterable<FlowEntry> flowEntries = getFlowEntries(deviceId);
-        for (FlowEntry entry : flowEntries) {
-            TrafficSelector sel = entry.selector();
-            PortCriterion pc =
-                (PortCriterion) sel.getCriterion(Criterion.Type.IN_PORT);
-            OchSignalCriterion osc =
-                (OchSignalCriterion) sel.getCriterion(Criterion.Type.OCH_SIGID);
-            if (pc.port().toLong() == inPort &&
-                osc.lambda().spacingMultiplier() == channel) {
-                flowTable.setFlowOuputPower(deviceId, entry.id(), power);
-                return;
+        try {
+            for (FlowEntry entry : flowEntries) {
+                TrafficSelector sel = entry.selector();
+                PortCriterion pc =
+                    (PortCriterion) sel.getCriterion(Criterion.Type.IN_PORT);
+                OchSignalCriterion osc =
+                    (OchSignalCriterion) sel.getCriterion(Criterion.Type.OCH_SIGID);
+                List<Instruction> instructions = entry.treatment().allInstructions();
+                OutputInstruction opIns = null;
+                for (Instruction ins : instructions) {
+                    if (ins instanceof OutputInstruction) {
+                        opIns = (OutputInstruction) ins;
+                        break;
+                    }
+                }
+                if (pc.port().toLong() == inPort &&
+                        opIns.port().toLong() == outPort &&
+                        osc.lambda().spacingMultiplier() == channel) {
+                    flowTable.setFlowOuputPower(deviceId, entry.id(), power);
+                    return;
+                }
             }
+        } catch (Exception e) {
+            log.debug("Error details:", e);
         }
     }
 
@@ -762,7 +778,7 @@ public class NewDistributedFlowRuleStore
             return deviceStandbys.isEmpty() ? null : deviceStandbys.get(0);
         }
 
-        public float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
+        public Float getFlowOuputPower(DeviceId deviceId, FlowId flowId) {
             return flowOutputPower.computeIfAbsent(deviceId,
                     id -> Maps.newConcurrentMap()).get(flowId);
         }

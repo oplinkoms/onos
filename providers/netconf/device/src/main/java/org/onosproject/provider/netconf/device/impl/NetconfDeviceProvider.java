@@ -45,6 +45,7 @@ import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.device.DefaultDeviceDescription;
 import org.onosproject.net.device.DeviceDescription;
@@ -244,6 +245,10 @@ public class NetconfDeviceProvider extends AbstractProvider
             return false;
         }
         return netconfDevice.isReachable();
+    }
+
+    @Override
+    public void setPortPower(DeviceId deviceId, PortNumber portNumber, float power) {
     }
 
     /**

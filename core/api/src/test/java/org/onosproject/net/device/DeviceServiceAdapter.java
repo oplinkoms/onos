@@ -100,4 +100,7 @@ public class DeviceServiceAdapter implements DeviceService {
         return Collections.emptyList();
     }
 
+    @Override
+    public void setPortPower(DeviceId deviceId, PortNumber portNumber, float power) {
+    }
 }

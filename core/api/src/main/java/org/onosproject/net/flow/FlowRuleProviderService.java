@@ -60,5 +60,6 @@ public interface FlowRuleProviderService extends ProviderService<FlowRuleProvide
 
     // Interface for acquiring channel power, for test, Maolu @OPLINK
     // Float getFlowOuputPower(DeviceId deviceId, FlowId flowId);
-    void setFlowOuputPower(DeviceId deviceId, int inPort, int channel, float power);
+    void setFlowOuputPower(DeviceId deviceId, int inPort,
+        int outPort, int channel, float power);
 }

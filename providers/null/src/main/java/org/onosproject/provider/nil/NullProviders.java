@@ -30,6 +30,7 @@ import org.onosproject.cluster.NodeId;
 import org.onosproject.mastership.MastershipAdminService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.Host;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.device.DeviceAdminService;
@@ -403,6 +404,10 @@ public class NullProviders {
 
         @Override
         public void triggerProbe(DeviceId deviceId) {
+        }
+
+        @Override
+        public void setPortPower(DeviceId deviceId, PortNumber portNumber, float power) {
         }
     }
 
