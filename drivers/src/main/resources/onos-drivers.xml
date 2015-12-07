@@ -116,7 +116,7 @@
                    impl="org.onosproject.driver.handshaker.CalientFiberSwitchHandshaker"/>
     </driver>
     <driver name="oplk-roadm" extends="default"
-            manufacturer="oplink inc" hwVersion="roadm"
+            manufacturer="Oplink a Molex company" hwVersion="ROADM"
             swVersion="of-agent">
         <behaviour api="org.onosproject.openflow.controller.driver.OpenFlowSwitchDriver"
                    impl="org.onosproject.driver.handshaker.OplkRoadmHandshaker"/>
