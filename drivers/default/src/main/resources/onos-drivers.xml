@@ -201,6 +201,12 @@
         <behaviour api="org.onosproject.openflow.controller.driver.OpenFlowSwitchDriver"
                    impl="org.onosproject.driver.handshaker.OplinkRoadmHandshaker"/>
     </driver>
+    <driver name="oplk-edfa" extends="default"
+            manufacturer="Oplink a Molex company" hwVersion="EDFA"
+            swVersion="of-agent">
+        <behaviour api="org.onosproject.openflow.controller.driver.OpenFlowSwitchDriver"
+                   impl="org.onosproject.driver.handshaker.OplinkEdfaHandshaker"/>
+    </driver>
     <driver name="hp" extends="default"
             manufacturer="HP" hwVersion="Switch 3500yl-48G" swVersion="K.16.01.0004">
         <behaviour api="org.onosproject.net.behaviour.Pipeliner"
