@@ -787,6 +787,11 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                             pushPortMetrics(dpid, portStatsReplies.get(dpid));
                             portStatsReplies.get(dpid).clear();
                         }
+                    } else {
+                        if (((OFStatsReply) msg).getStatsType() == OFStatsType.EXPERIMENTER) {
+                            OpenFlowSwitch sw = controller.getSwitch(dpid);
+                            ((OpenFlowOpticalSwitch) sw).processExperimenterStats(msg);
+                        }
                     }
                     break;
                 case ERROR:

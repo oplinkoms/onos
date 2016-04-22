@@ -185,4 +185,9 @@ public class OplinkRoadmHandshaker extends AbstractOpenFlowSwitch implements Ope
         opticalPorts = new ArrayList<>();
         opticalPorts.addAll(wPorts.getEntries());
     }
+
+    @Override
+    public void processExperimenterStats(OFMessage msg) {
+       //TODO: add process topology message here
+    }
 }
