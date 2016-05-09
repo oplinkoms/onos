@@ -17,6 +17,7 @@ package org.onosproject.driver.handshaker;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -26,12 +27,23 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.onosproject.net.Device;
+import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
+import org.onosproject.net.ConnectPoint;
+import org.onosproject.net.Link;
+import org.onosproject.net.link.LinkProvider;
+import org.onosproject.net.link.LinkProviderRegistry;
+import org.onosproject.net.link.LinkProviderService;
+import org.onosproject.net.link.DefaultLinkDescription;
+import org.onosproject.net.provider.AbstractProvider;
+import org.onosproject.net.provider.ProviderId;
 import org.onosproject.openflow.controller.OpenFlowOpticalSwitch;
 import org.onosproject.openflow.controller.PortDescPropertyType;
 import org.onosproject.openflow.controller.driver.AbstractOpenFlowSwitch;
 import org.onosproject.openflow.controller.driver.SwitchDriverSubHandshakeAlreadyStarted;
 import org.onosproject.openflow.controller.driver.SwitchDriverSubHandshakeCompleted;
 import org.onosproject.openflow.controller.driver.SwitchDriverSubHandshakeNotStarted;
+import org.onosproject.openflow.controller.Dpid;
 import org.projectfloodlight.openflow.protocol.OFCircuitPortStatus;
 import org.projectfloodlight.openflow.protocol.OFCircuitPortsReply;
 import org.projectfloodlight.openflow.protocol.OFCircuitPortsRequest;
@@ -39,8 +51,15 @@ import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFObject;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 import org.projectfloodlight.openflow.protocol.OFPortOptical;
+import org.projectfloodlight.openflow.protocol.OFStatsRequest;
 import org.projectfloodlight.openflow.protocol.OFStatsReply;
 import org.projectfloodlight.openflow.protocol.OFStatsType;
+import org.projectfloodlight.openflow.protocol.OFType;
+import org.projectfloodlight.openflow.protocol.OFOplinkPortAdjacencyRequest;
+import org.projectfloodlight.openflow.protocol.OFOplinkPortAdjacencyReply;
+import org.projectfloodlight.openflow.protocol.OFOplinkPortAdjacency;
+import org.projectfloodlight.openflow.protocol.OFOplinkPortAdjacencyId;
+import org.projectfloodlight.openflow.protocol.OFOplinkPortAdidOtn;
 
 /**
  * Driver for Oplink single WSS 8D ROADM.
@@ -51,6 +70,7 @@ import org.projectfloodlight.openflow.protocol.OFStatsType;
 public class OplinkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenFlowOpticalSwitch {
     private final AtomicBoolean driverHandshakeComplete = new AtomicBoolean(false);
     private List<OFPortOptical> opticalPorts;
+    static final ProviderId PID = new ProviderId("handshaker", "org.onosproject.driver.handshaker", true);
 
     @Override
     public List<? extends OFObject> getPortsOf(PortDescPropertyType type) {
@@ -143,12 +163,12 @@ public class OplinkRoadmHandshaker extends AbstractOpenFlowSwitch implements Ope
                                  "subhandshake " + "from switch {} ... " +
                                  "Ignoring message", m,
                          getStringId());
-
+                break;
         }
     }
 
     private void processOFPortStatus(OFCircuitPortStatus ps) {
-        log.debug("OPLK ROADM ..OF Port Status :", ps);
+        log.info("OPLK ROADM ..OF Port Status :", ps);
     }
 
     @Override
@@ -160,6 +180,24 @@ public class OplinkRoadmHandshaker extends AbstractOpenFlowSwitch implements Ope
     public final void sendMsg(OFMessage m) {
         OFMessage newMsg = m;
         //Stub for later enhancement.
+        if (m.getType() == OFType.STATS_REQUEST) {
+            OFStatsRequest osr = (OFStatsRequest) m;
+            switch (osr.getStatsType()) {
+                case PORT:
+                    //Send original message first
+                    super.sendMsg(m);
+                    //Send experiment message
+                    OFOplinkPortAdjacencyRequest request = this.factory().buildOplinkPortAdjacencyRequest()
+                    .setXid(osr.getXid())
+                    .setFlags(osr.getFlags())
+                    .build();
+                    newMsg = request;
+                    // log.info("Send OFOplinkPortAdjacencyRequest message: {}", request);
+                    break;
+                default:
+                    break;
+            }
+        }
         super.sendMsg(newMsg);
     }
 
@@ -188,6 +226,49 @@ public class OplinkRoadmHandshaker extends AbstractOpenFlowSwitch implements Ope
 
     @Override
     public void processExperimenterStats(OFMessage msg) {
-       //TODO: add process topology message here
+        //TODO: add process topology message here
+        LinkProviderRegistry registry = checkNotNull(handler().get(LinkProviderRegistry.class));
+        LinkProvider provider = new TempLinkProvider();
+        LinkProviderService providerService = registry.register(provider);
+        OFOplinkPortAdjacencyReply reply = (OFOplinkPortAdjacencyReply) msg;
+        // log.info(reply);
+        List<OFOplinkPortAdjacency> ads = reply.getEntries();
+        ads.forEach(
+            ad -> {
+                // Current node information
+                PortNumber dstPort = PortNumber.portNumber(ad.getPortNo().getPortNumber());
+                DeviceId dstDeviceId = handler().data().deviceId();
+                ConnectPoint dst = new ConnectPoint(dstDeviceId, dstPort);
+                List<OFOplinkPortAdjacencyId> adids = ad.getProperties();
+                adids.forEach(
+                    adid -> {
+                        List<OFOplinkPortAdidOtn> otns = adid.getAdids();
+                        if (otns != null && otns.size() > 0) {
+                            OFOplinkPortAdidOtn otn = otns.get(0);
+                            //ITU-T G.7714 ETH MAC Format
+                            long ops3 = otn.getOpspec3().getValue();
+                            long ops4 = otn.getOpspec4().getValue();
+                            long mac = ((ops3 << 20) >>> 16) + (ops4 >>> 60);
+                            int port = (int) ((ops4 << 4) >>> 32);
+                            PortNumber srcPort = PortNumber.portNumber(port);
+                            DeviceId srcDeviceId = DeviceId.deviceId(Dpid.uri(new Dpid(mac)));
+                            ConnectPoint src = new ConnectPoint(srcDeviceId, srcPort);
+                            //Create connect
+                            providerService.linkDetected(
+                                    new DefaultLinkDescription(src, dst, Link.Type.DIRECT));
+                        }
+                    }
+                );
+            }
+        );
+        registry.unregister(provider);
+    }
+
+    // Token provider entity
+    private static final class TempLinkProvider
+            extends AbstractProvider implements LinkProvider {
+        private TempLinkProvider() {
+            super(PID);
+        }
     }
 }
