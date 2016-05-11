@@ -26,6 +26,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.buffer.ChannelBuffers;
+
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
@@ -35,7 +38,6 @@ import org.onosproject.net.link.LinkProvider;
 import org.onosproject.net.link.LinkProviderRegistry;
 import org.onosproject.net.link.LinkProviderService;
 import org.onosproject.net.link.DefaultLinkDescription;
-import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.openflow.controller.OpenFlowOpticalSwitch;
 import org.onosproject.openflow.controller.PortDescPropertyType;
@@ -55,11 +57,11 @@ import org.projectfloodlight.openflow.protocol.OFStatsRequest;
 import org.projectfloodlight.openflow.protocol.OFStatsReply;
 import org.projectfloodlight.openflow.protocol.OFStatsType;
 import org.projectfloodlight.openflow.protocol.OFType;
-import org.projectfloodlight.openflow.protocol.OFOplinkPortAdjacencyRequest;
-import org.projectfloodlight.openflow.protocol.OFOplinkPortAdjacencyReply;
-import org.projectfloodlight.openflow.protocol.OFOplinkPortAdjacency;
-import org.projectfloodlight.openflow.protocol.OFOplinkPortAdjacencyId;
-import org.projectfloodlight.openflow.protocol.OFOplinkPortAdidOtn;
+import org.projectfloodlight.openflow.protocol.OFExpPortAdjacencyRequest;
+import org.projectfloodlight.openflow.protocol.OFExperimenterStatsReply;
+import org.projectfloodlight.openflow.protocol.OFExpOpticalExtReply;
+import org.projectfloodlight.openflow.protocol.OFExpPortAdjacencyReply;
+import org.projectfloodlight.openflow.protocol.OFExpPortAdidOtn;
 
 /**
  * Driver for Oplink single WSS 8D ROADM.
@@ -70,7 +72,8 @@ import org.projectfloodlight.openflow.protocol.OFOplinkPortAdidOtn;
 public class OplinkRoadmHandshaker extends AbstractOpenFlowSwitch implements OpenFlowOpticalSwitch {
     private final AtomicBoolean driverHandshakeComplete = new AtomicBoolean(false);
     private List<OFPortOptical> opticalPorts;
-    static final ProviderId PID = new ProviderId("handshaker", "org.onosproject.driver.handshaker", true);
+    private static final ProviderId PID =
+            new ProviderId("oplink", "org.onosproject.driver.handshaker", true);
 
     @Override
     public List<? extends OFObject> getPortsOf(PortDescPropertyType type) {
@@ -187,7 +190,7 @@ public class OplinkRoadmHandshaker extends AbstractOpenFlowSwitch implements Ope
                     //Send original message first
                     super.sendMsg(m);
                     //Send experiment message
-                    OFOplinkPortAdjacencyRequest request = this.factory().buildOplinkPortAdjacencyRequest()
+                    OFExpPortAdjacencyRequest request = this.factory().buildExpPortAdjacencyRequest()
                     .setXid(osr.getXid())
                     .setFlags(osr.getFlags())
                     .build();
@@ -226,49 +229,67 @@ public class OplinkRoadmHandshaker extends AbstractOpenFlowSwitch implements Ope
 
     @Override
     public void processExperimenterStats(OFMessage msg) {
-        //TODO: add process topology message here
+        //TODO: add process experimenter message here
+        switch ((int) ((OFExperimenterStatsReply) msg).getExperimenter()) {
+            case 0xFF000007:
+                // Process msg that experimenter = 0xff000007L
+                OFExpOpticalExtReply optExtReply = (OFExpOpticalExtReply) msg;
+                if (optExtReply.getSubtype() == 2) {
+                    portAdjacencyDiscovery((OFExpPortAdjacencyReply) msg);
+                }
+                break;
+            case 0xff000088:
+                // Process msg that experimenter = 0xff000088L
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void portAdjacencyDiscovery(OFExpPortAdjacencyReply msg) {
         LinkProviderRegistry registry = checkNotNull(handler().get(LinkProviderRegistry.class));
-        LinkProvider provider = new TempLinkProvider();
-        LinkProviderService providerService = registry.register(provider);
-        OFOplinkPortAdjacencyReply reply = (OFOplinkPortAdjacencyReply) msg;
-        // log.info(reply);
-        List<OFOplinkPortAdjacency> ads = reply.getEntries();
-        ads.forEach(
-            ad -> {
-                // Current node information
-                PortNumber dstPort = PortNumber.portNumber(ad.getPortNo().getPortNumber());
-                DeviceId dstDeviceId = handler().data().deviceId();
-                ConnectPoint dst = new ConnectPoint(dstDeviceId, dstPort);
-                List<OFOplinkPortAdjacencyId> adids = ad.getProperties();
-                adids.forEach(
-                    adid -> {
-                        List<OFOplinkPortAdidOtn> otns = adid.getAdids();
-                        if (otns != null && otns.size() > 0) {
-                            OFOplinkPortAdidOtn otn = otns.get(0);
-                            //ITU-T G.7714 ETH MAC Format
-                            long ops3 = otn.getOpspec3().getValue();
-                            long ops4 = otn.getOpspec4().getValue();
-                            long mac = ((ops3 << 20) >>> 16) + (ops4 >>> 60);
-                            int port = (int) ((ops4 << 4) >>> 32);
-                            PortNumber srcPort = PortNumber.portNumber(port);
-                            DeviceId srcDeviceId = DeviceId.deviceId(Dpid.uri(new Dpid(mac)));
-                            ConnectPoint src = new ConnectPoint(srcDeviceId, srcPort);
-                            //Create connect
-                            providerService.linkDetected(
-                                    new DefaultLinkDescription(src, dst, Link.Type.DIRECT));
+        LinkProvider provider = new OplinkLinkProvider();
+        try {
+            LinkProviderService providerService = registry.register(provider);
+            // log.info(reply);
+            msg.getEntries().forEach(
+                ad -> {
+                    // Current node information
+                    ConnectPoint dst = new ConnectPoint(handler().data().deviceId(),
+                            PortNumber.portNumber(ad.getPortNo().getPortNumber()));
+                    ad.getProperties().forEach(
+                        adid -> {
+                            List<OFExpPortAdidOtn> otns = adid.getAdids();
+                            if (otns != null && otns.size() > 0) {
+                                OFExpPortAdidOtn otn = otns.get(0);
+                                // ITU-T G.7714 ETH MAC Format
+                                ChannelBuffer buffer = ChannelBuffers.buffer(16);
+                                otn.getOpspecEth().write16Bytes(buffer);
+                                long mac = buffer.getLong(2) << 4 >>> 16;
+                                int port = (int) (buffer.getLong(8) << 4 >>> 32);
+                                ConnectPoint src = new ConnectPoint(
+                                        DeviceId.deviceId(Dpid.uri(new Dpid(mac))),
+                                        PortNumber.portNumber(port));
+                                // Create optical links
+                                providerService.linkDetected(
+                                        new DefaultLinkDescription(src, dst, Link.Type.OPTICAL));
+                                providerService.linkDetected(
+                                        new DefaultLinkDescription(dst, src, Link.Type.OPTICAL));
+                            }
                         }
-                    }
-                );
-            }
-        );
-        registry.unregister(provider);
+                    );
+                }
+            );
+        } finally {
+            registry.unregister(provider);
+        }
     }
 
     // Token provider entity
-    private static final class TempLinkProvider
-            extends AbstractProvider implements LinkProvider {
-        private TempLinkProvider() {
-            super(PID);
+    private static final class OplinkLinkProvider implements LinkProvider {
+        @Override
+        public ProviderId id() {
+            return PID;
         }
     }
 }

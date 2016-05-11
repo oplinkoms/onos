@@ -77,11 +77,9 @@ import org.projectfloodlight.openflow.protocol.OFErrorType;
 import org.projectfloodlight.openflow.protocol.OFExpPort;
 import org.projectfloodlight.openflow.protocol.OFExpPortDescPropOpticalTransport;
 import org.projectfloodlight.openflow.protocol.OFExpPortOpticalTransportLayerEntry;
-import org.projectfloodlight.openflow.protocol.OFExperimenterStatsReply;
 import org.projectfloodlight.openflow.protocol.OFFactory;
 import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFObject;
-import org.projectfloodlight.openflow.protocol.OFOplinkStatsReply;
 import org.projectfloodlight.openflow.protocol.OFPortConfig;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 import org.projectfloodlight.openflow.protocol.OFPortDescPropOpticalTransport;
@@ -790,14 +788,8 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                             portStatsReplies.get(dpid).clear();
                         }
                     } else if (((OFStatsReply) msg).getStatsType() == OFStatsType.EXPERIMENTER) {
-                        OFExperimenterStatsReply expReply = (OFExperimenterStatsReply) msg;
-                        if (expReply.getExperimenter() == 0xff000088L) {
-                            OFOplinkStatsReply oplkReply = (OFOplinkStatsReply) msg;
-                            if (oplkReply.getSubtype() == 2) {
-                                OpenFlowSwitch sw = controller.getSwitch(dpid);
-                                ((OpenFlowOpticalSwitch) sw).processExperimenterStats(msg);
-                            }
-                        }
+                        OpenFlowSwitch sw = controller.getSwitch(dpid);
+                        ((OpenFlowOpticalSwitch) sw).processExperimenterStats(msg);
                     }
                     break;
                 case ERROR:
