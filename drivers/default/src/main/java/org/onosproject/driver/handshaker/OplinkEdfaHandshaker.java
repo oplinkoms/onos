@@ -43,10 +43,9 @@ import org.projectfloodlight.openflow.protocol.OFStatsReply;
 import org.projectfloodlight.openflow.protocol.OFStatsType;
 
 /**
- * Driver for Oplink single WSS 8D ROADM.
+ * Driver for Oplink EDFA.
  *
  * Driver implements custom handshaker and supports for Optical channel Port based on OpenFlow OTN extension.
- * The device consists of Och ports, and performances wavelength cross-connect among the ports.
  */
 public class OplinkEdfaHandshaker extends AbstractOpenFlowSwitch implements OpenFlowOpticalSwitch {
     private final AtomicBoolean driverHandshakeComplete = new AtomicBoolean(false);
@@ -153,7 +152,7 @@ public class OplinkEdfaHandshaker extends AbstractOpenFlowSwitch implements Open
 
     @Override
     public Device.Type deviceType() {
-        return Device.Type.OTHER;
+        return Device.Type.OPTICAL_AMPLIFIER;
     }
 
     @Override
