@@ -481,6 +481,16 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                      );
                     });
                     break;
+                case OPTICAL_AMPLIFIER:
+                    opsw = (OpenFlowOpticalSwitch) sw;
+                    opsw.getPortTypes().forEach(type -> {
+                        opsw.getPortsOf(type).forEach(
+                                op -> {
+                                    portDescs.add(buildPortDescription(type, (OFPortOptical) op));
+                                }
+                        );
+                    });
+                    break;
                 case FIBER_SWITCH:
                     opsw = (OpenFlowOpticalSwitch) sw;
                     opsw.getPortTypes().forEach(type -> {
@@ -796,6 +806,10 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                                     statsEntries.clear();
                                 }
                             }
+                        }
+                        else if (((OFStatsReply) msg).getStatsType() == OFStatsType.EXPERIMENTER) {
+                            OpenFlowSwitch sw = controller.getSwitch(dpid);
+                            ((OpenFlowOpticalSwitch) sw).processExperimenterStats(msg);
                         }
                         break;
                     case ERROR:

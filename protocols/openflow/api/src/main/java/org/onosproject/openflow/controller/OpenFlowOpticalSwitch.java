@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015 Open Networking Laboratory
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package org.onosproject.openflow.controller;
 
 import java.util.List;
 
+import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 
 import com.google.common.annotations.Beta;
@@ -38,4 +39,10 @@ public interface OpenFlowOpticalSwitch extends OpenFlowSwitch, WithTypedPorts {
     @Beta
     @Override
     abstract List<OFPortDesc> getPorts();
+
+    /**
+     * Update current power on optical ports.
+     * @param msg the OpenFlow message received from devices
+     */
+    default void processExperimenterStats(OFMessage msg){};
 }

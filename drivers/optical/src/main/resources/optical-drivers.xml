@@ -55,6 +55,13 @@
         <behaviour api="org.onosproject.net.optical.OpticalDevice"
                    impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
     </driver>
-
+    <driver name="oplk-edfa" extends="default"
+            manufacturer="Oplink a Molex company" hwVersion="EDFA"
+            swVersion="of-agent">
+        <behaviour api="org.onosproject.openflow.controller.driver.OpenFlowSwitchDriver"
+                   impl="org.onosproject.driver.optical.handshaker.OplinkEdfaHandshaker"/>
+        <behaviour api="org.onosproject.net.optical.OpticalDevice"
+                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
+    </driver>
 </drivers>
 
