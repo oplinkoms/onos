@@ -806,8 +806,7 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                                     statsEntries.clear();
                                 }
                             }
-                        }
-                        else if (((OFStatsReply) msg).getStatsType() == OFStatsType.EXPERIMENTER) {
+                        } else if (((OFStatsReply) msg).getStatsType() == OFStatsType.EXPERIMENTER) {
                             OpenFlowSwitch sw = controller.getSwitch(dpid);
                             ((OpenFlowOpticalSwitch) sw).processExperimenterStats(msg);
                         }

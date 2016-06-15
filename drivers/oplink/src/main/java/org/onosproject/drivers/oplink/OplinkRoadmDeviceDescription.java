@@ -16,15 +16,12 @@
 
 package org.onosproject.drivers.oplink;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.onosproject.drivers.utilities.XmlConfigParser;
-import org.onosproject.net.AnnotationKeys;
-import org.onosproject.net.DefaultAnnotations;
-import org.onosproject.net.PortNumber;
-import org.onosproject.net.SparseAnnotations;
-import org.onosproject.net.behaviour.PortDiscovery;
-import org.onosproject.net.device.OmsPortDescription;
+import org.onosproject.net.device.DeviceDescription;
+import org.onosproject.net.device.DeviceDescriptionDiscovery;
 import org.onosproject.net.device.PortDescription;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.netconf.NetconfController;
@@ -42,35 +39,38 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Retrieves the ports from a Oplink roadm device via netconf.
  */
-public class PortDiscoveryOplinkRoadm extends AbstractHandlerBehaviour
-        implements PortDiscovery {
+public class OplinkRoadmDeviceDescription extends AbstractHandlerBehaviour
+        implements DeviceDescriptionDiscovery {
 
     private final Logger log = getLogger(getClass());
 
     @Override
-    public List<PortDescription> getPorts() {
-        log.warn("PortDiscoveryOplinkRoadm: getPorts()");
-        System.out.println("PortDiscoveryOplinkRoadm: getPorts()");
+    public DeviceDescription discoverDeviceDetails() {
+        log.info("No description to be added for device");
+        //TODO to be implemented if needed.
+        return null;
+    }
+
+    @Override
+    public List<PortDescription> discoverPortDetails() {
         NetconfController controller = checkNotNull(handler().get(NetconfController.class));
         NetconfSession session = controller.getDevicesMap().get(handler().data().deviceId()).getSession();
         String reply;
         try {
             reply = session.get(requestBuilder());
         } catch (IOException e) {
-            log.error("Failed to retrieve configuration.");
-            System.out.println("Failed to retrieve configuration.");
             throw new RuntimeException(new NetconfException("Failed to retrieve configuration.", e));
         }
-        List<PortDescription> descriptions = parseOmsPorts(XmlConfigParser.
-                loadXml(new ByteArrayInputStream(reply.getBytes())));
-        log.warn("PortDiscoveryOplinkRoadm: finished parseOmsPorts");
-        System.out.println("PortDiscoveryOplinkRoadm: finished parseOmsPorts");
-        return descriptions;
+        List<PortDescription> descriptions =
+                parseOplinkRoadmPorts(XmlConfigParser.
+                        loadXml(new ByteArrayInputStream(reply.getBytes())));
+        return ImmutableList.copyOf(descriptions);
     }
 
     /**
      * Builds a request crafted to get the configuration required to create port
      * descriptions for the device.
+     *
      * @return The request string.
      */
     private String requestBuilder() {
@@ -88,32 +88,14 @@ public class PortDiscoveryOplinkRoadm extends AbstractHandlerBehaviour
     }
 
     /**
-     * Parses a configuration and returns a set of ports for the oplink roadm.
+     * Parses a configuration and returns a set of ports for the Oplink Roadm.
+     *
      * @param cfg a hierarchical configuration
      * @return a list of port descriptions
      */
-    private List<PortDescription> parseOmsPorts(HierarchicalConfiguration cfg) {
+    private static List<PortDescription> parseOplinkRoadmPorts(HierarchicalConfiguration cfg) {
         List<PortDescription> portDescriptions = Lists.newArrayList();
-        List<HierarchicalConfiguration> subtrees =
-                cfg.configurationsAt("data.interfaces.interface");
-        for (HierarchicalConfiguration omsConfig : subtrees) {
-            if (omsConfig.getString("type").equals("ianaift:oms")) {
-                HierarchicalConfiguration portConfig = omsConfig.configurationAt("port");
-                int portNumber = portConfig.getInt("number");
-                int portDirection = portConfig.getInt("direction");
-                SparseAnnotations ann = DefaultAnnotations.builder()
-                        .set(AnnotationKeys.PORT_NAME, portDirection + "-" + portNumber)
-                        .build();
-                PortDescription p = new OmsPortDescription(
-                        PortNumber.portNumber(portDescriptions.size() + 1),
-                        true,
-                        OplinkRoadmDevice.START_CENTER_FREQ,
-                        OplinkRoadmDevice.END_CENTER_FREQ,
-                        OplinkRoadmDevice.CHANNEL_SPACING.frequency(),
-                        ann);
-                portDescriptions.add(p);
-            }
-        }
+        //TODO to be implemented if needed.
         return portDescriptions;
     }
 }
