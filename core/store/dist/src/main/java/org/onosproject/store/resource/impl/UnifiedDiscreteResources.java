@@ -67,6 +67,15 @@ final class UnifiedDiscreteResources implements DiscreteResources {
 
     @Override
     public DiscreteResources difference(DiscreteResources other) {
+        if (other instanceof UnifiedDiscreteResources) {
+            UnifiedDiscreteResources cast = (UnifiedDiscreteResources) other;
+            return new UnifiedDiscreteResources(
+                    this.generics.difference(cast.generics),
+                    this.encodables.difference(cast.encodables));
+        } else if (other instanceof EmptyDiscreteResources) {
+            return this;
+        }
+
         return of(Sets.difference(this.values(), other.values()));
     }
 
@@ -84,12 +93,26 @@ final class UnifiedDiscreteResources implements DiscreteResources {
 
     @Override
     public DiscreteResources add(DiscreteResources other) {
+        if (other instanceof UnifiedDiscreteResources) {
+            UnifiedDiscreteResources cast = (UnifiedDiscreteResources) other;
+            return new UnifiedDiscreteResources(
+                    this.generics.add(cast.generics),
+                    this.encodables.add(cast.encodables));
+        } else if (other instanceof EmptyDiscreteResources) {
+            return this;
+        }
+
         return of(Sets.union(this.values(), other.values()));
     }
 
     @Override
     public Set<DiscreteResource> values() {
         return Stream.concat(encodables.values().stream(), generics.values().stream())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    public <T> Set<DiscreteResource> valuesOf(Class<T> cls) {
+        return Stream.concat(encodables.valuesOf(cls).stream(), generics.valuesOf(cls).stream())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 

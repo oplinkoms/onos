@@ -55,6 +55,8 @@ from sys import argv
 from glob import glob
 import time
 from functools import partial
+from re import search
+
 
 ### ONOS Environment
 
@@ -149,34 +151,22 @@ def unpackONOS( destDir='/tmp', run=quietRun ):
     return onosDir
 
 
-def waitListening( client=None, server='127.0.0.1', port=80, timeout=None,
-                   callback=None, sleepSecs=.5 ):
-    "Modified mininet.util.waitListening with callback, sleepSecs"
-    runCmd = ( client.cmd if client else
-               partial( quietRun, shell=True ) )
-    if not runCmd( 'which telnet' ):
-        raise Exception('Could not find telnet' )
-    # pylint: disable=maybe-no-member
-    serverIP = server if isinstance( server, basestring ) else server.IP()
-    cmd = ( 'echo A | telnet -e A %s %s' % ( serverIP, port ) )
-    elapsed = 0
-    result = runCmd( cmd )
-    while 'Connected' not in result:
-        if 'No route' in result:
-            rtable = runCmd( 'route' )
-            error( 'no route to %s:\n%s' % ( server, rtable ) )
-            return False
-        if timeout and elapsed >= timeout:
-            error( 'could not connect to %s on port %d\n' % ( server, port ) )
-            return False
-        debug( 'waiting for', server, 'to listen on port', port, '\n' )
+def waitListening( server, port=80, callback=None, sleepSecs=.5,
+                   proc='java' ):
+    "Simplified netstat version of waitListening"
+    while True:
+        lines = server.cmd( 'netstat -natp' ).strip().split( '\n' )
+        entries = [ line.split() for line in lines ]
+        portstr = ':%s' % port
+        listening = [ entry for entry in entries
+                      if len( entry ) > 6 and portstr in entry[ 3 ]
+                      and proc in entry[ 6 ] ]
+        if listening:
+            break
         info( '.' )
         if callback:
             callback()
         time.sleep( sleepSecs )
-        elapsed += sleepSecs
-        result = runCmd( cmd )
-    return True
 
 
 ### Mininet classes
@@ -227,6 +217,8 @@ class ONOSNode( Controller ):
         self.dir = '/tmp/%s' % self.name
         self.client = self.dir + '/karaf/bin/client'
         self.ONOS_HOME = '/tmp'
+        self.cmd( 'rm -rf', self.dir )
+        self.ONOS_HOME = unpackONOS( self.dir, run=self.ucmd )
 
     # pylint: disable=arguments-differ
 
@@ -235,8 +227,6 @@ class ONOSNode( Controller ):
            env: environment var dict
            nodes: all nodes in cluster"""
         env = dict( env )
-        self.cmd( 'rm -rf', self.dir )
-        self.ONOS_HOME = unpackONOS( self.dir, run=self.ucmd )
         env.update( ONOS_HOME=self.ONOS_HOME )
         self.updateEnv( env )
         karafbin = glob( '%s/apache*/bin' % self.ONOS_HOME )[ 0 ]
@@ -281,7 +271,7 @@ class ONOSNode( Controller ):
     def checkLog( self ):
         "Return log file errors and warnings"
         log = join( self.dir, 'log' )
-        errors, warnings = None, None
+        errors, warnings = [], []
         if isfile( log ):
             lines = open( log ).read().split( '\n' )
             errors = [ line for line in lines if 'ERROR' in line ]
@@ -338,7 +328,7 @@ class ONOSNode( Controller ):
                        callback=self.sanityCheck )
         info( ' client' )
         while True:
-            result = quietRun( 'echo apps -a | %s -h %s' %
+            result = quietRun( '%s -h %s "apps -a"' %
                                ( self.client, self.IP() ), shell=True )
             if 'openflow' in result:
                 break
@@ -430,9 +420,22 @@ class ONOSCluster( Controller ):
         "Return list of ONOS nodes"
         return [ h for h in self.net.hosts if isinstance( h, ONOSNode ) ]
 
-    def configPortForwarding( self, ports=[], intf='eth0', action='A' ):
-        """Start or stop ports on intf to all nodes
+    def defaultIntf( self ):
+        "Call ip route to determine default interface"
+        result = quietRun( 'ip route | grep default', shell=True ).strip()
+        match = search( r'dev\s+([^\s]+)', result )
+        if match:
+            intf = match.group( 1 )
+        else:
+            warn( "Can't find default network interface - using eth0\n" )
+            intf = 'eth0'
+        return intf
+
+    def configPortForwarding( self, ports=[], intf='', action='A' ):
+        """Start or stop forwarding on intf to all nodes
            action: A=add/start, D=delete/stop (default: A)"""
+        if not intf:
+            intf = self.defaultIntf()
         for port in ports:
             for index, node in enumerate( self.nodes() ):
                 ip, inport = node.IP(), port + index
@@ -528,7 +531,8 @@ class ONOSCLI( OldCLI ):
 
     def do_log( self, line ):
         "Run tail -f /tmp/onos1/log; press control-C to stop"
-        self.default( self.onos1().name, 'tail -f /tmp/%s/log' % self.onos1() )
+        self.default( '%s tail -f /tmp/%s/log' %
+                      ( self.onos1(), self.onos1() ) )
 
     def do_status( self, line ):
         "Return status of ONOS cluster(s)"
@@ -546,6 +550,32 @@ class ONOSCLI( OldCLI ):
                             status += '%d warnings' % len( warnings )
                         status = status if status else 'OK'
                         info( node, '\t', running, '\t', status, '\n' )
+
+    def do_arp( self, line ):
+        "Send gratuitous arps from all data network hosts"
+        startTime = time.time()
+        try:
+            count = int( line )
+        except:
+            count = 1
+        # Technically this check should be on the host
+        if '-U' not in quietRun( 'arping -h', shell=True ):
+            warn( 'Please install iputils-arping.\n' )
+            return
+        # This is much faster if we do it in parallel
+        for host in self.mn.net.hosts:
+            intf = host.defaultIntf()
+            # -b: keep using broadcasts; -f: quit after 1 reply
+            # -U: gratuitous ARP update
+            host.sendCmd( 'arping -bf -c', count, '-U -I',
+                           intf.name, intf.IP() )
+        for host in self.mn.net.hosts:
+            # We could check the output here if desired
+            host.waitOutput()
+            info( '.' )
+        info( '\n' )
+        elapsed = time.time() - startTime
+        debug( 'Completed in %.2f seconds\n' % elapsed )
 
 
 # For interactive use, exit on error

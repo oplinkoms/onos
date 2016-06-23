@@ -72,7 +72,7 @@ public class PcepClientImpl implements PcepClientDriver {
     private byte deadTime;
     private byte sessionId;
     private PcepPacketStatsImpl pktStats;
-    private Map<LspKey, Boolean> lspDelegationInfo;
+    private Map<LspKey, Boolean> lspDelegationInfo = new HashMap<>();
     private Map<PccId, List<PcepStateReport>> syncRptCache = new HashMap<>();
 
     @Override
@@ -186,6 +186,7 @@ public class PcepClientImpl implements PcepClientDriver {
 
     @Override
     public void setLspDbSyncStatus(PcepSyncStatus syncStatus) {
+        log.debug("LSP DB sync status set from {} to {}", this.lspDbSyncStatus, syncStatus);
         this.lspDbSyncStatus = syncStatus;
     }
 
@@ -199,7 +200,7 @@ public class PcepClientImpl implements PcepClientDriver {
 
         PcepSyncStatus syncOldStatus = labelDbSyncStatus();
         this.labelDbSyncStatus = syncStatus;
-
+        log.debug("Label DB sync status set from {} to {}", syncOldStatus, syncStatus);
         if ((syncOldStatus == PcepSyncStatus.IN_SYNC) && (syncStatus == PcepSyncStatus.SYNCED)) {
             // Perform end of LSP DB sync actions.
             this.agent.analyzeSyncMsgList(pccId);

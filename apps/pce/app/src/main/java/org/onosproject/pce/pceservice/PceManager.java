@@ -116,6 +116,7 @@ import static org.onosproject.incubator.net.tunnel.Tunnel.Type.MPLS;
 import static org.onosproject.incubator.net.tunnel.Tunnel.State.INIT;
 import static org.onosproject.incubator.net.tunnel.Tunnel.State.ESTABLISHED;
 import static org.onosproject.incubator.net.tunnel.Tunnel.State.UNSTABLE;
+import static org.onosproject.incubator.net.tunnel.Tunnel.State.FAILED;
 import static org.onosproject.pce.pceservice.LspType.WITH_SIGNALLING;
 import static org.onosproject.pce.pceservice.LspType.SR_WITHOUT_SIGNALLING;
 import static org.onosproject.pce.pceservice.LspType.WITHOUT_SIGNALLING_AND_WITHOUT_SR;
@@ -254,6 +255,7 @@ public class PceManager implements PceService {
 
         tunnelConsumerIdGen = coreService.getIdGenerator(TUNNEL_CONSUMER_ID_GEN_TOPIC);
         localLspIdIdGen = coreService.getIdGenerator(LOCAL_LSP_ID_GEN_TOPIC);
+        localLspIdIdGen.getNewId(); // To prevent 0, the 1st value generated from being used in protocol.
         localLspIdFreeList = storageService.<Short>setBuilder()
                 .withName("pcepLocalLspIdDeletedList")
                 .withSerializer(Serializer.using(KryoNamespaces.API))
@@ -515,7 +517,14 @@ public class PceManager implements PceService {
             }
 
             if (existingBwValue != null) {
-                shBwConstraint = new SharedBandwidthConstraint(links, existingBwValue, bwConstraint.bandwidth());
+                if (bwConstraintValue == 0) {
+                    bwConstraintValue = existingBwValue.bps();
+                }
+                //If bandwidth constraints not specified , take existing bandwidth for shared bandwidth calculation
+                shBwConstraint = bwConstraint != null ? new SharedBandwidthConstraint(links,
+                        existingBwValue, bwConstraint.bandwidth()) : new SharedBandwidthConstraint(links,
+                        existingBwValue, existingBwValue);
+
                 constraints.add(shBwConstraint);
             }
         } else {
@@ -595,6 +604,18 @@ public class PceManager implements PceService {
             PceccTunnelInfo pceccTunnelInfo = new PceccTunnelInfo(null, consumerId);
             pceStore.addTunnelInfo(updatedTunnelId, pceccTunnelInfo);
         }
+
+        // For CR cases, download labels and send update message.
+        if (lspType == WITHOUT_SIGNALLING_AND_WITHOUT_SR) {
+            Tunnel tunnelForlabelDownload = new DefaultTunnel(null, tunnel.src(), tunnel.dst(), MPLS, INIT, null,
+                                                              updatedTunnelId, tunnel.tunnelName(), computedPath,
+                                                              labelStack, annotationBuilder.build());
+
+            if (!crHandler.allocateLabel(tunnelForlabelDownload)) {
+                log.error("Unable to allocate labels for the tunnel {}.", tunnel.toString());
+            }
+        }
+
         return true;
     }
 
@@ -1145,6 +1166,11 @@ public class PceManager implements PceService {
                     pceStore.addFailedPathInfo(new PcePathInfo(links.get(0).src().deviceId(),
                                                                   links.get(links.size() - 1).dst().deviceId(),
                                                                   tunnel.tunnelName().value(), constraints, lspType));
+                }
+
+                if (tunnel.state() == FAILED) {
+                    // Check whether this ONOS instance is master, if yes, recompute and send update.
+                    checkForMasterAndUpdateTunnel(tunnel.path().src().deviceId(), tunnel);
                 }
                 break;
 
