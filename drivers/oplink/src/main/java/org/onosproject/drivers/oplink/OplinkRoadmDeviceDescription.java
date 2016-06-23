@@ -20,6 +20,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.onosproject.drivers.utilities.XmlConfigParser;
+import org.onosproject.net.AnnotationKeys;
+import org.onosproject.net.ChannelSpacing;
+import org.onosproject.net.DefaultAnnotations;
+import org.onosproject.net.GridType;
+import org.onosproject.net.OchSignal;
+import org.onosproject.net.OduSignalType;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceDescription;
 import org.onosproject.net.device.DeviceDescriptionDiscovery;
 import org.onosproject.net.device.PortDescription;
@@ -34,6 +41,7 @@ import java.io.IOException;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static org.onosproject.net.optical.device.OchPortHelper.ochPortDescription;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -57,7 +65,8 @@ public class OplinkRoadmDeviceDescription extends AbstractHandlerBehaviour
         NetconfSession session = controller.getDevicesMap().get(handler().data().deviceId()).getSession();
         String reply;
         try {
-            reply = session.get(requestBuilder());
+            //reply = session.get(requestBuilder());
+            reply = session.getConfig("running");
         } catch (IOException e) {
             throw new RuntimeException(new NetconfException("Failed to retrieve configuration.", e));
         }
@@ -79,8 +88,9 @@ public class OplinkRoadmDeviceDescription extends AbstractHandlerBehaviour
         rpc.append("<rpc xmlns=\"urn:ietf:params:xml:ns:netconf:base:1.0\">");
         rpc.append("<get>");
         rpc.append("<filter type=\"subtree\">");
-        rpc.append("<interfaces xmlns=\"urn:ietf:params:xml:ns:yang:ietf-interfaces\">");
-        rpc.append("</interfaces>");
+        rpc.append("<open-oplink-device xmlns=\"http://com/att/device\">");
+        rpc.append("<ports/>");
+        rpc.append("</open-oplink-device>");
         rpc.append("</filter>");
         rpc.append("</get>");
         rpc.append("</rpc>");
@@ -88,14 +98,33 @@ public class OplinkRoadmDeviceDescription extends AbstractHandlerBehaviour
     }
 
     /**
-     * Parses a configuration and returns a set of ports for the Oplink Roadm.
+     * Parses a configuration and returns a set of ports for Oplink Roadm.
      *
      * @param cfg a hierarchical configuration
      * @return a list of port descriptions
      */
     private static List<PortDescription> parseOplinkRoadmPorts(HierarchicalConfiguration cfg) {
         List<PortDescription> portDescriptions = Lists.newArrayList();
-        //TODO to be implemented if needed.
+        List<HierarchicalConfiguration> subtrees =
+                cfg.configurationsAt("data.open-oplink-device.ports");
+        for (HierarchicalConfiguration portConfig : subtrees) {
+            portDescriptions.add(parsePort(portConfig));
+        }
         return portDescriptions;
+    }
+
+    private static PortDescription parsePort(HierarchicalConfiguration cfg) {
+        PortNumber portNumber = PortNumber.portNumber(cfg.getString("port-id"));
+        HierarchicalConfiguration portInfo = cfg.configurationAt("port");
+        boolean enabled = true;
+        OduSignalType signalType = null;
+        boolean isTunable = true;
+        int wavelengthNumber = portInfo.configurationAt("available-wavelengths").
+                getInt("wavelength-number");
+        OchSignal lambda = new OchSignal(GridType.DWDM, ChannelSpacing.CHL_50GHZ, wavelengthNumber, 4);
+        DefaultAnnotations annotations = DefaultAnnotations.builder().
+                set(AnnotationKeys.PORT_NAME, cfg.getString("port-name")).
+                build();
+        return ochPortDescription(portNumber, enabled, signalType, isTunable, lambda, annotations);
     }
 }

@@ -16,8 +16,11 @@
   -->
 <drivers>
     <driver name="oplink-netconf" manufacturer="Oplink" hwVersion="ROADM" swVersion="of-agent">
-        <behaviour api="org.onosproject.net.behaviour.PortDiscovery"
-                   impl="org.onosproject.drivers.oplink.PortDiscoveryOplinkRoadm"/>
+        <behaviour api="org.onosproject.net.optical.OpticalDevice"
+                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
+        <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
+                   impl="org.onosproject.drivers.oplink.OplinkRoadmDeviceDescription"/>
+        <behaviour api="org.onosproject.net.behaviour.PowerConfig"
+                   impl="org.onosproject.drivers.oplink.OplinkRoadmPowerConfig"/>
     </driver>
 </drivers>
-
