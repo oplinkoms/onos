@@ -61,17 +61,17 @@ public class OplinkRoadmPowerConfig<T> extends AbstractHandlerBehaviour
     }
 
     /**
-     * Retrieves session reply information for get operation.
+     * Retrieves session reply information for get config operation.
      *
      * @param request the request string of xml content
      * @return The reply string
      */
-    private String netconfGet(String request) {
+    private String netconfGetConfig(String filter) {
         NetconfController controller = checkNotNull(handler().get(NetconfController.class));
         NetconfSession session = controller.getDevicesMap().get(handler().data().deviceId()).getSession();
         String reply;
         try {
-            reply = session.get(request);
+            reply = session.getConfig("running", filter);
         } catch (IOException e) {
             throw new RuntimeException(new NetconfException("Failed to retrieve configuration.", e));
         }
@@ -97,44 +97,31 @@ public class OplinkRoadmPowerConfig<T> extends AbstractHandlerBehaviour
     }
 
     /**
-     * Builds a request crafted to get the configuration required to get port
+     * Builds a request filter crafted to get the configuration required to get port
      * target power for the device.
      *
      * @param port the device port number used to get power
      * @return The request string
      */
-    private String getPortPowerBuilder(PortNumber port) {
-        StringBuilder rpc = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-        //Message ID is injected later.
-        rpc.append("<rpc xmlns=\"urn:ietf:params:xml:ns:netconf:base:1.0\">");
-        rpc.append("<get>");
-        rpc.append("<filter type=\"subtree\">");
-        rpc.append("<open-oplink-device xmlns=\"http://com/att/device\">");
+    private String getPortPowerFilter(PortNumber port) {
+        StringBuilder rpc = new StringBuilder("<open-oplink-device xmlns=\"http://com/att/device\">");
         rpc.append("<ports><port-id>");
         rpc.append(Long.toString(port.toLong()));
         rpc.append("</port-id></ports>");
         rpc.append("</open-oplink-device>");
-        rpc.append("</filter>");
-        rpc.append("</get>");
-        rpc.append("</rpc>");
         return rpc.toString();
     }
 
     /**
-     * Builds a request crafted to get the configuration required to get channel
+     * Builds a request filter crafted to get the configuration required to get channel
      * target power for the device.
      *
      * @param port the device port number used to get power
      * @Param channel the wavelength number used to get channel power
      * @return The request string
      */
-    private String getChannelPowerBuilder(PortNumber port, OchSignal channel) {
-        StringBuilder rpc = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-        //Message ID is injected later.
-        rpc.append("<rpc xmlns=\"urn:ietf:params:xml:ns:netconf:base:1.0\">");
-        rpc.append("<get>");
-        rpc.append("<filter type=\"subtree\">");
-        rpc.append("<open-oplink-device xmlns=\"http://com/att/device\">");
+    private String getChannelPowerFilter(PortNumber port, OchSignal channel) {
+        StringBuilder rpc = new StringBuilder("<open-oplink-device xmlns=\"http://com/att/device\">");
         rpc.append("<ports><port-id>");
         rpc.append(Long.toString(port.toLong()));
         rpc.append("</port-id>");
@@ -143,9 +130,6 @@ public class OplinkRoadmPowerConfig<T> extends AbstractHandlerBehaviour
         rpc.append("</wavelength-number></used-wavelengths></port>");
         rpc.append("</ports>");
         rpc.append("</open-oplink-device>");
-        rpc.append("</filter>");
-        rpc.append("</get>");
-        rpc.append("</rpc>");
         return rpc.toString();
     }
 
@@ -157,7 +141,6 @@ public class OplinkRoadmPowerConfig<T> extends AbstractHandlerBehaviour
     }
 
     private Long acquireCurrentPower(PortNumber port, T component) {
-        Long power = -10000L;
         if (component instanceof OchSignal) {
             return acquireChannelPower(port, (OchSignal) component, "wavelength-current-power");
         }
@@ -165,7 +148,7 @@ public class OplinkRoadmPowerConfig<T> extends AbstractHandlerBehaviour
     }
 
     private Long acquirePortPower(PortNumber port, String selection) {
-        String reply = netconfGet(getPortPowerBuilder(port));
+        String reply = netconfGetConfig(getPortPowerFilter(port));
         HierarchicalConfiguration cfg =
                 XmlConfigParser.loadXml(new ByteArrayInputStream(reply.getBytes()));
         HierarchicalConfiguration portInfo = cfg.configurationAt("port");
@@ -173,7 +156,7 @@ public class OplinkRoadmPowerConfig<T> extends AbstractHandlerBehaviour
     }
 
     private Long acquireChannelPower(PortNumber port, OchSignal channel, String selection) {
-        String reply = netconfGet(getChannelPowerBuilder(port, channel));
+        String reply = netconfGetConfig(getChannelPowerFilter(port, channel));
         HierarchicalConfiguration cfg =
                 XmlConfigParser.loadXml(new ByteArrayInputStream(reply.getBytes()));
         HierarchicalConfiguration portInfo = cfg.configurationAt("port");

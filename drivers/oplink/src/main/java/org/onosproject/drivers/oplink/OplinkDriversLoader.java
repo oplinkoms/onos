@@ -18,12 +18,18 @@ package org.onosproject.drivers.oplink;
 
 import org.apache.felix.scr.annotations.Component;
 import org.onosproject.net.driver.AbstractDriverLoader;
+import org.onosproject.net.optical.OpticalDevice;
 
 /**
  * Loader for Oplink device drivers.
  */
 @Component(immediate = true)
 public class OplinkDriversLoader extends AbstractDriverLoader {
+
+    // OSGI: help bundle plugin discover runtime package dependency.
+    @SuppressWarnings("unused")
+    private OpticalDevice optical;
+
     public OplinkDriversLoader() {
         super("/oplink-drivers.xml");
     }

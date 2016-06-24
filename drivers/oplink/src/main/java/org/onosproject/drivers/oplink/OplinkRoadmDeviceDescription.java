@@ -19,13 +19,12 @@ package org.onosproject.drivers.oplink;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.apache.commons.configuration.HierarchicalConfiguration;
+import org.onlab.util.Frequency;
 import org.onosproject.drivers.utilities.XmlConfigParser;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.ChannelSpacing;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.GridType;
-import org.onosproject.net.OchSignal;
-import org.onosproject.net.OduSignalType;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceDescription;
 import org.onosproject.net.device.DeviceDescriptionDiscovery;
@@ -41,7 +40,7 @@ import java.io.IOException;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static org.onosproject.net.optical.device.OchPortHelper.ochPortDescription;
+import static org.onosproject.net.optical.device.OmsPortHelper.omsPortDescription;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -51,6 +50,10 @@ public class OplinkRoadmDeviceDescription extends AbstractHandlerBehaviour
         implements DeviceDescriptionDiscovery {
 
     private final Logger log = getLogger(getClass());
+    public static final GridType GRID_TYPE = GridType.DWDM;
+    public static final ChannelSpacing CHANNEL_SPACING = ChannelSpacing.CHL_50GHZ;
+    public static final Frequency START_CENTER_FREQ = Frequency.ofGHz(191_350);
+    public static final Frequency END_CENTER_FREQ = Frequency.ofGHz(196_100);
 
     @Override
     public DeviceDescription discoverDeviceDetails() {
@@ -63,10 +66,10 @@ public class OplinkRoadmDeviceDescription extends AbstractHandlerBehaviour
     public List<PortDescription> discoverPortDetails() {
         NetconfController controller = checkNotNull(handler().get(NetconfController.class));
         NetconfSession session = controller.getDevicesMap().get(handler().data().deviceId()).getSession();
+        String filter = "<open-oplink-device xmlns=\"http://com/att/device\"><ports/></open-oplink-device>";
         String reply;
         try {
-            //reply = session.get(requestBuilder());
-            reply = session.getConfig("running");
+            reply = session.getConfig("running", filter);
         } catch (IOException e) {
             throw new RuntimeException(new NetconfException("Failed to retrieve configuration.", e));
         }
@@ -74,27 +77,6 @@ public class OplinkRoadmDeviceDescription extends AbstractHandlerBehaviour
                 parseOplinkRoadmPorts(XmlConfigParser.
                         loadXml(new ByteArrayInputStream(reply.getBytes())));
         return ImmutableList.copyOf(descriptions);
-    }
-
-    /**
-     * Builds a request crafted to get the configuration required to create port
-     * descriptions for the device.
-     *
-     * @return The request string.
-     */
-    private String requestBuilder() {
-        StringBuilder rpc = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-        //Message ID is injected later.
-        rpc.append("<rpc xmlns=\"urn:ietf:params:xml:ns:netconf:base:1.0\">");
-        rpc.append("<get>");
-        rpc.append("<filter type=\"subtree\">");
-        rpc.append("<open-oplink-device xmlns=\"http://com/att/device\">");
-        rpc.append("<ports/>");
-        rpc.append("</open-oplink-device>");
-        rpc.append("</filter>");
-        rpc.append("</get>");
-        rpc.append("</rpc>");
-        return rpc.toString();
     }
 
     /**
@@ -114,17 +96,15 @@ public class OplinkRoadmDeviceDescription extends AbstractHandlerBehaviour
     }
 
     private static PortDescription parsePort(HierarchicalConfiguration cfg) {
-        PortNumber portNumber = PortNumber.portNumber(cfg.getString("port-id"));
+        PortNumber portNumber = PortNumber.portNumber(cfg.getLong("port-id"));
         HierarchicalConfiguration portInfo = cfg.configurationAt("port");
-        boolean enabled = true;
-        OduSignalType signalType = null;
-        boolean isTunable = true;
-        int wavelengthNumber = portInfo.configurationAt("available-wavelengths").
-                getInt("wavelength-number");
-        OchSignal lambda = new OchSignal(GridType.DWDM, ChannelSpacing.CHL_50GHZ, wavelengthNumber, 4);
+        int portDirection = portInfo.getInt("port-direction");
         DefaultAnnotations annotations = DefaultAnnotations.builder().
-                set(AnnotationKeys.PORT_NAME, cfg.getString("port-name")).
+                set(AnnotationKeys.PORT_NAME, portInfo.getString("port-name")).
+                set("portDirection", portDirection == 1 ? "tx" :
+                        (portDirection == 2 ? "rx" : "bidirectional")).
                 build();
-        return ochPortDescription(portNumber, enabled, signalType, isTunable, lambda, annotations);
+        return omsPortDescription(portNumber, true, START_CENTER_FREQ, END_CENTER_FREQ,
+                CHANNEL_SPACING.frequency(), annotations);
     }
 }
