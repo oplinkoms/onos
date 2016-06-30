@@ -98,11 +98,9 @@ public class OplinkRoadmDeviceDescription extends AbstractHandlerBehaviour
     private static PortDescription parsePort(HierarchicalConfiguration cfg) {
         PortNumber portNumber = PortNumber.portNumber(cfg.getLong("port-id"));
         HierarchicalConfiguration portInfo = cfg.configurationAt("port");
-        int portDirection = portInfo.getInt("port-direction");
         DefaultAnnotations annotations = DefaultAnnotations.builder().
                 set(AnnotationKeys.PORT_NAME, portInfo.getString("port-name")).
-                set("portDirection", portDirection == 1 ? "tx" :
-                        (portDirection == 2 ? "rx" : "bidirectional")).
+                set("portDirection", portInfo.getString("port-direction")).
                 build();
         return omsPortDescription(portNumber, true, START_CENTER_FREQ, END_CENTER_FREQ,
                 CHANNEL_SPACING.frequency(), annotations);

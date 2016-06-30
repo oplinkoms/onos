@@ -104,12 +104,12 @@ public class OplinkRoadmPowerConfig<T> extends AbstractHandlerBehaviour
      * @return The request string
      */
     private String getPortPowerFilter(PortNumber port) {
-        StringBuilder rpc = new StringBuilder("<open-oplink-device xmlns=\"http://com/att/device\">");
-        rpc.append("<ports><port-id>");
-        rpc.append(Long.toString(port.toLong()));
-        rpc.append("</port-id></ports>");
-        rpc.append("</open-oplink-device>");
-        return rpc.toString();
+        StringBuilder filt = new StringBuilder("<open-oplink-device xmlns=\"http://com/att/device\">");
+        filt.append("<ports><port-id>");
+        filt.append(Long.toString(port.toLong()));
+        filt.append("</port-id></ports>");
+        filt.append("</open-oplink-device>");
+        return filt.toString();
     }
 
     /**
@@ -121,16 +121,16 @@ public class OplinkRoadmPowerConfig<T> extends AbstractHandlerBehaviour
      * @return The request string
      */
     private String getChannelPowerFilter(PortNumber port, OchSignal channel) {
-        StringBuilder rpc = new StringBuilder("<open-oplink-device xmlns=\"http://com/att/device\">");
-        rpc.append("<ports><port-id>");
-        rpc.append(Long.toString(port.toLong()));
-        rpc.append("</port-id>");
-        rpc.append("<port><used-wavelengths><wavelength-number>");
-        rpc.append(Integer.toString(channel.spacingMultiplier()));
-        rpc.append("</wavelength-number></used-wavelengths></port>");
-        rpc.append("</ports>");
-        rpc.append("</open-oplink-device>");
-        return rpc.toString();
+        StringBuilder filt = new StringBuilder("<open-oplink-device xmlns=\"http://com/att/device\">");
+        filt.append("<ports><port-id>");
+        filt.append(Long.toString(port.toLong()));
+        filt.append("</port-id>");
+        filt.append("<port><used-wavelengths><wavelength-number>");
+        filt.append(Integer.toString(channel.spacingMultiplier()));
+        filt.append("</wavelength-number></used-wavelengths></port>");
+        filt.append("</ports>");
+        filt.append("</open-oplink-device>");
+        return filt.toString();
     }
 
     private Long acquireTargetPower(PortNumber port, T component) {
@@ -141,6 +141,7 @@ public class OplinkRoadmPowerConfig<T> extends AbstractHandlerBehaviour
     }
 
     private Long acquireCurrentPower(PortNumber port, T component) {
+        Long power = -10000L;
         if (component instanceof OchSignal) {
             return acquireChannelPower(port, (OchSignal) component, "wavelength-current-power");
         }
@@ -151,17 +152,18 @@ public class OplinkRoadmPowerConfig<T> extends AbstractHandlerBehaviour
         String reply = netconfGetConfig(getPortPowerFilter(port));
         HierarchicalConfiguration cfg =
                 XmlConfigParser.loadXml(new ByteArrayInputStream(reply.getBytes()));
-        HierarchicalConfiguration portInfo = cfg.configurationAt("port");
-        return portInfo.getLong(selection);
+        HierarchicalConfiguration info =
+            cfg.configurationAt("data.open-oplink-device.ports.port");
+        return info.getLong(selection);
     }
 
     private Long acquireChannelPower(PortNumber port, OchSignal channel, String selection) {
         String reply = netconfGetConfig(getChannelPowerFilter(port, channel));
         HierarchicalConfiguration cfg =
                 XmlConfigParser.loadXml(new ByteArrayInputStream(reply.getBytes()));
-        HierarchicalConfiguration portInfo = cfg.configurationAt("port");
-        HierarchicalConfiguration chInfo = portInfo.configurationAt("used-wavelengths");
-        return chInfo.getLong(selection);
+        HierarchicalConfiguration info =
+            cfg.configurationAt("data.open-oplink-device.ports.port.used-wavelengths");
+        return info.getLong(selection);
     }
 
     private boolean setPortTargetPower(PortNumber port, long power) {
