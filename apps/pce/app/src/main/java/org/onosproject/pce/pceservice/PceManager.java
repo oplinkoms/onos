@@ -27,9 +27,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.IPv4;
@@ -112,15 +110,14 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 
-import static org.onosproject.incubator.net.tunnel.Tunnel.Type.MPLS;
+import static org.onosproject.incubator.net.tunnel.Tunnel.State.ACTIVE;
 import static org.onosproject.incubator.net.tunnel.Tunnel.State.INIT;
 import static org.onosproject.incubator.net.tunnel.Tunnel.State.ESTABLISHED;
 import static org.onosproject.incubator.net.tunnel.Tunnel.State.UNSTABLE;
-import static org.onosproject.incubator.net.tunnel.Tunnel.State.FAILED;
+import static org.onosproject.incubator.net.tunnel.Tunnel.Type.MPLS;
 import static org.onosproject.pce.pceservice.LspType.WITH_SIGNALLING;
 import static org.onosproject.pce.pceservice.LspType.SR_WITHOUT_SIGNALLING;
 import static org.onosproject.pce.pceservice.LspType.WITHOUT_SIGNALLING_AND_WITHOUT_SR;
-
 import static org.onosproject.pce.pceservice.PcepAnnotationKeys.BANDWIDTH;
 import static org.onosproject.pce.pceservice.PcepAnnotationKeys.LOCAL_LSP_ID;
 import static org.onosproject.pce.pceservice.PcepAnnotationKeys.LSP_SIG_TYPE;
@@ -264,9 +261,6 @@ public class PceManager implements PceService {
 
         packetService.addProcessor(processor, PacketProcessor.director(4));
         topologyService.addListener(topologyListener);
-        executor = Executors.newSingleThreadScheduledExecutor();
-        //Start a timer when the component is up, with initial delay of 30min and periodic delays at 30min
-        executor.scheduleAtFixedRate(new GlobalOptimizationTimer(), INITIAL_DELAY, PERIODIC_DELAY, TimeUnit.MINUTES);
 
         // Reserve global node pool
         if (!srTeHandler.reserveGlobalPool(GLOBAL_LABEL_SPACE_MIN, GLOBAL_LABEL_SPACE_MAX)) {
@@ -284,8 +278,6 @@ public class PceManager implements PceService {
         netCfgService.removeListener(cfgListener);
         packetService.removeProcessor(processor);
         topologyService.removeListener(topologyListener);
-        // Shutdown the thread when component is deactivated
-        executor.shutdown();
         log.info("Stopped");
     }
 
@@ -517,7 +509,7 @@ public class PceManager implements PceService {
             }
 
             if (existingBwValue != null) {
-                if (bwConstraintValue == 0) {
+                if (bwConstraintValue == 0 && bwConstraint != null) {
                     bwConstraintValue = existingBwValue.bps();
                 }
                 //If bandwidth constraints not specified , take existing bandwidth for shared bandwidth calculation
@@ -629,6 +621,12 @@ public class PceManager implements PceService {
             return false;
         }
 
+        LspType lspType = LspType.valueOf(tunnel.annotations().value(LSP_SIG_TYPE));
+        // Release basic PCECC labels.
+        if (lspType == WITHOUT_SIGNALLING_AND_WITHOUT_SR) {
+            crHandler.releaseLabel(tunnel);
+        }
+
         // 2. Call tunnel service.
         return tunnelService.downTunnel(appId, tunnel.tunnelId());
     }
@@ -649,7 +647,7 @@ public class PceManager implements PceService {
      *
      * @return value of local LSP identifier
      */
-    private short getNextLocalLspId() {
+    private synchronized short getNextLocalLspId() {
         // If there is any free id use it. Otherwise generate new id.
         if (localLspIdFreeList.isEmpty()) {
             return (short) localLspIdIdGen.getNewId();
@@ -786,7 +784,7 @@ public class PceManager implements PceService {
             bwToAllocate = 0;
             if ((shBwConstraint != null) && (shBwConstraint.links().contains(link))) {
                 if (additionalBwValue != null) {
-                    bwToAllocate = bandwidthConstraint - additionalBwValue;
+                    bwToAllocate = additionalBwValue;
                 }
             } else {
                 bwToAllocate = bandwidthConstraint;
@@ -865,7 +863,12 @@ public class PceManager implements PceService {
         // 1. Release old tunnel's bandwidth.
         resourceService.release(pceStore.getTunnelInfo(oldTunnel.tunnelId()).tunnelConsumerId());
 
-        // 2. Release new tunnel's bandwidth
+        // 2. Release new tunnel's bandwidth, if new tunnel bandwidth is allocated
+        if (pceStore.getTunnelInfo(newTunnel.tunnelId()) == null) {
+            //If bandwidth for new tunnel is not allocated i,e 0 then no need to allocate
+            return;
+        }
+
         ResourceConsumer consumer = pceStore.getTunnelInfo(newTunnel.tunnelId()).tunnelConsumerId();
         resourceService.release(consumer);
 
@@ -1058,6 +1061,18 @@ public class PceManager implements PceService {
                 // Node-label allocation is being done during Label DB Sync.
                 // So, when device is detected, no need to do node-label
                 // allocation.
+                String lsrId = specificDevice.annotations().value(LSRID);
+                if (lsrId != null) {
+                    pceStore.addLsrIdDevice(lsrId, specificDevice.id());
+
+                    // Search in failed DB sync store. If found, trigger label DB sync.
+                    DeviceId pccDeviceId = DeviceId.deviceId(lsrId);
+                    if (pceStore.hasPccLsr(pccDeviceId)) {
+                        log.debug("Continue to perform label DB sync for device {}.", pccDeviceId.toString());
+                        syncLabelDb(pccDeviceId);
+                        pceStore.removePccLsr(pccDeviceId);
+                    }
+                }
                 break;
 
             case DEVICE_REMOVED:
@@ -1065,6 +1080,11 @@ public class PceManager implements PceService {
                 if (mastershipService.getLocalRole(specificDevice.id()) == MastershipRole.MASTER) {
                     releaseNodeLabel(specificDevice);
                 }
+
+                if (specificDevice.annotations().value(LSRID) != null) {
+                    pceStore.removeLsrIdDevice(specificDevice.annotations().value(LSRID));
+                }
+
                 break;
 
             default:
@@ -1139,6 +1159,22 @@ public class PceManager implements PceService {
                     }
                 }
 
+                //In CR case, release labels when new tunnel for it is updated.
+                if (lspType == WITHOUT_SIGNALLING_AND_WITHOUT_SR && tunnel.state() == ACTIVE
+                        && mastershipService.getLocalRole(tunnel.path().src().deviceId()) == MastershipRole.MASTER) {
+                    Collection<Tunnel> tunnels = tunnelService.queryTunnel(tunnel.src(), tunnel.dst());
+
+                    for (Tunnel t : tunnels) {
+                          if (tunnel.annotations().value(PLSP_ID).equals(t.annotations().value(PLSP_ID))
+                              && !tunnel.annotations().value(LOCAL_LSP_ID)
+                                  .equals(t.annotations().value(LOCAL_LSP_ID))) {
+                              // Release basic PCECC labels.
+                              crHandler.releaseLabel(t);
+                              break;
+                          }
+                    }
+                }
+
                 if (tunnel.state() == UNSTABLE) {
                     /*
                      * During LSP DB sync if PCC doesn't report LSP which was PCE initiated, it's state is turned into
@@ -1168,33 +1204,22 @@ public class PceManager implements PceService {
                                                                   tunnel.tunnelName().value(), constraints, lspType));
                 }
 
-                if (tunnel.state() == FAILED) {
-                    // Check whether this ONOS instance is master, if yes, recompute and send update.
-                    checkForMasterAndUpdateTunnel(tunnel.path().src().deviceId(), tunnel);
-                }
                 break;
 
             case TUNNEL_REMOVED:
                 if (lspType != WITH_SIGNALLING) {
                     localLspIdFreeList.add(Short.valueOf(tunnel.annotations().value(LOCAL_LSP_ID)));
                 }
-
                 // If not zero bandwidth, and delegated (initiated LSPs will also be delegated).
-                if (bwConstraintValue != 0) {
-                    releaseBandwidth(event.subject());
-
-                    // Release basic PCECC labels.
-                    if (lspType == WITHOUT_SIGNALLING_AND_WITHOUT_SR) {
-                        // Delete stored tunnel consumer id from PCE store (while still retaining label list.)
-                        PceccTunnelInfo pceccTunnelInfo = pceStore.getTunnelInfo(tunnel.tunnelId());
-                        pceccTunnelInfo.tunnelConsumerId(null);
-                        if (mastershipService.getLocalRole(tunnel.path().src().deviceId()) == MastershipRole.MASTER) {
-                            crHandler.releaseLabel(tunnel);
-                        }
-                    } else {
-                        pceStore.removeTunnelInfo(tunnel.tunnelId());
-                    }
+                if (Float.parseFloat(tunnel.annotations().value(BANDWIDTH)) != 0
+                        && mastershipService.getLocalRole(tunnel.path().src().deviceId()) == MastershipRole.MASTER) {
+                    releaseBandwidth(tunnel);
                 }
+
+                if (pceStore.getTunnelInfo(tunnel.tunnelId()) != null) {
+                    pceStore.removeTunnelInfo(tunnel.tunnelId());
+                }
+
                 break;
 
             default:
@@ -1252,13 +1277,20 @@ public class PceManager implements PceService {
     private boolean syncLabelDb(DeviceId deviceId) {
         checkNotNull(deviceId);
 
-        Device specificDevice = deviceService.getDevice(deviceId);
-        if (specificDevice == null) {
-            log.error("Unable to find device for specific device id {}.", deviceId.toString());
+        DeviceId actualDevcieId = pceStore.getLsrIdDevice(deviceId.toString());
+        if (actualDevcieId == null) {
+            log.error("Device not available {}.", deviceId.toString());
+            pceStore.addPccLsr(deviceId);
             return false;
         }
 
-        if (pceStore.getGlobalNodeLabel(deviceId) != null) {
+        Device specificDevice = deviceService.getDevice(actualDevcieId);
+        if (specificDevice == null) {
+            log.error("Unable to find device for specific device id {}.", actualDevcieId.toString());
+            return false;
+        }
+
+        if (pceStore.getGlobalNodeLabel(actualDevcieId) != null) {
             Map<DeviceId, LabelResourceId> globalNodeLabelMap = pceStore.getGlobalNodeLabels();
 
             for (Entry<DeviceId, LabelResourceId> entry : globalNodeLabelMap.entrySet()) {
@@ -1279,7 +1311,7 @@ public class PceManager implements PceService {
                     continue;
                 }
 
-                srTeHandler.advertiseNodeLabelRule(deviceId,
+                srTeHandler.advertiseNodeLabelRule(actualDevcieId,
                                                    entry.getValue(),
                                                    IpPrefix.valueOf(IpAddress.valueOf(srcLsrId), PREFIX_LENGTH),
                                                    Objective.Operation.ADD, false);
@@ -1287,8 +1319,8 @@ public class PceManager implements PceService {
 
             Map<Link, LabelResourceId> adjLabelMap = pceStore.getAdjLabels();
             for (Entry<Link, LabelResourceId> entry : adjLabelMap.entrySet()) {
-                if (entry.getKey().src().deviceId().equals(deviceId)) {
-                    srTeHandler.installAdjLabelRule(deviceId,
+                if (entry.getKey().src().deviceId().equals(actualDevcieId)) {
+                    srTeHandler.installAdjLabelRule(actualDevcieId,
                                                     entry.getValue(),
                                                     entry.getKey().src().port(),
                                                     entry.getKey().dst().port(),
@@ -1297,12 +1329,12 @@ public class PceManager implements PceService {
             }
         }
 
-        srTeHandler.advertiseNodeLabelRule(deviceId,
+        srTeHandler.advertiseNodeLabelRule(actualDevcieId,
                                            LabelResourceId.labelResourceId(0),
                                            IpPrefix.valueOf(END_OF_SYNC_IP_PREFIX),
                                            Objective.Operation.ADD, true);
 
-        log.debug("End of label DB sync for device {}", deviceId);
+        log.debug("End of label DB sync for device {}", actualDevcieId);
 
         if (mastershipService.getLocalRole(specificDevice.id()) == MastershipRole.MASTER) {
             // Allocate node-label to this specific device.

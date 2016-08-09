@@ -94,6 +94,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.onosproject.net.flow.criteria.Criteria.*;
 import static org.onosproject.net.flow.instructions.Instructions.modL0Lambda;
 import static org.onosproject.net.flow.instructions.Instructions.modL1OduSignalId;
@@ -170,7 +172,8 @@ public class FlowEntryBuilder {
                     }
 
                     return new DefaultFlowEntry(builder.build(), FlowEntryState.ADDED,
-                                                stat.getDurationSec(),
+                                                SECONDS.toNanos(stat.getDurationSec())
+                                                        + stat.getDurationNsec(), NANOSECONDS,
                                                 stat.getPacketCount().getValue(),
                                                 stat.getByteCount().getValue());
                 case REMOVED:
@@ -185,7 +188,8 @@ public class FlowEntryBuilder {
                     }
 
                     return new DefaultFlowEntry(builder.build(), FlowEntryState.REMOVED,
-                                                removed.getDurationSec(),
+                                                SECONDS.toNanos(removed.getDurationSec())
+                                                        + removed.getDurationNsec(), NANOSECONDS,
                                                 removed.getPacketCount().getValue(),
                                                 removed.getByteCount().getValue());
                 case MOD:
@@ -511,6 +515,18 @@ public class FlowEntryBuilder {
             builder.setUdpSrc(TpPort.tpPort(udpsrc.getValue().getPort()));
             break;
         case TUNNEL_IPV4_DST:
+        case NSP:
+        case NSI:
+        case NSH_C1:
+        case NSH_C2:
+        case NSH_C3:
+        case NSH_C4:
+        case NSH_MDTYPE:
+        case NSH_NP:
+        case ENCAP_ETH_SRC:
+        case ENCAP_ETH_DST:
+        case ENCAP_ETH_TYPE:
+        case TUN_GPE_NP:
             if (treatmentInterpreter != null) {
                 try {
                     builder.extension(treatmentInterpreter.mapAction(action), deviceId);
@@ -899,6 +915,36 @@ public class FlowEntryBuilder {
             case ARP_TPA:
                 ip = Ip4Address.valueOf(match.get(MatchField.ARP_TPA).getInt());
                 builder.matchArpTpa(ip);
+                break;
+            case NSP:
+                if (selectorInterpreter != null) {
+                    try {
+                        OFOxm oxm = ((OFMatchV3) match).getOxmList().get(MatchField.NSP);
+                        builder.extension(selectorInterpreter.mapOxm(oxm), deviceId);
+                    } catch (UnsupportedOperationException e) {
+                        log.debug(e.getMessage());
+                    }
+                }
+                break;
+            case NSI:
+                if (selectorInterpreter != null) {
+                    try {
+                        OFOxm oxm = ((OFMatchV3) match).getOxmList().get(MatchField.NSI);
+                        builder.extension(selectorInterpreter.mapOxm(oxm), deviceId);
+                    } catch (UnsupportedOperationException e) {
+                        log.debug(e.getMessage());
+                    }
+                }
+                break;
+            case ENCAP_ETH_TYPE:
+                if (selectorInterpreter != null) {
+                    try {
+                        OFOxm oxm = ((OFMatchV3) match).getOxmList().get(MatchField.ENCAP_ETH_TYPE);
+                        builder.extension(selectorInterpreter.mapOxm(oxm), deviceId);
+                    } catch (UnsupportedOperationException e) {
+                        log.debug(e.getMessage());
+                    }
+                }
                 break;
             case MPLS_TC:
             default:

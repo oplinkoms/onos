@@ -132,8 +132,12 @@ public class DistributedNetworkConfigStore
         ImmutableSet.copyOf(configs.keySet()).forEach(k -> {
             if (Objects.equals(k.configKey, configFactory.configKey()) &&
                     isAssignableFrom(configFactory, k)) {
-                validateConfig(k, configFactory, configs.get(k).value());
-                configs.remove(k); // Prune whether valid or not
+                // Prune whether valid or not
+                Versioned<JsonNode> versioned = configs.remove(k);
+                // Allow for the value to be processed by another node already
+                if (versioned != null) {
+                    validateConfig(k, configFactory, versioned.value());
+                }
             }
         });
     }
@@ -173,9 +177,12 @@ public class DistributedNetworkConfigStore
     private void processExistingConfigs(ConfigFactory configFactory) {
         ImmutableSet.copyOf(configs.keySet()).forEach(k -> {
             if (Objects.equals(configFactory.configClass().getName(), k.configClass)) {
-                JsonNode json = configs.remove(k).value();
-                configs.put(key(k.subject, configFactory.configKey()), json);
-                log.debug("Set config pending: {}, {}", k.subject, k.configClass);
+                Versioned<JsonNode> remove = configs.remove(k);
+                if (remove != null) {
+                    JsonNode json = remove.value();
+                    configs.put(key(k.subject, configFactory.configKey()), json);
+                    log.debug("Set config pending: {}, {}", k.subject, k.configClass);
+                }
             }
         });
     }
@@ -219,10 +226,11 @@ public class DistributedNetworkConfigStore
             if (Objects.equals(subject, k.subject) && k.configClass != null && delegate != null) {
                 ConfigFactory<S, ? extends Config<S>> configFactory = factoriesByConfig.get(k.configClass);
                 if (configFactory == null) {
-                    log.error("Found config but no config factory: subject={}, configClass={}",
-                            subject, k.configClass);
+                    log.warn("Found config but no config factory: subject={}, configClass={}",
+                             subject, k.configClass);
+                } else {
+                    builder.add(configFactory.configClass());
                 }
-                builder.add(factoriesByConfig.get(k.configClass).configClass());
             }
         });
         return builder.build();

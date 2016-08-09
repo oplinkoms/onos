@@ -26,6 +26,8 @@ import org.onosproject.net.intent.Intent;
 import org.onosproject.net.intent.IntentService;
 import org.onosproject.net.intent.IntentState;
 import org.onosproject.net.link.LinkAdminService;
+import org.onosproject.net.region.RegionAdminService;
+import org.onosproject.ui.UiTopoLayoutService;
 
 /**
  * Wipes-out the entire network information base, i.e. devices, links, hosts, intents.
@@ -51,6 +53,9 @@ public class WipeOutCommand extends ClustersListCommand {
         wipeOutHosts();
         wipeOutDevices();
         wipeOutLinks();
+
+        wipeOutLayouts();
+        wipeOutRegions();
     }
 
     private void wipeOutIntents() {
@@ -105,5 +110,22 @@ public class WipeOutCommand extends ClustersListCommand {
                 log.warn("Unable to wipe-out links", e);
             }
         }
+    }
+
+    private void wipeOutLayouts() {
+        print("Wiping UI layouts");
+        UiTopoLayoutService service = get(UiTopoLayoutService.class);
+        // wipe out all layouts except the default, which should always be there
+        service.getLayouts().forEach(l -> {
+            if (!l.id().isDefault()) {
+                service.removeLayout(l);
+            }
+        });
+    }
+
+    private void wipeOutRegions() {
+        print("Wiping regions");
+        RegionAdminService service = get(RegionAdminService.class);
+        service.getRegions().forEach(r -> service.removeRegion(r.id()));
     }
 }

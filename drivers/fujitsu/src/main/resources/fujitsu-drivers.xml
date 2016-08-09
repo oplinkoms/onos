@@ -24,5 +24,15 @@
     <driver name="fujitsu-volt-netconf" manufacturer="Fujitsu" hwVersion="svkOLT" swVersion="v1.0">
         <behaviour api="org.onosproject.net.behaviour.ControllerConfig"
                    impl="org.onosproject.drivers.fujitsu.FujitsuVoltControllerConfig"/>
+        <behaviour api="org.onosproject.drivers.fujitsu.behaviour.VoltPonLinkConfig"
+                   impl="org.onosproject.drivers.fujitsu.FujitsuVoltPonLinkConfig"/>
+        <behaviour api="org.onosproject.drivers.fujitsu.behaviour.VoltOnuConfig"
+                   impl="org.onosproject.drivers.fujitsu.FujitsuVoltOnuConfig"/>
+        <behaviour api="org.onosproject.drivers.fujitsu.behaviour.VoltOnuOperConfig"
+                   impl="org.onosproject.drivers.fujitsu.FujitsuVoltOnuOperConfig"/>
+        <behaviour api="org.onosproject.drivers.fujitsu.behaviour.VoltAlertConfig"
+                   impl="org.onosproject.drivers.fujitsu.FujitsuVoltAlertConfig"/>
+        <behaviour api="org.onosproject.drivers.fujitsu.behaviour.VoltFwdlConfig"
+                   impl="org.onosproject.drivers.fujitsu.FujitsuVoltFwdlConfig"/>
     </driver>
 </drivers>

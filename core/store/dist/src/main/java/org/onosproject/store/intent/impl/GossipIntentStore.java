@@ -27,6 +27,8 @@ import org.onlab.util.KryoNamespace;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.ControllerNode;
 import org.onosproject.cluster.NodeId;
+import org.onosproject.incubator.net.virtual.NetworkId;
+import org.onosproject.incubator.net.virtual.VirtualNetworkIntent;
 import org.onosproject.net.intent.Intent;
 import org.onosproject.net.intent.IntentData;
 import org.onosproject.net.intent.IntentEvent;
@@ -86,11 +88,19 @@ public class GossipIntentStore
 
     private final AtomicLong sequenceNumber = new AtomicLong(0);
 
+    private EventuallyConsistentMapListener<Key, IntentData>
+            mapCurrentListener = new InternalCurrentListener();
+
+    private EventuallyConsistentMapListener<Key, IntentData>
+            mapPendingListener = new InternalPendingListener();
+
     @Activate
     public void activate() {
         KryoNamespace.Builder intentSerializer = KryoNamespace.newBuilder()
                 .register(KryoNamespaces.API)
                 .register(IntentData.class)
+                .register(VirtualNetworkIntent.class)
+                .register(NetworkId.class)
                 .register(MultiValuedTimestamp.class);
 
         currentMap = storageService.<Key, IntentData>eventuallyConsistentMapBuilder()
@@ -111,14 +121,16 @@ public class GossipIntentStore
                 .withPeerUpdateFunction((key, intentData) -> getPeerNodes(key, intentData))
                 .build();
 
-        currentMap.addListener(new InternalCurrentListener());
-        pendingMap.addListener(new InternalPendingListener());
+        currentMap.addListener(mapCurrentListener);
+        pendingMap.addListener(mapPendingListener);
 
         log.info("Started");
     }
 
     @Deactivate
     public void deactivate() {
+        currentMap.removeListener(mapCurrentListener);
+        pendingMap.removeListener(mapPendingListener);
         currentMap.destroy();
         pendingMap.destroy();
 

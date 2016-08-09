@@ -52,14 +52,6 @@ public interface StorageService {
     <E> DistributedSetBuilder<E> setBuilder();
 
     /**
-     * Creates a new DistributedQueueBuilder.
-     *
-     * @param <E> queue entry type
-     * @return builder for an distributed queue
-     */
-    <E> DistributedQueueBuilder<E> queueBuilder();
-
-    /**
      * Creates a new AtomicCounterBuilder.
      *
      * @return atomic counter builder
@@ -107,4 +99,15 @@ public interface StorageService {
     default AtomicCounter getAtomicCounter(String name) {
         return getAsyncAtomicCounter(name).asAtomicCounter();
     }
+
+    /**
+     * Returns an instance of {@code WorkQueue} with specified name.
+     *
+     * @param <E> work element type
+     * @param name work queue name
+     * @param serializer serializer
+     *
+     * @return WorkQueue instance
+     */
+    <E> WorkQueue<E> getWorkQueue(String name, Serializer serializer);
 }

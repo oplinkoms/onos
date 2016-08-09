@@ -16,6 +16,7 @@
 
 package org.onosproject.bmv2.api.runtime;
 
+import com.google.common.annotations.Beta;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import org.onlab.util.ImmutableByteSequence;
@@ -30,12 +31,13 @@ import static com.google.common.base.Preconditions.checkState;
 /**
  * An action of a BMv2 match-action table entry.
  */
+@Beta
 public final class Bmv2Action {
 
     private final String name;
     private final List<ImmutableByteSequence> parameters;
 
-    private Bmv2Action(String name, List<ImmutableByteSequence> parameters) {
+    protected Bmv2Action(String name, List<ImmutableByteSequence> parameters) {
         // hide constructor
         this.name = name;
         this.parameters = parameters;
@@ -58,8 +60,7 @@ public final class Bmv2Action {
     }
 
     /**
-     * Returns an immutable view of the ordered list of parameters of this
-     * action.
+     * Returns an immutable view of the list of parameters of this action.
      *
      * @return list of byte sequence
      */
@@ -106,7 +107,7 @@ public final class Bmv2Action {
         }
 
         /**
-         * Set the action name.
+         * Sets the action name.
          *
          * @param actionName a string value
          * @return this
@@ -117,7 +118,7 @@ public final class Bmv2Action {
         }
 
         /**
-         * Add a parameter at the end of the parameters list.
+         * Adds a parameter at the end of the parameters list.
          *
          * @param parameter a ByteBuffer value
          * @return this

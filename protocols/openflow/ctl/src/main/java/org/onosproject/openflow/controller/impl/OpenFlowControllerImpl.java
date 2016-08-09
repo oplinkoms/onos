@@ -120,6 +120,14 @@ public class OpenFlowControllerImpl implements OpenFlowController {
     private final ExecutorService executorBarrier =
         Executors.newFixedThreadPool(4, groupedThreads("onos/of", "event-barrier-%d", log));
 
+    //Separate executor thread for handling error messages and barrier replies for same failed
+    // transactions to avoid context switching of thread
+    protected ExecutorService executorErrorMsgs =
+            Executors.newSingleThreadExecutor(groupedThreads("onos/of", "event-error-msg-%d", log));
+
+    //concurrent hashmap to track failed transactions
+    protected ConcurrentMap<Long, Boolean> errorMsgs =
+            new ConcurrentHashMap<>();
     protected ConcurrentMap<Dpid, OpenFlowSwitch> connectedSwitches =
             new ConcurrentHashMap<>();
     protected ConcurrentMap<Dpid, OpenFlowSwitch> activeMasterSwitches =
@@ -272,6 +280,8 @@ public class OpenFlowControllerImpl implements OpenFlowController {
         Collection<OFGroupDescStatsEntry> groupDescStats;
         Collection<OFPortStatsEntry> portStats;
 
+        OpenFlowSwitch sw = this.getSwitch(dpid);
+
         switch (msg.getType()) {
         case PORT_STATUS:
             for (OpenFlowSwitchListener l : ofSwitchListener) {
@@ -284,9 +294,12 @@ public class OpenFlowControllerImpl implements OpenFlowController {
             }
             break;
         case PACKET_IN:
+            if (sw == null) {
+                log.error("Switch {} is not found", dpid);
+                break;
+            }
             OpenFlowPacketContext pktCtx = DefaultOpenFlowPacketContext
-            .packetContextFromPacketIn(this.getSwitch(dpid),
-                    (OFPacketIn) msg);
+            .packetContextFromPacketIn(sw, (OFPacketIn) msg);
             for (PacketListener p : ofPacketListener.values()) {
                 p.handlePacket(pktCtx);
             }
@@ -294,8 +307,12 @@ public class OpenFlowControllerImpl implements OpenFlowController {
         // TODO: Consider using separate threadpool for sensitive messages.
         //    ie. Back to back error could cause us to starve.
         case FLOW_REMOVED:
-        case ERROR:
             executorMsgs.execute(new OFMessageHandler(dpid, msg));
+            break;
+        case ERROR:
+            log.debug("Received error message from {}: {}", dpid, msg);
+            errorMsgs.putIfAbsent(msg.getXid(), true);
+            executorErrorMsgs.execute(new OFMessageHandler(dpid, msg));
             break;
         case STATS_REPLY:
             OFStatsReply reply = (OFStatsReply) msg;
@@ -355,7 +372,11 @@ public class OpenFlowControllerImpl implements OpenFlowController {
                     if (reply instanceof OFCalientFlowStatsReply) {
                         // Convert Calient flow statistics to regular flow stats
                         // TODO: parse remaining fields such as power levels etc. when we have proper monitoring API
-                        OFFlowStatsReply.Builder fsr = getSwitch(dpid).factory().buildFlowStatsReply();
+                        if (sw == null) {
+                            log.error("Switch {} is not found", dpid);
+                            break;
+                        }
+                        OFFlowStatsReply.Builder fsr = sw.factory().buildFlowStatsReply();
                         List<OFFlowStatsEntry> entries = new LinkedList<>();
                         for (OFCalientFlowStatsEntry entry : ((OFCalientFlowStatsReply) msg).getEntries()) {
 
@@ -370,7 +391,7 @@ public class OpenFlowControllerImpl implements OpenFlowController {
                                     .getFactory(msg.getVersion())
                                     .instructions()
                                     .applyActions(Collections.singletonList(action));
-                            OFFlowStatsEntry fs = getSwitch(dpid).factory().buildFlowStatsEntry()
+                            OFFlowStatsEntry fs = sw.factory().buildFlowStatsEntry()
                                     .setMatch(entry.getMatch())
                                     .setTableId(entry.getTableId())
                                     .setDurationSec(entry.getDurationSec())
@@ -403,15 +424,26 @@ public class OpenFlowControllerImpl implements OpenFlowController {
             }
             break;
         case BARRIER_REPLY:
-            executorBarrier.execute(new OFMessageHandler(dpid, msg));
+            if (errorMsgs.containsKey(msg.getXid())) {
+                //To make oferror msg handling and corresponding barrier reply serialized,
+                // executorErrorMsgs is used for both transaction
+                errorMsgs.remove(msg.getXid());
+                executorErrorMsgs.execute(new OFMessageHandler(dpid, msg));
+            } else {
+                executorBarrier.execute(new OFMessageHandler(dpid, msg));
+            }
             break;
         case EXPERIMENTER:
+            if (sw == null) {
+                log.error("Switch {} is not found", dpid);
+                break;
+            }
             long experimenter = ((OFExperimenter) msg).getExperimenter();
             if (experimenter == 0x748771) {
                 // LINC-OE port stats
                 OFCircuitPortStatus circuitPortStatus = (OFCircuitPortStatus) msg;
-                OFPortStatus.Builder portStatus = this.getSwitch(dpid).factory().buildPortStatus();
-                OFPortDesc.Builder portDesc = this.getSwitch(dpid).factory().buildPortDesc();
+                OFPortStatus.Builder portStatus = sw.factory().buildPortStatus();
+                OFPortDesc.Builder portDesc = sw.factory().buildPortDesc();
                 portDesc.setPortNo(circuitPortStatus.getPortNo())
                         .setHwAddr(circuitPortStatus.getHwAddr())
                         .setName(circuitPortStatus.getName())

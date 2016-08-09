@@ -44,6 +44,7 @@
         <module>corsa</module>
         <module>optical</module>
         <module>oplink</module>
+        <module>arista</module>
     </modules>
 
     <!--<properties>

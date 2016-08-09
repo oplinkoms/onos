@@ -23,8 +23,12 @@ import org.onosproject.net.region.RegionId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -46,6 +50,9 @@ public class UiTopology extends UiElement {
 
     private static final Logger log = LoggerFactory.getLogger(UiTopology.class);
 
+    private static final Comparator<UiClusterMember> CLUSTER_MEMBER_COMPARATOR =
+            (o1, o2) -> o1.idAsString().compareTo(o2.idAsString());
+
 
     // top level mappings of topology elements by ID
     private final Map<NodeId, UiClusterMember> cnodeLookup = new HashMap<>();
@@ -53,6 +60,9 @@ public class UiTopology extends UiElement {
     private final Map<DeviceId, UiDevice> deviceLookup = new HashMap<>();
     private final Map<HostId, UiHost> hostLookup = new HashMap<>();
     private final Map<UiLinkId, UiLink> linkLookup = new HashMap<>();
+
+    // a container for devices, hosts, etc. belonging to no region
+    private final UiRegion nullRegion = new UiRegion(this, null);
 
 
     @Override
@@ -82,6 +92,20 @@ public class UiTopology extends UiElement {
         deviceLookup.clear();
         hostLookup.clear();
         linkLookup.clear();
+
+        nullRegion.destroy();
+    }
+
+
+    /**
+     * Returns all the cluster members, sorted by their ID.
+     *
+     * @return all cluster members
+     */
+    public List<UiClusterMember> allClusterMembers() {
+        List<UiClusterMember> members = new ArrayList<>(cnodeLookup.values());
+        Collections.sort(members, CLUSTER_MEMBER_COMPARATOR);
+        return members;
     }
 
     /**
@@ -125,6 +149,27 @@ public class UiTopology extends UiElement {
         return cnodeLookup.size();
     }
 
+
+    /**
+     * Returns all regions in the model (except the
+     * {@link #nullRegion() null region}).
+     *
+     * @return all regions
+     */
+    public Set<UiRegion> allRegions() {
+        return new HashSet<>(regionLookup.values());
+    }
+
+    /**
+     * Returns a reference to the null-region. That is, the container for
+     * devices, hosts, and links that belong to no region.
+     *
+     * @return the null-region
+     */
+    public UiRegion nullRegion() {
+        return nullRegion;
+    }
+
     /**
      * Returns the region with the specified identifier, or null if
      * no such region exists.
@@ -133,7 +178,7 @@ public class UiTopology extends UiElement {
      * @return corresponding UI region
      */
     public UiRegion findRegion(RegionId id) {
-        return regionLookup.get(id);
+        return UiRegion.NULL_ID.equals(id) ? nullRegion() : regionLookup.get(id);
     }
 
     /**
@@ -164,6 +209,15 @@ public class UiTopology extends UiElement {
      */
     public int regionCount() {
         return regionLookup.size();
+    }
+
+    /**
+     * Returns all devices in the model.
+     *
+     * @return all devices
+     */
+    public Set<UiDevice> allDevices() {
+        return new HashSet<>(deviceLookup.values());
     }
 
     /**
@@ -208,6 +262,15 @@ public class UiTopology extends UiElement {
     }
 
     /**
+     * Returns all links in the model.
+     *
+     * @return all links
+     */
+    public Set<UiLink> allLinks() {
+        return new HashSet<>(linkLookup.values());
+    }
+
+    /**
      * Returns the link with the specified identifier, or null if no such
      * link exists.
      *
@@ -246,6 +309,15 @@ public class UiTopology extends UiElement {
      */
     public int linkCount() {
         return linkLookup.size();
+    }
+
+    /**
+     * Returns all hosts in the model.
+     *
+     * @return all hosts
+     */
+    public Set<UiHost> allHosts() {
+        return new HashSet<>(hostLookup.values());
     }
 
     /**

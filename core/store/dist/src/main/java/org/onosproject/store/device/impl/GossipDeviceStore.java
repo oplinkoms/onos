@@ -15,10 +15,24 @@
  */
 package org.onosproject.store.device.impl;
 
-import com.google.common.collect.FluentIterable;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.felix.scr.annotations.Activate;
@@ -82,24 +96,10 @@ import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.WallClockTimestamp;
 import org.slf4j.Logger;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
+import com.google.common.collect.FluentIterable;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Predicates.notNull;
@@ -111,8 +111,15 @@ import static org.onlab.util.Tools.groupedThreads;
 import static org.onlab.util.Tools.minPriority;
 import static org.onosproject.cluster.ControllerNodeToNodeId.toNodeId;
 import static org.onosproject.net.DefaultAnnotations.merge;
-import static org.onosproject.net.device.DeviceEvent.Type.*;
-import static org.onosproject.store.device.impl.GossipDeviceStoreMessageSubjects.*;
+import static org.onosproject.net.device.DeviceEvent.Type.DEVICE_AVAILABILITY_CHANGED;
+import static org.onosproject.net.device.DeviceEvent.Type.PORT_ADDED;
+import static org.onosproject.net.device.DeviceEvent.Type.PORT_REMOVED;
+import static org.onosproject.net.device.DeviceEvent.Type.PORT_STATS_UPDATED;
+import static org.onosproject.net.device.DeviceEvent.Type.PORT_UPDATED;
+import static org.onosproject.store.device.impl.GossipDeviceStoreMessageSubjects.DEVICE_ADVERTISE;
+import static org.onosproject.store.device.impl.GossipDeviceStoreMessageSubjects.DEVICE_INJECTED;
+import static org.onosproject.store.device.impl.GossipDeviceStoreMessageSubjects.DEVICE_REMOVE_REQ;
+import static org.onosproject.store.device.impl.GossipDeviceStoreMessageSubjects.PORT_INJECTED;
 import static org.onosproject.store.service.EventuallyConsistentMapEvent.Type.PUT;
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -257,6 +264,7 @@ public class GossipDeviceStore
 
     @Deactivate
     public void deactivate() {
+        devicePortStats.removeListener(portStatsListener);
         devicePortStats.destroy();
         devicePortDeltaStats.destroy();
         executor.shutdownNow();
@@ -274,6 +282,24 @@ public class GossipDeviceStore
         devices.clear();
         devicePorts.clear();
         availableDevices.clear();
+        clusterCommunicator.removeSubscriber(
+                GossipDeviceStoreMessageSubjects.DEVICE_UPDATE);
+        clusterCommunicator.removeSubscriber(
+                GossipDeviceStoreMessageSubjects.DEVICE_OFFLINE);
+        clusterCommunicator.removeSubscriber(
+                GossipDeviceStoreMessageSubjects.DEVICE_REMOVE_REQ);
+        clusterCommunicator.removeSubscriber(
+                GossipDeviceStoreMessageSubjects.DEVICE_REMOVED);
+        clusterCommunicator.removeSubscriber(
+                GossipDeviceStoreMessageSubjects.PORT_UPDATE);
+        clusterCommunicator.removeSubscriber(
+                GossipDeviceStoreMessageSubjects.PORT_STATUS_UPDATE);
+        clusterCommunicator.removeSubscriber(
+                GossipDeviceStoreMessageSubjects.DEVICE_ADVERTISE);
+        clusterCommunicator.removeSubscriber(
+                GossipDeviceStoreMessageSubjects.DEVICE_INJECTED);
+        clusterCommunicator.removeSubscriber(
+                GossipDeviceStoreMessageSubjects.PORT_INJECTED);
         log.info("Stopped");
     }
 
@@ -322,7 +348,7 @@ public class GossipDeviceStore
 
             if (deviceEvent != null) {
                 log.debug("Notifying peers of a device update topology event for providerId: {} and deviceId: {}",
-                         providerId, deviceId);
+                          providerId, deviceId);
                 notifyPeers(new InternalDeviceEvent(providerId, deviceId, mergedDesc));
             }
 
@@ -387,11 +413,16 @@ public class GossipDeviceStore
                 return null;
             }
             if (oldDevice == null) {
+                // REGISTER
+                if (!deltaDesc.value().isDefaultAvailable()) {
+                    return registerDevice(providerId, newDevice);
+                }
                 // ADD
                 return createDevice(providerId, newDevice, deltaDesc.timestamp());
             } else {
                 // UPDATE or ignore (no change or stale)
-                return updateDevice(providerId, oldDevice, newDevice, deltaDesc.timestamp());
+                return updateDevice(providerId, oldDevice, newDevice, deltaDesc.timestamp(),
+                                    deltaDesc.value().isDefaultAvailable());
             }
         }
     }
@@ -418,7 +449,8 @@ public class GossipDeviceStore
     // Guarded by deviceDescs value (=Device lock)
     private DeviceEvent updateDevice(ProviderId providerId,
                                      Device oldDevice,
-                                     Device newDevice, Timestamp newTimestamp) {
+                                     Device newDevice, Timestamp newTimestamp,
+                                     boolean forceAvailable) {
         // We allow only certain attributes to trigger update
         boolean propertiesChanged =
                 !Objects.equals(oldDevice.hwVersion(), newDevice.hwVersion()) ||
@@ -442,7 +474,7 @@ public class GossipDeviceStore
             event = new DeviceEvent(DeviceEvent.Type.DEVICE_UPDATED, newDevice, null);
         }
 
-        if (!providerId.isAncillary()) {
+        if (!providerId.isAncillary() && forceAvailable) {
             boolean wasOnline = availableDevices.contains(newDevice.id());
             markOnline(newDevice.id(), newTimestamp);
             if (!wasOnline) {
@@ -450,6 +482,20 @@ public class GossipDeviceStore
             }
         }
         return event;
+    }
+
+    private DeviceEvent registerDevice(ProviderId providerId, Device newDevice) {
+        // update composed device cache
+        Device oldDevice = devices.putIfAbsent(newDevice.id(), newDevice);
+        verify(oldDevice == null,
+               "Unexpected Device in cache. PID:%s [old=%s, new=%s]",
+               providerId, oldDevice, newDevice);
+
+        if (!providerId.isAncillary()) {
+            markOffline(newDevice.id());
+        }
+
+        return new DeviceEvent(DeviceEvent.Type.DEVICE_ADDED, newDevice, null);
     }
 
     @Override
@@ -493,6 +539,24 @@ public class GossipDeviceStore
             }
             return null;
         }
+    }
+
+    public boolean markOnline(DeviceId deviceId) {
+        if (devices.containsKey(deviceId)) {
+            final Timestamp timestamp = deviceClockService.getTimestamp(deviceId);
+            Map<?, ?> deviceLock = getOrCreateDeviceDescriptionsMap(deviceId);
+            synchronized (deviceLock) {
+                if (markOnline(deviceId, timestamp)) {
+                    notifyDelegate(new DeviceEvent(DEVICE_AVAILABILITY_CHANGED, getDevice(deviceId), null));
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        }
+        log.warn("Device {} does not exist in store", deviceId);
+        return false;
+
     }
 
     /**
@@ -612,7 +676,10 @@ public class GossipDeviceStore
                                                   Timestamped<List<PortDescription>> portDescriptions) {
 
         Device device = devices.get(deviceId);
-        checkArgument(device != null, DEVICE_NOT_FOUND, deviceId);
+        if (device == null) {
+            log.debug("Device is no longer valid: {}", deviceId);
+            return Collections.emptyList();
+        }
 
         Map<ProviderId, DeviceDescriptions> descsMap = deviceDescs.get(deviceId);
         checkArgument(descsMap != null, DEVICE_NOT_FOUND, deviceId);
@@ -1557,7 +1624,8 @@ public class GossipDeviceStore
             Timestamped<DeviceDescription> deviceDescription = event.deviceDescription();
 
             try {
-                notifyDelegateIfNotNull(createOrUpdateDeviceInternal(providerId, deviceId, deviceDescription));
+                notifyDelegateIfNotNull(createOrUpdateDeviceInternal(providerId, deviceId,
+                                                                     deviceDescription));
             } catch (Exception e) {
                 log.warn("Exception thrown handling device update", e);
             }

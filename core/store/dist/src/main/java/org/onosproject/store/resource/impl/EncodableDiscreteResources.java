@@ -66,19 +66,27 @@ final class EncodableDiscreteResources implements DiscreteResources {
         return new EncodableDiscreteResources(parent, values);
     }
 
+    private static DiscreteResources of(DiscreteResource parent, Map<Class<?>, EncodedDiscreteResources> map) {
+        if (isEmpty(map)) {
+            return DiscreteResources.empty();
+        }
+        return new EncodableDiscreteResources(parent, map);
+    }
+
+    private static boolean isEmpty(Map<Class<?>, EncodedDiscreteResources> map) {
+        return map.values().stream().allMatch(EncodedDiscreteResources::isEmpty);
+    }
+
     EncodableDiscreteResources(DiscreteResource parent, Map<Class<?>, EncodedDiscreteResources> map) {
         this.parent = parent;
         this.map = map;
     }
 
-    // for serializer
-    private EncodableDiscreteResources() {
-        this.parent = null;
-        this.map = null;
-    }
-
     @Override
     public Optional<DiscreteResource> lookup(DiscreteResourceId id) {
+        if (!id.parent().filter(parent.id()::equals).isPresent()) {
+            return Optional.empty();
+        }
         DiscreteResource resource = Resources.discrete(id).resource();
         Class<?> cls = getClass(resource);
         return Optional.ofNullable(map.get(cls))
@@ -90,15 +98,26 @@ final class EncodableDiscreteResources implements DiscreteResources {
     public DiscreteResources difference(DiscreteResources other) {
         if (other instanceof EncodableDiscreteResources) {
             EncodableDiscreteResources cast = (EncodableDiscreteResources) other;
-            Map<Class<?>, EncodedDiscreteResources> newMap =
-                    Stream.concat(this.map.entrySet().stream(), cast.map.entrySet().stream())
-                            .filter(entry -> this.map.containsKey(entry.getKey()))
-                            .collect(Collectors.toMap(
-                                    Map.Entry::getKey,
-                                    Map.Entry::getValue,
-                                    EncodedDiscreteResources::difference,
-                                    LinkedHashMap::new));
-            return new EncodableDiscreteResources(parent, newMap);
+
+            Map<Class<?>, EncodedDiscreteResources> newMap = new LinkedHashMap<>();
+            for (Class<?> key : this.map.keySet()) {
+                EncodedDiscreteResources thisValues = this.map.get(key);
+                if (!cast.map.containsKey(key)) {
+                    newMap.put(key, thisValues);
+                    continue;
+                }
+                EncodedDiscreteResources otherValues = cast.map.get(key);
+                EncodedDiscreteResources diff = thisValues.difference(otherValues);
+                // omit empty resources from a new resource set
+                // empty EncodedDiscreteResources can't deserialize due to
+                // inability to reproduce a Class<?> instance from the serialized data
+                if (diff.isEmpty()) {
+                    continue;
+                }
+                newMap.put(key, diff);
+            }
+
+            return of(parent, newMap);
         } else if (other instanceof EmptyDiscreteResources) {
             return this;
         }
@@ -108,8 +127,7 @@ final class EncodableDiscreteResources implements DiscreteResources {
 
     @Override
     public boolean isEmpty() {
-        return map.values().stream()
-                .allMatch(x -> x.isEmpty());
+        return isEmpty(map);
     }
 
     @Override
@@ -131,7 +149,7 @@ final class EncodableDiscreteResources implements DiscreteResources {
                                     EncodedDiscreteResources::add,
                                     LinkedHashMap::new
                             ));
-            return new EncodableDiscreteResources(parent, newMap);
+            return of(parent, newMap);
         } else if (other instanceof EmptyDiscreteResources) {
             return this;
         }

@@ -31,10 +31,13 @@ import org.onosproject.incubator.net.virtual.VirtualLink;
 import org.onosproject.incubator.net.virtual.VirtualNetwork;
 import org.onosproject.incubator.store.virtual.impl.DistributedVirtualNetworkStore;
 import org.onosproject.net.ConnectPoint;
+import org.onosproject.net.DefaultPort;
 import org.onosproject.net.Link;
 import org.onosproject.net.NetTestTools;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.TestDeviceParams;
+import org.onosproject.net.intent.FakeIntentManager;
+import org.onosproject.net.intent.TestableIntentService;
 import org.onosproject.net.link.LinkService;
 import org.onosproject.store.service.TestStorageService;
 
@@ -54,6 +57,7 @@ public class VirtualNetworkLinkServiceTest extends TestDeviceParams {
     private VirtualNetworkManager manager;
     private DistributedVirtualNetworkStore virtualNetworkManagerStore;
     private CoreService coreService;
+    private TestableIntentService intentService = new FakeIntentManager();
 
     @Before
     public void setUp() throws Exception {
@@ -67,6 +71,7 @@ public class VirtualNetworkLinkServiceTest extends TestDeviceParams {
 
         manager = new VirtualNetworkManager();
         manager.store = virtualNetworkManagerStore;
+        manager.intentService = intentService;
         NetTestTools.injectEventDispatcher(manager, new TestEventDispatcher());
         manager.activate();
     }
@@ -93,7 +98,13 @@ public class VirtualNetworkLinkServiceTest extends TestDeviceParams {
         VirtualDevice dstVirtualDevice =
                 manager.createVirtualDevice(virtualNetwork.id(), DID2);
         ConnectPoint src = new ConnectPoint(srcVirtualDevice.id(), PortNumber.portNumber(1));
+        manager.createVirtualPort(virtualNetwork.id(), src.deviceId(), src.port(),
+                                  new DefaultPort(srcVirtualDevice, src.port(), true));
+
         ConnectPoint dst = new ConnectPoint(dstVirtualDevice.id(), PortNumber.portNumber(2));
+        manager.createVirtualPort(virtualNetwork.id(), dst.deviceId(), dst.port(),
+                                  new DefaultPort(dstVirtualDevice, dst.port(), true));
+
         VirtualLink link1 = manager.createVirtualLink(virtualNetwork.id(), src, dst);
         VirtualLink link2 = manager.createVirtualLink(virtualNetwork.id(), dst, src);
 
@@ -103,7 +114,7 @@ public class VirtualNetworkLinkServiceTest extends TestDeviceParams {
         Iterator<Link> it = linkService.getLinks().iterator();
         assertEquals("The link set size did not match.", 2, Iterators.size(it));
 
-        // test the getActiveLinks() method where no links are ACTIVE
+        // test the getActiveLinks() method where all links are INACTIVE
         Iterator<Link> it2 = linkService.getActiveLinks().iterator();
         assertEquals("The link set size did not match.", 0, Iterators.size(it2));
 

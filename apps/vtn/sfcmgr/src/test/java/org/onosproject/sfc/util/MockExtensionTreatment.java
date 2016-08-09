@@ -23,6 +23,12 @@ import org.onosproject.net.flow.instructions.ExtensionTreatmentType;
 
 public class MockExtensionTreatment implements ExtensionTreatment {
 
+    private ExtensionTreatmentType type;
+
+    public MockExtensionTreatment(ExtensionTreatmentType type) {
+        this.type = type;
+    }
+
     @Override
     public <T> void setPropertyValue(String key, T value) throws ExtensionPropertyException {
     }
@@ -48,7 +54,7 @@ public class MockExtensionTreatment implements ExtensionTreatment {
 
     @Override
     public ExtensionTreatmentType type() {
-        return null;
+        return type;
     }
 
 }

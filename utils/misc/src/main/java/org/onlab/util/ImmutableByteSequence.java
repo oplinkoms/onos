@@ -16,7 +16,6 @@
 
 package org.onlab.util;
 
-import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 
 import java.nio.ByteBuffer;
@@ -77,6 +76,8 @@ public final class ImmutableByteSequence {
      * the passed byte array, from/to the given indexes (inclusive).
      *
      * @param original a byte array value
+     * @param fromIdx starting index
+     * @param toIdx ending index
      * @return a new immutable byte sequence
      */
     public static ImmutableByteSequence copyFrom(byte[] original, int fromIdx, int toIdx) {
@@ -238,8 +239,6 @@ public final class ImmutableByteSequence {
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(this)
-                .addValue(HexString.toHexString(asArray()))
-                .toString();
+        return HexString.toHexString(value.array());
     }
 }

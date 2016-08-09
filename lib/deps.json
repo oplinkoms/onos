@@ -86,7 +86,7 @@
     "gmetric4j": "mvn:info.ganglia.gmetric4j:gmetric4j:1.0.10",
     "aopalliance-repackaged": "mvn:org.glassfish.hk2.external:aopalliance-repackaged:2.4.0-b34",
     "asm": "mvn:org.ow2.asm:asm:5.0.3",
-    "atomix": "mvn:io.atomix:atomix-all:1.0.0-rc8",
+    "atomix": "mvn:io.atomix:atomix-all:1.0.0-rc9",
     "commons-codec": "mvn:commons-codec:commons-codec:1.10",
     "commons-collections": "mvn:commons-collections:commons-collections:3.2.2",
     "commons-configuration": "mvn:commons-configuration:commons-configuration:1.10",
@@ -142,7 +142,7 @@
     "jsr305": "mvn:com.google.code.findbugs:jsr305:3.0.1",
     "junit": "mvn:junit:junit:4.12",
     "kryo": "mvn:com.esotericsoftware:kryo:3.0.3",
-    "mapdb": "mvn:org.mapdb:mapdb:1.0.8",
+    "mapdb": "mvn:org.mapdb:mapdb:1.0.9",
     "metrics-core": "mvn:io.dropwizard.metrics:metrics-core:3.1.0",
     "metrics-ganglia": "mvn:io.dropwizard.metrics:metrics-ganglia:3.1.2",
     "metrics-graphite": "mvn:io.dropwizard.metrics:metrics-graphite:3.1.2",
@@ -183,6 +183,9 @@
     "checkstyle": "mvn:com.puppycrawl.tools:checkstyle:6.11.2",
     "apache-karaf": "http://onlab.vicci.org/onos/third-party/apache-karaf-3.0.5.tar.gz",
     "bndlib": "mvn:biz.aQute.bnd:biz.aQute.bndlib:jar:3.1.0",
+    "cord-config": "mvn:org.onosproject:cord-config:1.0-b1",
+    "libthrift": "mvn:org.apache.thrift:libthrift:0.9.3",
+    "qdox": "mvn:com.thoughtworks.qdox:qdox:2.0-M3",
     "org.apache.felix.scr.bnd": {
       "uri": "mvn:org.onosproject:org.apache.felix.scr.bnd:1.4.1-SNAPSHOT",
       "repo": "https://oss.sonatype.org/content/repositories/snapshots"
@@ -201,10 +204,6 @@
     },
     "mibs-rfc": {
       "uri": "mvn:com.btisystems.mibbler.mibs:rfc:1.0-SNAPSHOT",
-      "repo": "https://oss.sonatype.org/content/repositories/snapshots"
-    },
-    "cord-config": {
-      "uri": "mvn:org.opencord:cord-config:1.0-SNAPSHOT",
       "repo": "https://oss.sonatype.org/content/repositories/snapshots"
     },
     // Openstack4j related jars

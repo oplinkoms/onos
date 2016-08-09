@@ -55,7 +55,6 @@ from sys import argv
 from glob import glob
 import time
 from functools import partial
-from re import search
 
 
 ### ONOS Environment
@@ -136,9 +135,13 @@ def unpackONOS( destDir='/tmp', run=quietRun ):
         raise Exception( 'Missing ONOS tarball %s - run buck build onos?'
                          % tarPath )
     info( '(unpacking %s)' % destDir)
-    cmds = ( 'mkdir -p "%s" && cd "%s" && tar xzf "%s"'
-             % ( destDir, destDir, tarPath) )
-    run( cmds, shell=True, verbose=True )
+    success = '*** SUCCESS ***'
+    cmds = ( 'mkdir -p "%s" && cd "%s" && tar xzf "%s" && echo "%s"'
+             % ( destDir, destDir, tarPath, success ) )
+    result = run( cmds, shell=True, verbose=True )
+    if success not in result:
+        raise Exception( 'Failed to unpack ONOS archive %s in %s:\n%s\n' %
+                         ( tarPath, destDir, result ) )
     # We can use quietRun for this usually
     tarOutput = quietRun( 'tar tzf "%s" | head -1' % tarPath, shell=True)
     tarOutput = tarOutput.split()[ 0 ].strip()
@@ -365,7 +368,7 @@ class ONOSCluster( Controller ):
         args = list( args )
         name = args.pop( 0 )
         topo = kwargs.pop( 'topo', None )
-        nat = kwargs.pop( 'nat', 'nat0' )
+        self.nat = kwargs.pop( 'nat', 'nat0' )
         nodeOpts = kwargs.pop( 'nodeOpts', {} )
         # Default: single switch with 1 ONOS node
         if not topo:
@@ -384,8 +387,8 @@ class ONOSCluster( Controller ):
                             host=partial( ONOSNode, **nodeOpts ),
                             switch=LinuxBridge,
                             controller=None )
-        if nat:
-            self.net.addNAT( nat ).configDefault()
+        if self.nat:
+            self.net.addNAT( self.nat ).configDefault()
         updateNodeIPs( self.env, self.nodes() )
         self._remoteControllers = []
 
@@ -420,32 +423,21 @@ class ONOSCluster( Controller ):
         "Return list of ONOS nodes"
         return [ h for h in self.net.hosts if isinstance( h, ONOSNode ) ]
 
-    def defaultIntf( self ):
-        "Call ip route to determine default interface"
-        result = quietRun( 'ip route | grep default', shell=True ).strip()
-        match = search( r'dev\s+([^\s]+)', result )
-        if match:
-            intf = match.group( 1 )
-        else:
-            warn( "Can't find default network interface - using eth0\n" )
-            intf = 'eth0'
-        return intf
-
-    def configPortForwarding( self, ports=[], intf='', action='A' ):
-        """Start or stop forwarding on intf to all nodes
+    def configPortForwarding( self, ports=[], action='A' ):
+        """Start or stop port forwarding (any intf) for all nodes
+           ports: list of ports to forward
            action: A=add/start, D=delete/stop (default: A)"""
-        if not intf:
-            intf = self.defaultIntf()
+        self.cmd( 'iptables -' + action, 'FORWARD -d', self.ipBase,
+                  '-j ACCEPT' )
         for port in ports:
             for index, node in enumerate( self.nodes() ):
                 ip, inport = node.IP(), port + index
                 # Configure a destination NAT rule
-                cmd = ( 'iptables -t nat -{action} PREROUTING -t nat '
-                        '-i {intf} -p tcp --dport {inport} '
-                        '-j DNAT --to-destination {ip}:{port}' )
-                self.cmd( cmd.format( **locals() ) )
+                self.cmd( 'iptables -t nat -' + action,
+                          'PREROUTING -t nat -p tcp --dport', inport,
+                          '-j DNAT --to-destination %s:%s' % ( ip, port ) )
 
-
+                    
 class ONOSSwitchMixin( object ):
     "Mixin for switches that connect to an ONOSCluster"
     def start( self, controllers ):

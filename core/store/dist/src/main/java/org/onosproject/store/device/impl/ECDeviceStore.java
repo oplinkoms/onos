@@ -232,7 +232,6 @@ public class ECDeviceStore
         availableDevices = storageService.<DeviceId>setBuilder()
                 .withName("onos-online-devices")
                 .withSerializer(Serializer.using(KryoNamespaces.API))
-                .withPartitionsDisabled()
                 .withRelaxedReadConsistency()
                 .build()
                 .asDistributedSet();
@@ -276,6 +275,7 @@ public class ECDeviceStore
         return devices.get(deviceId);
     }
 
+    // FIXME handle deviceDescription.isDefaultAvailable()=false case properly.
     @Override
     public DeviceEvent createOrUpdateDevice(ProviderId providerId,
             DeviceId deviceId,
@@ -393,8 +393,13 @@ public class ECDeviceStore
         return null;
     }
 
-    private boolean markOnline(DeviceId deviceId) {
-        return availableDevices.add(deviceId);
+    // FIXME publicization of markOnline -- trigger some action independently?
+    public boolean markOnline(DeviceId deviceId) {
+        if (devices.containsKey(deviceId)) {
+            return availableDevices.add(deviceId);
+        }
+        log.warn("Device {} does not exist in store", deviceId);
+        return false;
     }
 
     @Override

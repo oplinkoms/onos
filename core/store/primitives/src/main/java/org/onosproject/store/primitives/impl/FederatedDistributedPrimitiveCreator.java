@@ -29,8 +29,8 @@ import org.onosproject.store.service.AsyncAtomicValue;
 import org.onosproject.store.service.AsyncConsistentMap;
 import org.onosproject.store.service.AsyncDistributedSet;
 import org.onosproject.store.service.AsyncLeaderElector;
-import org.onosproject.store.service.DistributedQueue;
 import org.onosproject.store.service.Serializer;
+import org.onosproject.store.service.WorkQueue;
 
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableSet;
@@ -83,11 +83,6 @@ public class FederatedDistributedPrimitiveCreator implements DistributedPrimitiv
     }
 
     @Override
-    public <E> DistributedQueue<E> newDistributedQueue(String name, Serializer serializer) {
-        return getCreator(name).newDistributedQueue(name, serializer);
-    }
-
-    @Override
     public AsyncLeaderElector newAsyncLeaderElector(String name) {
         checkNotNull(name);
         Map<PartitionId, AsyncLeaderElector> leaderElectors =
@@ -98,6 +93,11 @@ public class FederatedDistributedPrimitiveCreator implements DistributedPrimitiv
             return sortedMemberPartitionIds.get(Math.abs(hashCode) % members.size());
         };
         return new PartitionedAsyncLeaderElector(name, leaderElectors, hasher);
+    }
+
+    @Override
+    public <E> WorkQueue<E> newWorkQueue(String name, Serializer serializer) {
+        return getCreator(name).newWorkQueue(name, serializer);
     }
 
     @Override
@@ -114,6 +114,15 @@ public class FederatedDistributedPrimitiveCreator implements DistributedPrimitiv
         return members.values()
                       .stream()
                       .map(DistributedPrimitiveCreator::getAsyncAtomicCounterNames)
+                      .reduce(Sets::union)
+                      .orElse(ImmutableSet.of());
+    }
+
+    @Override
+    public Set<String> getWorkQueueNames() {
+        return members.values()
+                      .stream()
+                      .map(DistributedPrimitiveCreator::getWorkQueueNames)
                       .reduce(Sets::union)
                       .orElse(ImmutableSet.of());
     }

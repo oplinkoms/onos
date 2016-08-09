@@ -53,6 +53,9 @@
     </licenses>
 
     <modules>
+        <!-- FIXME remove after 1.10 is released -->
+        <module>tools/package/maven-plugin</module>
+
         <module>lib</module>
 
         <module>utils</module>
@@ -137,6 +140,12 @@
             <dependency>
                 <groupId>org.onosproject</groupId>
                 <artifactId>onos-incubator-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.onosproject</groupId>
+                <artifactId>onos-incubator-net</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

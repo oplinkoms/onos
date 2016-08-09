@@ -15,8 +15,10 @@
  */
 package org.onosproject.openflow.controller;
 
+import java.util.Collections;
 import java.util.List;
 
+import org.onosproject.net.device.PortDescription;
 import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 
@@ -41,8 +43,13 @@ public interface OpenFlowOpticalSwitch extends OpenFlowSwitch, WithTypedPorts {
     abstract List<OFPortDesc> getPorts();
 
     /**
-     * Update current power on optical ports.
-     * @param msg the OpenFlow message received from devices
+     * Returns updated PortDescriptions built from experimenter message
+     * received from device.
+     *
+     * @param msg OpenFlow message from device.
+     * @return List of updated PortDescriptions.
      */
-    default void processExperimenterStats(OFMessage msg){};
+    default List<PortDescription> processExpPortStats(OFMessage msg) {
+        return Collections.emptyList();
+    }
 }

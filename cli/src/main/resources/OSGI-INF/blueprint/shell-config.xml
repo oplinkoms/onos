@@ -305,16 +305,6 @@
             </optional-completers>
         </command>
         <command>
-            <action class="org.onosproject.cli.net.AddOpticalIntentCommand"/>
-            <completers>
-                <ref component-id="connectPointCompleter"/>
-                <ref component-id="connectPointCompleter"/>
-            </completers>
-            <optional-completers>
-                <entry key="-a" value-ref="allAppNameCompleter"/>
-            </optional-completers>
-        </command>
-        <command>
             <action class="org.onosproject.cli.net.GetStatisticsCommand"/>
             <completers>
                 <ref component-id="connectPointCompleter"/>
@@ -413,6 +403,9 @@
             <action class="org.onosproject.cli.net.CountersListCommand"/>
         </command>
         <command>
+            <action class="org.onosproject.cli.net.QueuesListCommand"/>
+        </command>
+        <command>
             <action class="org.onosproject.cli.net.TransactionsCommand"/>
         </command>
         <command>
@@ -469,6 +462,13 @@
                 <ref component-id="deviceIdCompleter"/>
                 <ref component-id="portNumberCompleter"/>
                 <null/>
+            </completers>
+        </command>
+
+        <command>
+            <action class="org.onosproject.cli.net.PortQueryVlansCommand"/>
+            <completers>
+                <ref component-id="connectPointCompleter"/>
             </completers>
         </command>
 
@@ -641,6 +641,19 @@
             </completers>
         </command>
 
+        <!-- UI Layout commands -->
+        <command>
+            <action class="org.onosproject.cli.net.LayoutListCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.cli.net.LayoutAddCommand"/>
+        </command>
+        <!--TODO: add this + completers
+        <command>
+            <action class="org.onosproject.cli.net.LayoutRemoveCommand"/>
+        </command>
+        -->
+
         <!--virtual network commands -->
         <command>
             <action class="org.onosproject.cli.net.vnet.TenantListCommand"/>
@@ -686,6 +699,21 @@
         </command>
         <command>
             <action class="org.onosproject.cli.net.vnet.VirtualPortRemoveCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.cli.net.vnet.VirtualHostListCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.cli.net.vnet.VirtualHostCreateCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.cli.net.vnet.VirtualHostRemoveCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.cli.net.vnet.VirtualNetworkIntentCreateCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.cli.net.vnet.VirtualNetworkIntentRemoveCommand"/>
         </command>
     </command-bundle>
 

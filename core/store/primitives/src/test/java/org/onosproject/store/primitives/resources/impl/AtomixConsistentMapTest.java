@@ -18,7 +18,8 @@ package org.onosproject.store.primitives.resources.impl;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Sets;
 import io.atomix.resource.ResourceType;
-import org.junit.Ignore;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.onlab.util.Tools;
 import org.onosproject.store.primitives.MapUpdate;
@@ -49,9 +50,17 @@ import static org.junit.Assert.fail;
 /**
  * Unit tests for {@link AtomixConsistentMap}.
  */
-@Ignore
 public class AtomixConsistentMapTest extends AtomixTestBase {
 
+    @BeforeClass
+    public static void preTestSetup() throws Throwable {
+        createCopycatServers(3);
+    }
+
+    @AfterClass
+    public static void postTestCleanup() throws Exception {
+        clearTests();
+    }
     @Override
     protected ResourceType resourceType() {
         return new ResourceType(AtomixConsistentMap.class);
@@ -62,7 +71,7 @@ public class AtomixConsistentMapTest extends AtomixTestBase {
      */
     @Test
     public void testBasicMapOperations() throws Throwable {
-        basicMapOperationTests(3);
+        basicMapOperationTests();
     }
 
     /**
@@ -70,7 +79,7 @@ public class AtomixConsistentMapTest extends AtomixTestBase {
      */
     @Test
     public void testMapComputeOperations() throws Throwable {
-        mapComputeOperationTests(3);
+        mapComputeOperationTests();
     }
 
     /**
@@ -78,7 +87,7 @@ public class AtomixConsistentMapTest extends AtomixTestBase {
      */
     @Test
     public void testMapListeners() throws Throwable {
-        mapListenerTests(3);
+        mapListenerTests();
     }
 
     /**
@@ -86,7 +95,7 @@ public class AtomixConsistentMapTest extends AtomixTestBase {
      */
     @Test
     public void testTransactionCommit() throws Throwable {
-        transactionCommitTests(3);
+        transactionCommitTests();
     }
 
     /**
@@ -94,16 +103,15 @@ public class AtomixConsistentMapTest extends AtomixTestBase {
      */
     @Test
     public void testTransactionRollback() throws Throwable {
-        transactionRollbackTests(3);
+        transactionRollbackTests();
     }
 
-    protected void basicMapOperationTests(int clusterSize) throws Throwable {
-        createCopycatServers(clusterSize);
-
+    protected void basicMapOperationTests() throws Throwable {
         final byte[] rawFooValue = Tools.getBytesUtf8("Hello foo!");
         final byte[] rawBarValue = Tools.getBytesUtf8("Hello bar!");
 
-        AtomixConsistentMap map = createAtomixClient().getResource("test", AtomixConsistentMap.class).join();
+        AtomixConsistentMap map = createAtomixClient().getResource("testBasicMapOperationMap",
+                                                                   AtomixConsistentMap.class).join();
 
         map.isEmpty().thenAccept(result -> {
             assertTrue(result);
@@ -227,13 +235,13 @@ public class AtomixConsistentMapTest extends AtomixTestBase {
         }).join();
     }
 
-    public void mapComputeOperationTests(int clusterSize) throws Throwable {
-        createCopycatServers(clusterSize);
+    public void mapComputeOperationTests() throws Throwable {
         final byte[] value1 = Tools.getBytesUtf8("value1");
         final byte[] value2 = Tools.getBytesUtf8("value2");
         final byte[] value3 = Tools.getBytesUtf8("value3");
 
-        AtomixConsistentMap map = createAtomixClient().getResource("test", AtomixConsistentMap.class).join();
+        AtomixConsistentMap map = createAtomixClient().getResource("testMapComputeOperationsMap",
+                                                                   AtomixConsistentMap.class).join();
 
         map.computeIfAbsent("foo", k -> value1).thenAccept(result -> {
             assertTrue(Arrays.equals(Versioned.valueOrElse(result, null), value1));
@@ -265,13 +273,13 @@ public class AtomixConsistentMapTest extends AtomixTestBase {
     }
 
 
-    protected void mapListenerTests(int clusterSize) throws Throwable {
-        createCopycatServers(clusterSize);
+    protected void mapListenerTests() throws Throwable {
         final byte[] value1 = Tools.getBytesUtf8("value1");
         final byte[] value2 = Tools.getBytesUtf8("value2");
         final byte[] value3 = Tools.getBytesUtf8("value3");
 
-        AtomixConsistentMap map = createAtomixClient().getResource("test", AtomixConsistentMap.class).join();
+        AtomixConsistentMap map = createAtomixClient().getResource("testMapListenerMap",
+                                                                   AtomixConsistentMap.class).join();
         TestMapEventListener listener = new TestMapEventListener();
 
         // add listener; insert new value into map and verify an INSERT event is received.
@@ -325,12 +333,12 @@ public class AtomixConsistentMapTest extends AtomixTestBase {
         map.removeListener(listener).join();
     }
 
-    protected void transactionCommitTests(int clusterSize) throws Throwable {
-        createCopycatServers(clusterSize);
+    protected void transactionCommitTests() throws Throwable {
         final byte[] value1 = Tools.getBytesUtf8("value1");
         final byte[] value2 = Tools.getBytesUtf8("value2");
 
-        AtomixConsistentMap map = createAtomixClient().getResource("test", AtomixConsistentMap.class).join();
+        AtomixConsistentMap map = createAtomixClient().getResource("testCommitTestsMap",
+                                                                   AtomixConsistentMap.class).join();
         TestMapEventListener listener = new TestMapEventListener();
 
         map.addListener(listener).join();
@@ -420,12 +428,12 @@ public class AtomixConsistentMapTest extends AtomixTestBase {
 
     }
 
-    protected void transactionRollbackTests(int clusterSize) throws Throwable {
-        createCopycatServers(clusterSize);
+    protected void transactionRollbackTests() throws Throwable {
         final byte[] value1 = Tools.getBytesUtf8("value1");
         final byte[] value2 = Tools.getBytesUtf8("value2");
 
-        AtomixConsistentMap map = createAtomixClient().getResource("test", AtomixConsistentMap.class).join();
+        AtomixConsistentMap map = createAtomixClient().getResource("testTransactionRollbackTestsMap",
+                                                                   AtomixConsistentMap.class).join();
         TestMapEventListener listener = new TestMapEventListener();
 
         map.addListener(listener).join();
