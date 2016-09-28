@@ -41,18 +41,20 @@
     }
 
     angular.module('ovTopo2')
-    .factory('Topo2HostService',
-        ['Topo2Collection', 'Topo2Model',
+    .factory('Topo2HostService', [
+        'Topo2Collection', 'Topo2NodeModel', 'Topo2ViewService',
+        function (_Collection_, _NodeModel_, classnames, _t2vs_) {
 
-            function (_Collection_, _Model_) {
+            Collection = _Collection_;
 
-                Collection = _Collection_;
-                Model = _Model_.extend();
+            Model = _NodeModel_.extend({
+                nodeType: 'host'
+            });
 
-                return {
-                    createHostCollection: createHostCollection
-                };
-            }
-        ]);
+            return {
+                createHostCollection: createHostCollection
+            };
+        }
+    ]);
 
 })();

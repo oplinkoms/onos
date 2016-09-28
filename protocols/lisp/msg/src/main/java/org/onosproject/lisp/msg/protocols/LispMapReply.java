@@ -15,22 +15,24 @@
  */
 package org.onosproject.lisp.msg.protocols;
 
+import java.util.List;
+
 /**
  * LISP map reply message interface.
- *
+ * <p>
  * LISP map reply message format is defined in RFC6830.
  * https://tools.ietf.org/html/rfc6830#page-31
  *
  * <pre>
  * {@literal
- * 0                   1                   2                   3
- * 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |Type=2 |P|E|S|          Reserved               | Record Count  |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                         Nonce . . .                           |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                         . . . Nonce                           |
+ *      0                   1                   2                   3
+ *      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |Type=2 |P|E|S|          Reserved               | Record Count  |
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |                         Nonce . . .                           |
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |                         . . . Nonce                           |
  * +-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  * |   |                          Record TTL                           |
  * |   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -76,7 +78,7 @@ public interface LispMapReply extends LispMessage {
      *
      * @return record count value
      */
-    byte getRecordCount();
+    int getRecordCount();
 
     /**
      * Obtains nonce value.
@@ -86,41 +88,40 @@ public interface LispMapReply extends LispMessage {
     long getNonce();
 
     /**
+     * Obtains map records.
+     *
+     * @return map records
+     */
+    List<LispMapRecord> getMapRecords();
+
+    /**
      * A builder of LISP map reply message.
      */
     interface ReplyBuilder extends Builder {
 
         /**
-         * Sets isProbe flag.
+         * Sets probe flag.
          *
-         * @param isProbe isProbe flag
+         * @param probe probe flag
          * @return ReplyBuilder object
          */
-        ReplyBuilder withIsProbe(boolean isProbe);
+        ReplyBuilder withIsProbe(boolean probe);
 
         /**
-         * Sets isEtr flag.
+         * Sets etr flag.
          *
-         * @param isEtr isEtr flag
+         * @param etr etr flag
          * @return ReplyBuilder object
          */
-        ReplyBuilder withIsEtr(boolean isEtr);
+        ReplyBuilder withIsEtr(boolean etr);
 
         /**
-         * Sets isSecurity flag.
+         * Sets security flag.
          *
-         * @param isSecurity isSecurity flag
+         * @param security security flag
          * @return ReplyBuilder object
          */
-        ReplyBuilder withIsSecurity(boolean isSecurity);
-
-        /**
-         * Sets record count.
-         *
-         * @param recordCount record count
-         * @return ReplyBuilder object
-         */
-        ReplyBuilder withRecordCount(byte recordCount);
+        ReplyBuilder withIsSecurity(boolean security);
 
         /**
          * Sets nonce value.
@@ -129,5 +130,20 @@ public interface LispMapReply extends LispMessage {
          * @return ReplyBuilder object
          */
         ReplyBuilder withNonce(long nonce);
+
+        /**
+         * Sets a collection of map records.
+         *
+         * @param mapRecords a collection of map records
+         * @return ReplyBuilder object
+         */
+        ReplyBuilder withMapRecords(List<LispMapRecord> mapRecords);
+
+        /**
+         * Builds LISP map reply message.
+         *
+         * @return LISP map reply message
+         */
+        LispMapReply build();
     }
 }

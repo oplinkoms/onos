@@ -35,11 +35,13 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
+import com.google.common.collect.ImmutableList;
 import org.onosproject.incubator.net.tunnel.Tunnel;
 import org.onosproject.incubator.net.tunnel.TunnelId;
 import org.onosproject.incubator.net.tunnel.TunnelService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.intent.Constraint;
+import org.onosproject.pce.pceservice.ExplicitPathInfo;
 import org.onosproject.pce.pceservice.api.PceService;
 import org.onosproject.pce.pceservice.PcePath;
 import org.onosproject.pce.pceservice.DefaultPcePath;
@@ -101,6 +103,9 @@ public class PcePathWebResource extends AbstractWebResource {
         Tunnel tunnel = nullIsNotFound(get(PceService.class).queryPath(TunnelId.valueOf(id)),
                                        PCE_PATH_NOT_FOUND);
         PcePath path = DefaultPcePath.builder().of(tunnel).build();
+        if (path == null) {
+            return Response.status(OK).entity(PCE_SETUP_PATH_FAILED).build();
+        }
         ObjectNode result = mapper().createObjectNode();
         result.set("path", codec(PcePath.class).encode(path, this));
         return ok(result.toString()).build();
@@ -122,6 +127,10 @@ public class PcePathWebResource extends AbstractWebResource {
             JsonNode port = jsonTree.get("path");
             TunnelService tunnelService = get(TunnelService.class);
             PcePath path = codec(PcePath.class).decode((ObjectNode) port, this);
+            if (path == null) {
+                return Response.status(OK).entity(PCE_SETUP_PATH_FAILED).build();
+            }
+
             //Validating tunnel name, duplicated tunnel names not allowed
             Collection<Tunnel> existingTunnels = tunnelService.queryTunnel(Tunnel.Type.MPLS);
             if (existingTunnels != null) {
@@ -143,8 +152,14 @@ public class PcePathWebResource extends AbstractWebResource {
             // Add cost
             listConstrnt.add(path.costConstraint());
 
+            List<ExplicitPathInfo> explicitPathInfoList = null;
+            if (explicitPathInfoList != null) {
+                explicitPathInfoList = ImmutableList.copyOf(path.explicitPathInfo());
+            }
+
             Boolean issuccess = nullIsNotFound(get(PceService.class)
-                                               .setupPath(srcDevice, dstDevice, path.name(), listConstrnt, lspType),
+                                               .setupPath(srcDevice, dstDevice, path.name(), listConstrnt,
+                                                       lspType, explicitPathInfoList),
                                                PCE_SETUP_PATH_FAILED);
             return Response.status(OK).entity(issuccess.toString()).build();
         } catch (IOException e) {
@@ -171,6 +186,9 @@ public class PcePathWebResource extends AbstractWebResource {
             ObjectNode jsonTree = (ObjectNode) mapper().readTree(stream);
             JsonNode pathNode = jsonTree.get("path");
             PcePath path = codec(PcePath.class).decode((ObjectNode) pathNode, this);
+            if (path == null) {
+                return Response.status(OK).entity(PCE_SETUP_PATH_FAILED).build();
+            }
             List<Constraint> constrntList = new LinkedList<Constraint>();
             // Assign bandwidth
             if (path.bandwidthConstraint() != null) {

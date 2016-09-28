@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Laboratory
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -808,7 +808,7 @@ public class OpticalPathProvisionerTest {
     private static class TestResourceService implements ResourceService {
 
         @Override
-        public List<ResourceAllocation> allocate(ResourceConsumer consumer, List<Resource> resources) {
+        public List<ResourceAllocation> allocate(ResourceConsumer consumer, List<? extends Resource> resources) {
             List<ResourceAllocation> allocations = new ArrayList<>();
 
             resources.forEach(r -> allocations.add(new ResourceAllocation(r, consumer.consumerId())));

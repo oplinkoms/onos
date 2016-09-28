@@ -22,7 +22,12 @@
 (function () {
     'use strict';
 
+    var wss;
     var Collection, Model;
+
+    var remappedDeviceTypes = {
+        virtual: 'cord'
+    };
 
     function createSubRegionCollection(data, region) {
 
@@ -35,12 +40,37 @@
 
     angular.module('ovTopo2')
     .factory('Topo2SubRegionService',
-        ['Topo2Collection', 'Topo2Model',
+        ['WebSocketService', 'Topo2Collection', 'Topo2NodeModel',
+        'ThemeService', 'Topo2ViewService',
 
-            function (_Collection_, _Model_) {
+            function (_wss_, _c_, _NodeModel_, _ts_, _t2vs_) {
 
-                Collection = _Collection_;
-                Model = _Model_.extend({});
+                wss = _wss_;
+                Collection = _c_;
+
+                Model = _NodeModel_.extend({
+                    initialize: function () {
+                        this.super = this.constructor.__super__;
+                        this.super.initialize.apply(this, arguments);
+                    },
+                    events: {
+                        'dblclick': 'navigateToRegion'
+                    },
+                    nodeType: 'sub-region',
+                    icon: function () {
+                        var type = this.get('type');
+                        return remappedDeviceTypes[type] || type || 'm_cloud';
+                    },
+                    navigateToRegion: function () {
+
+                        if (d3.event.defaultPrevented) return;
+
+                        wss.sendEvent('topo2navRegion', {
+                            dir: 'down',
+                            rid: this.get('id')
+                        });
+                    }
+                });
 
                 return {
                     createSubRegionCollection: createSubRegionCollection

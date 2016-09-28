@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Laboratory
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ public class MockResourceService implements ResourceService {
     private final Map<Resource, ResourceConsumer> assignment = new HashMap<>();
 
     @Override
-    public List<ResourceAllocation> allocate(ResourceConsumer consumer, List<Resource> resources) {
+    public List<ResourceAllocation> allocate(ResourceConsumer consumer, List<? extends Resource> resources) {
         assignment.putAll(
                 resources.stream().collect(Collectors.toMap(Function.identity(), x -> consumer))
         );

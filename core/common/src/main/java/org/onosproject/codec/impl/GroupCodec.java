@@ -82,7 +82,7 @@ public final class GroupCodec extends JsonCodec<Group> {
                 .put(DEVICE_ID, group.deviceId().toString());
 
         if (group.appId() != null) {
-            result.put(APP_ID, group.appId().toString());
+            result.put(APP_ID, group.appId().name());
         }
 
         if (group.appCookie() != null) {
@@ -151,8 +151,7 @@ public final class GroupCodec extends JsonCodec<Group> {
                 groupType = Group.Type.FAILOVER;
                 break;
             default:
-                log.warn("The requested type {} is not defined for group.", type);
-                return null;
+                nullIsIllegal(groupType, "The requested group type " + type + " is not valid");
         }
 
         // parse group buckets

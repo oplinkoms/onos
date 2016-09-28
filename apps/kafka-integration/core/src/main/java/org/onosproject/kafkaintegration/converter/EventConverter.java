@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Laboratory
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -16,7 +16,7 @@ package org.onosproject.kafkaintegration.converter;
 
 import org.onosproject.event.Event;
 
-import com.google.protobuf.GeneratedMessage;
+import com.google.protobuf.GeneratedMessageV3;
 
 /**
  *
@@ -32,5 +32,6 @@ public interface EventConverter {
      * @param event ONOS Event object
      * @return converted data in protobuf format.
      */
-    GeneratedMessage convertToProtoMessage(Event<?, ?> event);
+    // FIXME reconsider return type, something similar to "OnosEvent"?
+    GeneratedMessageV3 convertToProtoMessage(Event<?, ?> event);
 }

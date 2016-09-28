@@ -121,7 +121,7 @@ public class OpenstackSecurityGroupManager extends AbstractVmHandler
                 .filter(entry -> getTenantId(entry.getKey()).equals(tenantId))
                 .forEach(entry -> {
                     Host local = entry.getKey();
-                    entry.getValue().stream().forEach(sgRule -> {
+                    entry.getValue().forEach(sgRule -> {
                         setSecurityGroupRule(local.location().deviceId(),
                                 sgRule.rule(),
                                 getIp(local),
@@ -228,15 +228,15 @@ public class OpenstackSecurityGroupManager extends AbstractVmHandler
         if (portMin > 0 && portMax > 0 && portMin == portMax) {
             if (protocol.toUpperCase().equals(PROTO_TCP)) {
                 if (direction.equals(OpenstackSecurityGroupRule.Direction.EGRESS)) {
-                    sBuilder.matchTcpDst(TpPort.tpPort(portMax));
-                } else {
                     sBuilder.matchTcpSrc(TpPort.tpPort(portMax));
+                } else {
+                    sBuilder.matchTcpDst(TpPort.tpPort(portMax));
                 }
             } else if (protocol.toUpperCase().equals(PROTO_UDP)) {
                 if (direction.equals(OpenstackSecurityGroupRule.Direction.EGRESS)) {
-                    sBuilder.matchUdpDst(TpPort.tpPort(portMax));
-                } else {
                     sBuilder.matchUdpSrc(TpPort.tpPort(portMax));
+                } else {
+                    sBuilder.matchUdpDst(TpPort.tpPort(portMax));
                 }
             }
         }
@@ -250,10 +250,10 @@ public class OpenstackSecurityGroupManager extends AbstractVmHandler
         }
 
         Set<SecurityGroupRule> rules = Sets.newHashSet();
-        osPort.securityGroups().stream().forEach(sgId -> {
+        osPort.securityGroups().forEach(sgId -> {
             OpenstackSecurityGroup osSecGroup = openstackService.securityGroup(sgId);
             if (osSecGroup != null) {
-                osSecGroup.rules().stream().forEach(rule -> rules.addAll(getSgRules(rule)));
+                osSecGroup.rules().forEach(rule -> rules.addAll(getSgRules(rule)));
             } else {
                 // TODO handle the case that the security group removed
                 log.warn("Failed to get security group {}", sgId);

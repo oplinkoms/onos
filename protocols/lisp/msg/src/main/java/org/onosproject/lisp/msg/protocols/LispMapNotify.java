@@ -19,24 +19,24 @@ import java.util.List;
 
 /**
  * LISP map notify message interface.
- *
+ * <p>
  * LISP map notify message format is defined in RFC6830.
  * https://tools.ietf.org/html/rfc6830#page-39
  *
  * <pre>
  * {@literal
- * 0                   1                   2                   3
- * 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |Type=4 |              Reserved                 | Record Count  |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                         Nonce . . .                           |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                         . . . Nonce                           |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |            Key ID             |  Authentication Data Length   |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * ~                     Authentication Data                       ~
+ *      0                   1                   2                   3
+ *      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |Type=4 |              Reserved                 | Record Count  |
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |                         Nonce . . .                           |
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |                         . . . Nonce                           |
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |            Key ID             |  Authentication Data Length   |
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     ~                     Authentication Data                       ~
  * +-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  * |   |                          Record TTL                           |
  * |   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -68,7 +68,7 @@ public interface LispMapNotify extends LispMessage {
      *
      * @return record count value
      */
-    byte getRecordCount();
+    int getRecordCount();
 
     /**
      * Obtains key identifier.
@@ -76,6 +76,13 @@ public interface LispMapNotify extends LispMessage {
      * @return key identifier
      */
     short getKeyId();
+
+    /**
+     * Obtains authentication data length.
+     *
+     * @return authentication data length
+     */
+    short getAuthDataLength();
 
     /**
      * Obtains authentication data.
@@ -89,7 +96,7 @@ public interface LispMapNotify extends LispMessage {
      *
      * @return a collection of records
      */
-    List<LispRecord> getLispRecords();
+    List<LispMapRecord> getMapRecords();
 
     /**
      * A builder of LISP map notify message.
@@ -105,20 +112,20 @@ public interface LispMapNotify extends LispMessage {
         NotifyBuilder withNonce(long nonce);
 
         /**
-         * Sets record count.
-         *
-         * @param recordCount record count
-         * @return NotifyBuilder object
-         */
-        NotifyBuilder withRecordCount(byte recordCount);
-
-        /**
          * Sets key identitifer.
          *
          * @param keyId key identifier
          * @return NotifyBuilder object
          */
         NotifyBuilder withKeyId(short keyId);
+
+        /**
+         * Sets authentication data length.
+         *
+         * @param authDataLength authentication data length
+         * @return NotifyBuilder object
+         */
+        NotifyBuilder withAuthDataLength(short authDataLength);
 
         /**
          * Sets authentication data.
@@ -129,11 +136,18 @@ public interface LispMapNotify extends LispMessage {
         NotifyBuilder withAuthenticationData(byte[] authenticationData);
 
         /**
-         * Adds a new record to record list.
+         * Sets a collection of map records.
          *
-         * @param record record
-         * @return NotifyBuilder object
+         * @param mapRecords a collection of map records
+         * @return RegisterBuilder object
          */
-        NotifyBuilder addRecord(LispRecord record);
+        NotifyBuilder withMapRecords(List<LispMapRecord> mapRecords);
+
+        /**
+         * Builds LISP map notify message.
+         *
+         * @return LISP map notify message
+         */
+        LispMapNotify build();
     }
 }

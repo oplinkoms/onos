@@ -25,10 +25,12 @@ import org.onosproject.ui.impl.topo.model.UiSharedTopologyModel;
 import org.onosproject.ui.model.topo.UiClusterMember;
 import org.onosproject.ui.model.topo.UiNode;
 import org.onosproject.ui.model.topo.UiRegion;
+import org.onosproject.ui.model.topo.UiSynthLink;
 import org.onosproject.ui.model.topo.UiTopoLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -133,6 +135,25 @@ public class UiTopoSession implements UiModelListener {
     }
 
     /**
+     * Returns the breadcrumb trail from current layout to root. That is,
+     * element 0 of the list will be the current layout; the last element
+     * of the list will be the root layout. This list is guaranteed to have
+     * size of at least 1.
+     *
+     * @return breadcrumb trail
+     */
+    public List<UiTopoLayout> breadCrumbs() {
+        UiTopoLayout current = currentLayout;
+        List<UiTopoLayout> crumbs = new ArrayList<>();
+        crumbs.add(current);
+        while (!current.isRoot()) {
+            current = layoutService.getLayout(current.parent());
+            crumbs.add(current);
+        }
+        return crumbs;
+    }
+
+    /**
      * Changes the current layout context to the specified layout.
      *
      * @param topoLayout new topology layout context
@@ -214,9 +235,33 @@ public class UiTopoSession implements UiModelListener {
     }
 
     /**
+     * Returns the (synthetic) links of the region in the specified layout.
+     *
+     * @param layout the layout being viewed
+     * @return all links that are contained by this layout's region
+     */
+    public List<UiSynthLink> getLinks(UiTopoLayout layout) {
+        return sharedModel.getSynthLinks(layout.regionId());
+    }
+
+    /**
      * Refreshes the model's internal state.
      */
     public void refreshModel() {
         sharedModel.refresh();
+    }
+
+    /**
+     * Navigates to the specified region by setting the associated layout as
+     * current.
+     *
+     * @param regionId region identifier
+     */
+    public void navToRegion(String regionId) {
+        // 1. find the layout corresponding to the region ID
+        // 2. set this layout to be "current"
+        RegionId r = RegionId.regionId(regionId);
+        UiTopoLayout layout = layoutService.getLayout(r);
+        setCurrentLayout(layout);
     }
 }

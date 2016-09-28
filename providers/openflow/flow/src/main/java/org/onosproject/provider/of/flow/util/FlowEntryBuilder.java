@@ -182,7 +182,9 @@ public class FlowEntryBuilder {
                             .withSelector(buildSelector())
                             .withPriority(removed.getPriority())
                             .makeTemporary(removed.getIdleTimeout())
-                            .withCookie(removed.getCookie().getValue());
+                            .withCookie(removed.getCookie().getValue())
+                            .withReason(FlowRule.FlowRemoveReason.parseShort(removed.getReason()));
+
                     if (removed.getVersion() != OFVersion.OF_10) {
                         builder.forTable(removed.getTableId().getValue());
                     }
@@ -487,7 +489,7 @@ public class FlowEntryBuilder {
         case MPLS_BOS:
             @SuppressWarnings("unchecked")
             OFOxm<U8> mplsBos = (OFOxm<U8>) oxm;
-            builder.setMplsBos(mplsBos.getValue() == U8.ZERO ? false : true);
+            builder.setMplsBos(mplsBos.getValue() != U8.ZERO);
             break;
         case TUNNEL_ID:
             @SuppressWarnings("unchecked")

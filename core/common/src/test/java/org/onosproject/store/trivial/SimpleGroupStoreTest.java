@@ -130,6 +130,18 @@ public class SimpleGroupStoreTest {
             } else if (expectedEvent == GroupEvent.Type.GROUP_UPDATE_REQUESTED) {
                 assertEquals(Group.GroupState.PENDING_UPDATE,
                              event.subject().state());
+                for (GroupBucket bucket:event.subject().buckets().buckets()) {
+                    Optional<GroupBucket> matched = createdBuckets.buckets()
+                            .stream()
+                            .filter((expected) -> expected.equals(bucket))
+                            .findFirst();
+                    assertEquals(matched.get().weight(),
+                            bucket.weight());
+                    assertEquals(matched.get().watchGroup(),
+                            bucket.watchGroup());
+                    assertEquals(matched.get().watchPort(),
+                            bucket.watchPort());
+                }
             } else if (expectedEvent == GroupEvent.Type.GROUP_REMOVE_REQUESTED) {
                 assertEquals(Group.GroupState.PENDING_DELETE,
                              event.subject().state());
@@ -202,10 +214,15 @@ public class SimpleGroupStoreTest {
         // Testing removeGroupEntry operation from southbound
         testRemoveGroupFromSB(currKey);
 
-        // Testing removing all groups on the given device
+        // Testing removing all groups on the given device by deviceid
         newKey = new DefaultGroupKey("group1".getBytes());
         testStoreAndGetGroup(newKey);
         testDeleteGroupOnDevice(newKey);
+
+        // Testing removing all groups on the given device
+        newKey = new DefaultGroupKey("group1".getBytes());
+        testStoreAndGetGroup(newKey);
+        testPurgeGroupEntries();
     }
 
     // Testing storeGroup operation
@@ -342,6 +359,36 @@ public class SimpleGroupStoreTest {
                                                 toAddGroupBuckets,
                                                 addKey);
         simpleGroupStore.unsetDelegate(updateGroupDescDelegate);
+
+        short weight = 5;
+        toAddBuckets = new ArrayList<>();
+        for (PortNumber portNumber: newOutPorts) {
+            TrafficTreatment.Builder tBuilder = DefaultTrafficTreatment.builder();
+            tBuilder.setOutput(portNumber)
+                    .setEthDst(MacAddress.valueOf("00:00:00:00:00:03"))
+                    .setEthSrc(MacAddress.valueOf("00:00:00:00:00:01"))
+                    .pushMpls()
+                    .setMpls(MplsLabel.mplsLabel(106));
+            toAddBuckets.add(DefaultGroupBucket.createSelectGroupBucket(
+                    tBuilder.build(), weight));
+        }
+
+        toAddGroupBuckets = new GroupBuckets(toAddBuckets);
+        buckets = new ArrayList<>();
+        buckets.addAll(existingGroup.buckets().buckets());
+        buckets.addAll(toAddBuckets);
+        updatedGroupBuckets = new GroupBuckets(buckets);
+        updateGroupDescDelegate =
+                new InternalGroupStoreDelegate(addKey,
+                                               updatedGroupBuckets,
+                                               GroupEvent.Type.GROUP_UPDATE_REQUESTED);
+        simpleGroupStore.setDelegate(updateGroupDescDelegate);
+        simpleGroupStore.updateGroupDescription(D1,
+                                                addKey,
+                                                UpdateType.ADD,
+                                                toAddGroupBuckets,
+                                                addKey);
+        simpleGroupStore.unsetDelegate(updateGroupDescDelegate);
     }
 
     // Testing updateGroupDescription for REMOVE operation from northbound
@@ -387,6 +434,13 @@ public class SimpleGroupStoreTest {
     private void testDeleteGroupOnDevice(GroupKey currKey) {
         assertThat(simpleGroupStore.getGroupCount(D1), is(1));
         simpleGroupStore.purgeGroupEntry(D1);
+        assertThat(simpleGroupStore.getGroupCount(D1), is(0));
+    }
+
+    // Testing purgeGroupEntries
+    private void testPurgeGroupEntries() {
+        assertThat(simpleGroupStore.getGroupCount(D1), is(1));
+        simpleGroupStore.purgeGroupEntries();
         assertThat(simpleGroupStore.getGroupCount(D1), is(0));
     }
 

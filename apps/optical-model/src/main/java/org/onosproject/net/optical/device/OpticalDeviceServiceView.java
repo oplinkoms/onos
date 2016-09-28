@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Laboratory
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import java.util.Optional;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.device.PortStatistics;
 import org.onosproject.net.optical.OpticalDevice;
 import org.onosproject.net.utils.ForwardingDeviceService;
 import org.slf4j.Logger;
@@ -145,6 +146,16 @@ public class OpticalDeviceServiceView
     public List<Port> getPorts(DeviceId deviceId) {
         return Lists.transform(super.getPorts(deviceId),
                                this::augment);
+    }
+
+    @Override
+    public PortStatistics getStatisticsForPort(DeviceId deviceId, PortNumber portNumber) {
+        return null;
+    }
+
+    @Override
+    public PortStatistics getDeltaStatisticsForPort(DeviceId deviceId, PortNumber portNumber) {
+        return null;
     }
 
     @Override

@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Laboratory
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -31,7 +31,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-@Component(immediate = true)
+@Component(immediate = false)
 public class KafkaStorageManager implements KafkaEventStorageService {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)

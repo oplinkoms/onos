@@ -58,4 +58,19 @@ public class StorageServiceAdapter implements StorageService {
     public <E> WorkQueue<E> getWorkQueue(String name, Serializer serializer) {
         return null;
     }
+
+    @Override
+    public <T> Topic<T> getTopic(String name, Serializer serializer) {
+        return null;
+    }
+
+    @Override
+    public <V> ConsistentTreeMapBuilder<V> consistentTreeMapBuilder() {
+        return null;
+    }
+
+    @Override
+    public <V> AsyncDocumentTree<V> getDocumentTree(String name, Serializer serializer) {
+        return null;
+    }
 }

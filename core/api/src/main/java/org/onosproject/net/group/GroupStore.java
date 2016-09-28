@@ -125,6 +125,11 @@ public interface GroupStore extends Store<GroupEvent, GroupStoreDelegate> {
     void purgeGroupEntry(DeviceId deviceId);
 
     /**
+     * Removes all group entries from store.
+     */
+    default void purgeGroupEntries() {};
+
+    /**
      * A group entry that is present in switch but not in the store.
      *
      * @param group group entry
@@ -179,4 +184,9 @@ public interface GroupStore extends Store<GroupEvent, GroupStoreDelegate> {
      * @param groupEntries the group entries as received from southbound
      */
     void pushGroupMetrics(DeviceId deviceId, Collection<Group> groupEntries);
+
+    /**
+     * Indicates failover within a failover group.
+     */
+    void notifyOfFailovers(Collection<Group> failoverGroups);
 }

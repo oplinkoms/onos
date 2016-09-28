@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Laboratory
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,15 +19,15 @@ package org.onosproject.ui;
 import java.util.List;
 
 /**
- * Abstraction of an entity capable of producing one or more topology
- * map topologies.
+ * Abstraction of an entity capable of producing one or more geographic-based
+ * maps for the topology view.
  */
 public interface UiTopoMapFactory {
 
     /**
-     * Produces a list of new maps.
+     * Produces a list of maps to be added to the topology view.
      *
-     * @return list of new maps
+     * @return list of maps
      */
-    List<UiTopoMap> newMaps();
+    List<UiTopoMap> geoMaps();
 }

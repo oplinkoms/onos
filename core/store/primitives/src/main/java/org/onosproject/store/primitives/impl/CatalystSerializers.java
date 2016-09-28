@@ -15,12 +15,13 @@
  */
 package org.onosproject.store.primitives.impl;
 
-import java.util.Arrays;
-
 import io.atomix.catalyst.serializer.Serializer;
 import io.atomix.catalyst.serializer.TypeSerializerFactory;
 import io.atomix.manager.util.ResourceManagerTypeResolver;
 import io.atomix.variables.internal.LongCommands;
+
+import java.util.Arrays;
+import java.util.Optional;
 
 import org.onlab.util.Match;
 import org.onosproject.cluster.Leader;
@@ -31,15 +32,24 @@ import org.onosproject.store.primitives.MapUpdate;
 import org.onosproject.store.primitives.TransactionId;
 import org.onosproject.store.primitives.resources.impl.AtomixConsistentMapCommands;
 import org.onosproject.store.primitives.resources.impl.AtomixConsistentMapFactory;
+import org.onosproject.store.primitives.resources.impl.AtomixConsistentMultimapCommands;
+import org.onosproject.store.primitives.resources.impl.AtomixConsistentSetMultimapFactory;
+import org.onosproject.store.primitives.resources.impl.AtomixConsistentTreeMapCommands;
+import org.onosproject.store.primitives.resources.impl.AtomixConsistentTreeMapFactory;
+import org.onosproject.store.primitives.resources.impl.AtomixDocumentTreeCommands;
+import org.onosproject.store.primitives.resources.impl.AtomixDocumentTreeFactory;
 import org.onosproject.store.primitives.resources.impl.AtomixLeaderElectorCommands;
 import org.onosproject.store.primitives.resources.impl.AtomixLeaderElectorFactory;
 import org.onosproject.store.primitives.resources.impl.AtomixWorkQueueCommands;
 import org.onosproject.store.primitives.resources.impl.AtomixWorkQueueFactory;
 import org.onosproject.store.primitives.resources.impl.CommitResult;
+import org.onosproject.store.primitives.resources.impl.DocumentTreeUpdateResult;
 import org.onosproject.store.primitives.resources.impl.MapEntryUpdateResult;
 import org.onosproject.store.primitives.resources.impl.PrepareResult;
 import org.onosproject.store.primitives.resources.impl.RollbackResult;
 import org.onosproject.store.serializers.KryoNamespaces;
+import org.onosproject.store.service.DocumentPath;
+import org.onosproject.store.service.DocumentTreeEvent;
 import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.MapTransaction;
 import org.onosproject.store.service.Task;
@@ -62,12 +72,17 @@ public final class CatalystSerializers {
         TypeSerializerFactory factory =
                 new DefaultCatalystTypeSerializerFactory(
                         org.onosproject.store.service.Serializer.using(Arrays.asList((KryoNamespaces.API)),
-                                MapEntryUpdateResult.class,
-                                MapEntryUpdateResult.Status.class,
-                                Transaction.State.class,
-                                PrepareResult.class,
-                                CommitResult.class,
-                                RollbackResult.class));
+                                                                       MapEntryUpdateResult.class,
+                                                                       MapEntryUpdateResult.Status.class,
+                                                                       Transaction.State.class,
+                                                                       PrepareResult.class,
+                                                                       CommitResult.class,
+                                                                       DocumentPath.class,
+                                                                       DocumentTreeUpdateResult.class,
+                                                                       DocumentTreeUpdateResult.Status.class,
+                                                                       DocumentTreeEvent.class,
+                                                                       DocumentTreeEvent.Type.class,
+                                                                       RollbackResult.class));
         // ONOS classes
         serializer.register(Change.class, factory);
         serializer.register(Leader.class, factory);
@@ -88,18 +103,31 @@ public final class CatalystSerializers {
         serializer.register(MapEvent.class, factory);
         serializer.register(Task.class, factory);
         serializer.register(WorkQueueStats.class, factory);
+        serializer.register(DocumentPath.class, factory);
+        serializer.register(DocumentTreeUpdateResult.class, factory);
+        serializer.register(DocumentTreeUpdateResult.Status.class, factory);
+        serializer.register(DocumentTreeEvent.class, factory);
         serializer.register(Maps.immutableEntry("a", "b").getClass(), factory);
         serializer.register(ImmutableList.of().getClass(), factory);
+        serializer.register(ImmutableList.of("a").getClass(), factory);
+        serializer.register(Arrays.asList().getClass(), factory);
+        serializer.register(Optional.class, factory);
 
         serializer.resolve(new LongCommands.TypeResolver());
         serializer.resolve(new AtomixConsistentMapCommands.TypeResolver());
         serializer.resolve(new AtomixLeaderElectorCommands.TypeResolver());
         serializer.resolve(new AtomixWorkQueueCommands.TypeResolver());
+        serializer.resolve(new AtomixDocumentTreeCommands.TypeResolver());
         serializer.resolve(new ResourceManagerTypeResolver());
+        serializer.resolve(new AtomixConsistentTreeMapCommands.TypeResolver());
+        serializer.resolve(new AtomixConsistentMultimapCommands.TypeResolver());
 
         serializer.registerClassLoader(AtomixConsistentMapFactory.class)
-                  .registerClassLoader(AtomixLeaderElectorFactory.class)
-                  .registerClassLoader(AtomixWorkQueueFactory.class);
+                .registerClassLoader(AtomixLeaderElectorFactory.class)
+                .registerClassLoader(AtomixWorkQueueFactory.class)
+                .registerClassLoader(AtomixDocumentTreeFactory.class)
+                .registerClassLoader(AtomixConsistentTreeMapFactory.class)
+                .registerClassLoader(AtomixConsistentSetMultimapFactory.class);
 
         return serializer;
     }

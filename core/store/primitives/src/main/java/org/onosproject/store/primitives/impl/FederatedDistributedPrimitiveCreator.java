@@ -27,7 +27,9 @@ import org.onosproject.store.primitives.DistributedPrimitiveCreator;
 import org.onosproject.store.service.AsyncAtomicCounter;
 import org.onosproject.store.service.AsyncAtomicValue;
 import org.onosproject.store.service.AsyncConsistentMap;
+import org.onosproject.store.service.AsyncConsistentTreeMap;
 import org.onosproject.store.service.AsyncDistributedSet;
+import org.onosproject.store.service.AsyncDocumentTree;
 import org.onosproject.store.service.AsyncLeaderElector;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.WorkQueue;
@@ -68,6 +70,12 @@ public class FederatedDistributedPrimitiveCreator implements DistributedPrimitiv
     }
 
     @Override
+    public <V> AsyncConsistentTreeMap<V> newAsyncConsistentTreeMap(String name,
+                                                                   Serializer serializer) {
+        return getCreator(name).newAsyncConsistentTreeMap(name, serializer);
+    }
+
+    @Override
     public <E> AsyncDistributedSet<E> newAsyncDistributedSet(String name, Serializer serializer) {
         return DistributedPrimitives.newSetFromMap(newAsyncConsistentMap(name, serializer));
     }
@@ -98,6 +106,11 @@ public class FederatedDistributedPrimitiveCreator implements DistributedPrimitiv
     @Override
     public <E> WorkQueue<E> newWorkQueue(String name, Serializer serializer) {
         return getCreator(name).newWorkQueue(name, serializer);
+    }
+
+    @Override
+    public <V> AsyncDocumentTree<V> newAsyncDocumentTree(String name, Serializer serializer) {
+        return getCreator(name).newAsyncDocumentTree(name, serializer);
     }
 
     @Override

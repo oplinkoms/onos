@@ -13,13 +13,15 @@
   ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
-  --><project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>org.onosproject</groupId>
         <artifactId>onos</artifactId>
-        <version>1.7.0-SNAPSHOT</version>
+        <version>1.8.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>onos-apps</artifactId>
@@ -58,6 +60,7 @@
         <module>pim</module>
         <module>mlb</module>
         <module>pathpainter</module>
+        <module>patchpanel</module>
         <module>drivermatrix</module>
         <module>cpman</module>
         <module>events</module>
@@ -72,6 +75,9 @@
         <module>xosclient</module>
         <module>scalablegateway</module>
         <module>bmv2-demo</module>
+        <module>yms</module>
+        <module>rabbitmq</module>
+        <module>learning-switch</module>
     </modules>
 
 
@@ -88,7 +94,6 @@
         <dependency>
             <groupId>org.onosproject</groupId>
             <artifactId>onlab-osgi</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <dependency>

@@ -24,15 +24,20 @@
 
     var Collection, Model;
 
+    var remappedDeviceTypes = {
+        switch: 'm_switch',
+        virtual: 'cord'
+    };
+
     function createDeviceCollection(data, region) {
 
         var DeviceCollection = Collection.extend({
             model: Model,
-            get: function () {},
-            comparator: function(a, b) {
-
-                var order = region.layerOrder;
-                return order.indexOf(a.get('layer')) - order.indexOf(b.get('layer'));
+            comparator: function (a, b) {
+                var order = region.get('layerOrder'),
+                    aLayer = a.get('layer'),
+                    bLayer = b.get('layer');
+                return order.indexOf(aLayer - order.indexOf(bLayer));
             }
         });
 
@@ -49,14 +54,38 @@
         return deviceCollection;
     }
 
+
     angular.module('ovTopo2')
     .factory('Topo2DeviceService',
-        ['Topo2Collection', 'Topo2Model',
+        ['Topo2Collection', 'Topo2NodeModel',
+            function (_c_, _nm_) {
 
-            function (_Collection_, _Model_) {
+                Collection = _c_;
 
-                Collection = _Collection_;
-                Model = _Model_.extend({});
+                Model = _nm_.extend({
+                    initialize: function () {
+                        this.super = this.constructor.__super__;
+                        this.super.initialize.apply(this, arguments);
+                    },
+                    nodeType: 'device',
+                    icon: function () {
+                        var type = this.get('type');
+                        return remappedDeviceTypes[type] || type || 'unknown';
+                    },
+                    onExit: function () {
+                        var node = this.el;
+                        node.select('use')
+                            .style('opacity', 0.5)
+                            .transition()
+                            .duration(800)
+                            .style('opacity', 0);
+
+                        node.selectAll('rect')
+                            .style('stroke-fill', '#555')
+                            .style('fill', '#888')
+                            .style('opacity', 0.5);
+                    }
+                });
 
                 return {
                     createDeviceCollection: createDeviceCollection

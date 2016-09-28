@@ -30,6 +30,7 @@ import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Host;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
@@ -40,6 +41,8 @@ import org.onosproject.net.flowobjective.FlowObjectiveService;
 import org.onosproject.net.flowobjective.ForwardingObjective;
 import org.onosproject.net.host.HostService;
 import org.onosproject.openstackinterface.OpenstackFloatingIP;
+import org.onosproject.openstackinterface.OpenstackInterfaceService;
+import org.onosproject.openstacknetworking.AbstractVmHandler;
 import org.onosproject.openstacknetworking.Constants;
 import org.onosproject.openstacknetworking.OpenstackFloatingIpService;
 import org.onosproject.openstacknetworking.RulePopulatorUtil;
@@ -70,7 +73,7 @@ import static org.onosproject.openstacknode.OpenstackNodeService.NodeType.GATEWA
 
 @Service
 @Component(immediate = true)
-public class OpenstackFloatingIpManager implements OpenstackFloatingIpService {
+public class OpenstackFloatingIpManager extends AbstractVmHandler implements OpenstackFloatingIpService {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -95,6 +98,9 @@ public class OpenstackFloatingIpManager implements OpenstackFloatingIpService {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ScalableGatewayService gatewayService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected OpenstackInterfaceService openstackService;
+
     private static final String NOT_ASSOCIATED = "null";
     private static final KryoNamespace.Builder FLOATING_IP_SERIALIZER =
             KryoNamespace.newBuilder().register(KryoNamespaces.API);
@@ -108,6 +114,7 @@ public class OpenstackFloatingIpManager implements OpenstackFloatingIpService {
 
     @Activate
     protected void activate() {
+        super.activate();
         appId = coreService.registerApplication(ROUTING_APP_ID);
         nodeService.addListener(nodeListener);
         floatingIpMap = storageService.<IpAddress, Host>consistentMapBuilder()
@@ -121,8 +128,31 @@ public class OpenstackFloatingIpManager implements OpenstackFloatingIpService {
 
     @Deactivate
     protected void deactivate() {
+        super.deactivate();
         nodeService.removeListener(nodeListener);
         log.info("Stopped");
+    }
+
+    @Override
+    protected void hostDetected(Host host) {
+        IpAddress hostIp = host.ipAddresses().stream().findFirst().get();
+        Optional<OpenstackFloatingIP> floatingIp = openstackService.floatingIps().stream()
+                .filter(fip -> fip.fixedIpAddress() != null && fip.fixedIpAddress().equals(hostIp))
+                .findFirst();
+        if (floatingIp.isPresent()) {
+            eventExecutor.execute(() -> associateFloatingIp(floatingIp.get()));
+        }
+    }
+
+    @Override
+    protected void hostRemoved(Host host) {
+        IpAddress hostIp = host.ipAddresses().stream().findFirst().get();
+        Optional<OpenstackFloatingIP> floatingIp = openstackService.floatingIps().stream()
+                .filter(fip -> fip.fixedIpAddress() != null && fip.fixedIpAddress().equals(hostIp))
+                .findFirst();
+        if (floatingIp.isPresent()) {
+            eventExecutor.execute(() -> disassociateFloatingIp(floatingIp.get()));
+        }
     }
 
     @Override
@@ -202,6 +232,11 @@ public class OpenstackFloatingIpManager implements OpenstackFloatingIpService {
                 .matchIPDst(floatingIp.toIpPrefix());
 
         gatewayService.getGatewayDeviceIds().stream().forEach(deviceId -> {
+            TrafficSelector.Builder sForTrafficFromVmBuilder = DefaultTrafficSelector.builder()
+                    .matchEthType(Ethernet.TYPE_IPV4)
+                    .matchIPDst(floatingIp.toIpPrefix())
+                    .matchInPort(nodeService.tunnelPort(deviceId).get());
+
             RulePopulatorUtil.removeRule(
                     flowObjectiveService,
                     appId,
@@ -217,6 +252,14 @@ public class OpenstackFloatingIpManager implements OpenstackFloatingIpService {
                     sIncomingBuilder.build(),
                     ForwardingObjective.Flag.VERSATILE,
                     FLOATING_RULE_PRIORITY);
+
+            RulePopulatorUtil.removeRule(
+                    flowObjectiveService,
+                    appId,
+                    deviceId,
+                    sForTrafficFromVmBuilder.build(),
+                    ForwardingObjective.Flag.VERSATILE,
+                    FLOATING_RULE_FOR_TRAFFIC_FROM_VM_PRIORITY);
         });
     }
 
@@ -230,13 +273,13 @@ public class OpenstackFloatingIpManager implements OpenstackFloatingIpService {
             return;
         }
 
-        TrafficSelector selector = DefaultTrafficSelector.builder()
+        TrafficSelector selectorForTrafficFromExternal = DefaultTrafficSelector.builder()
                 .matchEthType(Ethernet.TYPE_IPV4)
                 .matchIPDst(floatingIp.toIpPrefix())
                 .build();
 
         gatewayService.getGatewayDeviceIds().stream().forEach(gnodeId -> {
-            TrafficTreatment treatment =  DefaultTrafficTreatment.builder()
+            TrafficTreatment treatmentForTrafficFromExternal =  DefaultTrafficTreatment.builder()
                     .setEthSrc(Constants.DEFAULT_GATEWAY_MAC)
                     .setEthDst(associatedVm.mac())
                     .setIpDst(associatedVm.ipAddresses().stream().findFirst().get())
@@ -246,15 +289,43 @@ public class OpenstackFloatingIpManager implements OpenstackFloatingIpService {
                     .setOutput(nodeService.tunnelPort(gnodeId).get())
                     .build();
 
-            ForwardingObjective fo = DefaultForwardingObjective.builder()
-                    .withSelector(selector)
-                    .withTreatment(treatment)
+            ForwardingObjective forwardingObjectiveForTrafficFromExternal = DefaultForwardingObjective.builder()
+                    .withSelector(selectorForTrafficFromExternal)
+                    .withTreatment(treatmentForTrafficFromExternal)
                     .withFlag(ForwardingObjective.Flag.VERSATILE)
                     .withPriority(FLOATING_RULE_PRIORITY)
                     .fromApp(appId)
                     .add();
 
-            flowObjectiveService.forward(gnodeId, fo);
+            flowObjectiveService.forward(gnodeId, forwardingObjectiveForTrafficFromExternal);
+
+
+            TrafficSelector selectorForTrafficFromVm = DefaultTrafficSelector.builder()
+                    .matchEthType(Ethernet.TYPE_IPV4)
+                    .matchIPDst(floatingIp.toIpPrefix())
+                    .matchInPort(nodeService.tunnelPort(gnodeId).get())
+                    .build();
+
+            TrafficTreatment treatmentForTrafficFromVm = DefaultTrafficTreatment.builder()
+                    .setEthSrc(Constants.DEFAULT_GATEWAY_MAC)
+                    .setEthDst(associatedVm.mac())
+                    .setIpDst(associatedVm.ipAddresses().stream().findFirst().get())
+                    .setTunnelId(Long.valueOf(associatedVm.annotations().value(VXLAN_ID)))
+                    .extension(buildExtension(deviceService, gnodeId, dataIp.get().getIp4Address()),
+                            gnodeId)
+                    .setOutput(PortNumber.IN_PORT)
+                    .build();
+
+            ForwardingObjective forwardingObjectiveForTrafficFromVm = DefaultForwardingObjective.builder()
+                    .withSelector(selectorForTrafficFromVm)
+                    .withTreatment(treatmentForTrafficFromVm)
+                    .withFlag(ForwardingObjective.Flag.VERSATILE)
+                    .withPriority(FLOATING_RULE_FOR_TRAFFIC_FROM_VM_PRIORITY)
+                    .fromApp(appId)
+                    .add();
+
+            flowObjectiveService.forward(gnodeId, forwardingObjectiveForTrafficFromVm);
+
         });
     }
 
@@ -285,18 +356,6 @@ public class OpenstackFloatingIpManager implements OpenstackFloatingIpService {
         });
     }
 
-    private void reloadFloatingIpRules() {
-        floatingIpMap.entrySet().stream().forEach(entry -> {
-            IpAddress floatingIp = entry.getKey();
-            Host associatedVm = entry.getValue().value();
-
-            populateFloatingIpRules(floatingIp, associatedVm);
-            log.debug("Reload floating IP {} mapped to {}",
-                      floatingIp, associatedVm.ipAddresses());
-        });
-    }
-
-    // TODO apply existing floating IPs on service start-up by handling host event
     // TODO consider the case that port with associated floating IP is attached to a VM
 
     private class InternalNodeListener implements OpenstackNodeListener {
@@ -316,7 +375,6 @@ public class OpenstackFloatingIpManager implements OpenstackFloatingIpService {
                                     .uplinkIntf(node.externalPortName().get())
                                     .build();
                             gatewayService.addGatewayNode(gnode);
-                            reloadFloatingIpRules();
                         });
                     }
                     break;

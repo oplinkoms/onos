@@ -242,6 +242,7 @@
             <action class="org.onosproject.cli.net.EdgePortsListCommand"/>
             <completers>
                 <ref component-id="deviceIdCompleter"/>
+                <null/>
             </completers>
         </command>
 
@@ -293,6 +294,7 @@
             <completers>
                 <ref component-id="connectPointCompleter"/>
                 <ref component-id="connectPointCompleter"/>
+                <null/> <!-- no more argument -->
             </completers>
             <optional-completers>
                 <entry key="-t" value-ref="ethTypeCompleter"/>
@@ -302,6 +304,7 @@
                 <entry key="--extHdr" value-ref="ExtHeaderCompleter"/>
                 <entry key="-a" value-ref="allAppNameCompleter"/>
                 <entry key="-e" value-ref="encapTypeCompleter"/>
+                <entry key="-r" value-ref="nullCompleter"/> <!-- option has no argument -->
             </optional-completers>
         </command>
         <command>
@@ -409,6 +412,9 @@
             <action class="org.onosproject.cli.net.TransactionsCommand"/>
         </command>
         <command>
+            <action class="org.onosproject.cli.net.CounterCommand"/>
+        </command>
+        <command>
             <action class="org.onosproject.cli.net.ClusterDevicesCommand"/>
             <completers>
                 <ref component-id="clusterIdCompleter"/>
@@ -491,6 +497,9 @@
         </command>
         <command>
             <action class="org.onosproject.cli.net.PacketProcessorsListCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.cli.net.NeighbourHandlersListCommand"/>
         </command>
 
         <command>

@@ -44,6 +44,14 @@ public interface StorageService {
     <K, V> ConsistentMapBuilder<K, V> consistentMapBuilder();
 
     /**
+     * Creates a new {@code AsyncConsistentTreeMapBuilder}.
+     *
+     * @param <V> value type
+     * @return builder for a async consistent tree map
+     */
+    <V> ConsistentTreeMapBuilder<V> consistentTreeMapBuilder();
+
+    /**
      * Creates a new DistributedSetBuilder.
      *
      * @param <E> set element type
@@ -106,8 +114,28 @@ public interface StorageService {
      * @param <E> work element type
      * @param name work queue name
      * @param serializer serializer
-     *
      * @return WorkQueue instance
      */
     <E> WorkQueue<E> getWorkQueue(String name, Serializer serializer);
+
+    /**
+     * Returns an instance of {@code AsyncDocumentTree} with specified name.
+     *
+     * @param <V> tree node value type
+     * @param name document tree name
+     * @param serializer serializer
+     * @return AsyncDocumentTree instance
+     */
+    <V> AsyncDocumentTree<V> getDocumentTree(String name, Serializer serializer);
+
+    /**
+     * Returns an instance of {@code Topic} with specified name.
+     *
+     * @param <T> topic message type
+     * @param name topic name
+     * @param serializer serializer
+     *
+     * @return Topic instance
+     */
+    <T> Topic<T> getTopic(String name, Serializer serializer);
 }

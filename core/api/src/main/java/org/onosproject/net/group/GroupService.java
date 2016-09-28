@@ -107,6 +107,17 @@ public interface GroupService
                                 ApplicationId appId);
 
     /**
+     * Purges all the group entries on the specified device.
+     * @param deviceId device identifier
+     */
+    void purgeGroupEntries(DeviceId deviceId);
+
+    /**
+     * Purges all group entries.
+     */
+    default void purgeGroupEntries() {};
+
+    /**
      * Deletes a group associated to an application cookie.
      * GROUP_DELETED or GROUP_DELETE_FAILED notifications would be
      * provided along with cookie depending on the result of the

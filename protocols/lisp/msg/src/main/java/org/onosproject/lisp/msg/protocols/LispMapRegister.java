@@ -19,24 +19,24 @@ import java.util.List;
 
 /**
  * LISP map register message interface.
- *
+ * <p>
  * LISP map register message format is defined in RFC6830.
  * https://tools.ietf.org/html/rfc6830#page-37
  *
  * <pre>
  * {@literal
- * 0                   1                   2                   3
- * 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |Type=3 |P|            Reserved               |M| Record Count  |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                         Nonce . . .                           |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                         . . . Nonce                           |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |            Key ID             |  Authentication Data Length   |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * ~                     Authentication Data                       ~
+ *      0                   1                   2                   3
+ *      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |Type=3 |P|            Reserved               |M| Record Count  |
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |                         Nonce . . .                           |
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |                         . . . Nonce                           |
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     |            Key ID             |  Authentication Data Length   |
+ *     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *     ~                     Authentication Data                       ~
  * +-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  * |   |                          Record TTL                           |
  * |   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -75,7 +75,7 @@ public interface LispMapRegister extends LispMessage {
      *
      * @return record count value
      */
-    byte getRecordCount();
+    int getRecordCount();
 
     /**
      * Obtains nonce value.
@@ -92,6 +92,13 @@ public interface LispMapRegister extends LispMessage {
     short getKeyId();
 
     /**
+     * Obtains authentication data length.
+     *
+     * @return authentication data length
+     */
+    short getAuthDataLength();
+
+    /**
      * Obtains authentication data.
      *
      * @return authentication data
@@ -103,7 +110,7 @@ public interface LispMapRegister extends LispMessage {
      *
      * @return a collection of records
      */
-    List<LispRecord> getLispRecords();
+    List<LispMapRecord> getMapRecords();
 
     /**
      * A builder of LISP map register message.
@@ -127,20 +134,20 @@ public interface LispMapRegister extends LispMessage {
         RegisterBuilder withIsWantMapNotify(boolean isWantMapNotify);
 
         /**
-         * Sets record count.
-         *
-         * @param recordCount record count
-         * @return RegisterBuilder object
-         */
-        RegisterBuilder withRecordCount(byte recordCount);
-
-        /**
          * Sets nonce value.
          *
          * @param nonce nonce value
          * @return RegisterBuilder object
          */
         RegisterBuilder withNonce(long nonce);
+
+        /**
+         * Sets authentication data length.
+         *
+         * @param authDataLength authentication data length
+         * @return RegisterBuilder object
+         */
+        RegisterBuilder withAuthDataLength(short authDataLength);
 
         /**
          * Sets key identifier.
@@ -159,11 +166,18 @@ public interface LispMapRegister extends LispMessage {
         RegisterBuilder withAuthenticationData(byte[] authenticationData);
 
         /**
-         * Adds a new record to record list.
+         * Sets a collection of map records.
          *
-         * @param record record
+         * @param mapRecords a collection of map records
          * @return RegisterBuilder object
          */
-        RegisterBuilder addRecord(LispRecord record);
+        RegisterBuilder withMapRecords(List<LispMapRecord> mapRecords);
+
+        /**
+         * Builds LISP map register message.
+         *
+         * @return LISP map register message
+         */
+        LispMapRegister build();
     }
 }
