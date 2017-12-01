@@ -53,6 +53,7 @@ public class OplinkOpticalPowerConfig<T> extends AbstractHandlerBehaviour
     public static final String KEY_CHPWR = "wavelength-power";
     public static final String KEY_CHSTATS = "wavelength-stats";
     public static final String KEY_OCMSTATS = "ocm-stats";
+    public static final String KEY_OCMS = "ocms";
     public static final String KEY_PORTDIRECT_RX = "rx";
     public static final String KEY_PORTDIRECT_TX = "tx";
     public static final String KEY_PORTTARPWR = "port-target-power";
@@ -110,15 +111,13 @@ public class OplinkOpticalPowerConfig<T> extends AbstractHandlerBehaviour
 
     private String getChannelPowerFilter(PortNumber port, OchSignal channel) {
         return new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
-                .append(xmlOpen(KEY_PORTS))
+                .append(xmlOpen(KEY_OCMS))
                 .append(xml(KEY_PORTID, Long.toString(port.toLong())))
-                .append(xmlOpen(KEY_PORT))
                 .append(xmlOpen(KEY_OCMSTATS))
                 .append(xml(KEY_CHNUM, Integer.toString(channel.spacingMultiplier())))
                 .append(xmlEmpty(KEY_CHSTATS))
                 .append(xmlClose(KEY_OCMSTATS))
-                .append(xmlClose(KEY_PORT))
-                .append(xmlClose(KEY_PORTS))
+                .append(xmlClose(KEY_OCMS))
                 .append(xmlClose(KEY_OPENOPTICALDEV))
                 .toString();
     }
