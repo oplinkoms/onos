@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,14 +25,14 @@
     var Collection, Model;
 
     var remappedDeviceTypes = {
-        virtual: 'cord'
+        virtual: 'cord',
     };
 
     function createSubRegionCollection(data, region) {
 
         var SubRegionCollection = Collection.extend({
             model: Model,
-            region: region
+            region: region,
         });
 
         return new SubRegionCollection(data);
@@ -52,7 +52,7 @@
                 nodeType: 'sub-region',
                 events: {
                     'dblclick': 'navigateToRegion',
-                    'click': 'onClick'
+                    'click': 'onClick',
                 },
 
                 initialize: function () {
@@ -76,13 +76,13 @@
                     if (d3.event.defaultPrevented) return;
                     t2rns.navigateToRegion(this.get('id'));
                     t2srp.hide();
-                }
+                },
             });
 
             return {
-                createSubRegionCollection: createSubRegionCollection
+                createSubRegionCollection: createSubRegionCollection,
             };
-        }
+        },
     ]);
 
 })();

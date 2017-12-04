@@ -1,11 +1,13 @@
 COMPILE_DEPS = [
   '//lib:CORE_DEPS',
+  '//lib:JACKSON',
   '//lib:javax.ws.rs-api',
   '//utils/rest:onlab-rest',
   '//lib:jersey-media-multipart',
   '//lib:onos-yang-model',
   '//lib:onos-yang-compiler-api',
   '//lib:onos-yang-runtime',
+  '//apps/yang:onos-apps-yang'
 ]
 
 TEST_DEPS = [

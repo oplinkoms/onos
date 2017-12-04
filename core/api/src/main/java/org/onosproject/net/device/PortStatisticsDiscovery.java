@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,14 @@
 
 package org.onosproject.net.device;
 
+import org.onosproject.net.driver.HandlerBehaviour;
+
 import java.util.Collection;
 
 /**
  * Handler behaviour capable of collecting and updating port statistics.
  */
-public interface PortStatisticsDiscovery extends DeviceDescriptionDiscovery {
+public interface PortStatisticsDiscovery extends HandlerBehaviour {
 
     /**
      * Returns a list of port statistics descriptions appropriately annotated

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -104,7 +104,22 @@ public class VirtualNetworkAdminServiceAdapter
     }
 
     @Override
+    public void updatePortState(NetworkId networkId, DeviceId deviceId, PortNumber portNumber, boolean isEnabled) {
+
+    }
+
+    @Override
     public void removeVirtualPort(NetworkId networkId, DeviceId deviceId, PortNumber portNumber) {
 
+    }
+
+    @Override
+    public VirtualNetwork getVirtualNetwork(NetworkId networkId) {
+        return null;
+    }
+
+    @Override
+    public TenantId getTenantId(NetworkId networkId) {
+        return null;
     }
 }

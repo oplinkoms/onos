@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -118,15 +118,9 @@ public final class LispListLcafAddress extends LispLcafAddress {
         LispAfiAddress ipv4 = addresses.get(0);
         LispAfiAddress ipv6 = addresses.get(1);
 
-        if (ipv4.getAfi() != AddressFamilyIdentifierEnum.IP4) {
-            return false;
-        }
+        return ipv4.getAfi() == AddressFamilyIdentifierEnum.IP4 &&
+                ipv6.getAfi() == AddressFamilyIdentifierEnum.IP6;
 
-        if (ipv6.getAfi() != AddressFamilyIdentifierEnum.IP6) {
-            return false;
-        }
-
-        return true;
     }
 
     /**

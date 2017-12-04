@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,9 +24,9 @@ import org.junit.Before;
 import org.junit.Test;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceListener;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceListener;
+import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.EncapsulationType;
 import org.onosproject.net.FilteredConnectPoint;
@@ -40,6 +40,7 @@ import org.onosproject.net.intent.IntentService;
 import org.onosproject.net.intent.IntentServiceAdapter;
 import org.onosproject.net.intent.IntentUtils;
 import org.onosproject.net.intent.Key;
+import org.onosproject.net.intent.MockIdGenerator;
 import org.onosproject.net.intent.MultiPointToSinglePointIntent;
 import org.onosproject.net.intent.SinglePointToMultiPointIntent;
 import org.onosproject.vpls.api.VplsData;
@@ -73,9 +74,7 @@ public class VplsIntentTest extends VplsTest {
 
     @Before
     public void setUp() throws Exception {
-        idGenerator = new TestIdGenerator();
-        Intent.unbindIdGenerator(idGenerator);
-        Intent.bindIdGenerator(idGenerator);
+        MockIdGenerator.cleanBind();
         hostsAvailable = Sets.newHashSet();
         intentService = new TestIntentService();
         interfaceService = createMock(InterfaceService.class);
@@ -86,7 +85,7 @@ public class VplsIntentTest extends VplsTest {
 
     @After
     public void tearDown() {
-        Intent.unbindIdGenerator(idGenerator);
+        MockIdGenerator.unbind();
     }
 
     /**

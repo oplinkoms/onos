@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,10 +46,22 @@ public final class BasicLinkConfig extends AllowedEntityConfig<LinkKey> {
 
     @Override
     public boolean isValid() {
+        // Validate type/devices
+        type();
+
         return hasOnlyFields(ALLOWED, TYPE, METRIC, LATENCY, BANDWIDTH, IS_DURABLE, IS_BIDIRECTIONAL) &&
                 isBoolean(ALLOWED, OPTIONAL) && isNumber(METRIC, OPTIONAL) &&
                 isNumber(LATENCY, OPTIONAL) && isNumber(BANDWIDTH, OPTIONAL) &&
                 isBoolean(IS_BIDIRECTIONAL, OPTIONAL);
+    }
+
+    /**
+     * Returns if the link type is configured.
+     *
+     * @return true if config contains link type
+     */
+    public boolean isTypeConfigured() {
+        return hasField(TYPE);
     }
 
     /**
@@ -159,7 +171,7 @@ public final class BasicLinkConfig extends AllowedEntityConfig<LinkKey> {
      *
      * @return true for bidirectional, false otherwise
      */
-    public Boolean isBidirectional() {
+    public boolean isBidirectional() {
         JsonNode res = object.path(IS_BIDIRECTIONAL);
         if (res.isMissingNode()) {
             return true;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,10 +31,12 @@
     // TODO: Topo2<Device|Link|Host>Panel should only be concerned with the content displayed
 
     // Injected Services
-    var Panel;
+    var Panel, flash;
 
     // Internal State
-    var detailsPanel, summaryPanel;
+    var useDetails = true,
+        detailsPanel,
+        summaryPanel;
 
     // configuration
     var id = 'topo2-p-detail',
@@ -43,7 +45,7 @@
         panelPadding = 64,
         panelSpacing = 20,
         panelOpts = {
-            width: 260          // summary and detail panel width
+            width: 260, // summary and detail panel width
         };
 
     function getInstance(_summaryPanel_) {
@@ -54,7 +56,7 @@
         summaryPanel = _summaryPanel_;
 
         var options = angular.extend({}, panelOpts, {
-            class: className
+            class: className,
         });
 
         Panel = Panel.extend({
@@ -73,6 +75,10 @@
             },
             show: function () {
 
+                if (!useDetails) {
+                    return;
+                }
+
                 var summaryInstance = summaryPanel.getInstance(),
                     position = 0;
 
@@ -84,7 +90,26 @@
                 detailsPanel.el.el()
                     .style('top', panelPadding + position + 'px');
                 detailsPanel.el.show();
-            }
+            },
+            hide: function () {
+                detailsPanel.el.hide();
+            },
+            toggleUseDetailsFlag: function (x) {
+                var kev = (x === 'keyev'),
+                    verb;
+
+                useDetails = kev ? !useDetails : !!x;
+                verb = useDetails ? 'Enable' : 'Disable';
+
+                if (useDetails) {
+                    this.show();
+                } else {
+                    this.hide();
+                }
+
+                flash.flash(verb + ' details panel');
+                return useDetails;
+            },
         });
 
         detailsPanel = new Panel(id, options);
@@ -94,14 +119,14 @@
     }
 
 
-
     angular.module('ovTopo2')
     .factory('Topo2DetailsPanelService', [
-        'Topo2PanelService',
-        function (_ps_) {
+        'Topo2PanelService', 'FlashService',
+        function (_ps_, _flash_) {
             Panel = _ps_;
+            flash = _flash_;
 
             return getInstance;
-        }
+        },
     ]);
 })();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,23 @@
  * limitations under the License.
  */
 
-
 #ov-yang-model h2 {
     display: inline-block;
 }
 
+#ov-yang-model div.ctrl-btns {
+    width: 250px;
+}
+
+/* -- Drag-n-Drop file upload -- */
+#ov-yang-model form#inputYangFileForm,
+#ov-yang-model input#uploadYangFile {
+    display: none;
+}
+
+.dropping {
+
+}
 
 #yang-model-details-panel.floatpanel {
     z-index: 0;
@@ -46,6 +58,16 @@
     display: inline-block;
     margin: 8px 0;
     padding-left: 6px;
+    font-size: 16pt;
+    font-weight: lighter;
+}
+
+#yang-model-details-panel h3 {
+    display: inline-block;
+    margin: 8px 0;
+    padding-left: 6px;
+    font-size: 13pt;
+    font-weight: lighter;
 }
 
 #yang-model-details-panel .src-frame {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -280,7 +280,7 @@ public final class TsLoopPacket implements NetworkAnomaly {
     /**
      * Returns true if the packet passed through the specific device.
      *
-     * @param deviceId identify of the divice to test
+     * @param deviceId identify of the device to test
      * @return true if packet passed through the specific device;
      *         false otherwise
      */

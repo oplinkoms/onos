@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -185,16 +185,6 @@ public class OpenstackNetworkManagerTest {
     @Test(expected = IllegalArgumentException.class)
     public void testCreateNetworkWithNullId() {
         final Network testNet = NeutronNetwork.builder().build();
-        target.createNetwork(testNet);
-    }
-
-    /**
-     * Tests if creating a network with null name fails with an exception.
-     */
-    @Test(expected = IllegalArgumentException.class)
-    public void testCreateNetworkWithNullName() {
-        final Network testNet = NeutronNetwork.builder().build();
-        testNet.setId(NETWORK_ID);
         target.createNetwork(testNet);
     }
 

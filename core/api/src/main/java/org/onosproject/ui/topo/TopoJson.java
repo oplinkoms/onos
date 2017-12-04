@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,9 +46,11 @@ public final class TopoJson {
     static final String MSG = "msg";
 
     static final String TITLE = "title";
-    static final String TYPE = "type";
+    static final String GLYPH_ID = "glyphId";
+    static final String NAV_PATH = "navPath";
     static final String PROP_ORDER = "propOrder";
-    static final String PROPS = "props";
+    static final String PROP_LABELS = "propLabels";
+    static final String PROP_VALUES = "propValues";
     static final String BUTTONS = "buttons";
 
 
@@ -63,7 +65,8 @@ public final class TopoJson {
     }
 
     // non-instantiable
-    private TopoJson() { }
+    private TopoJson() {
+    }
 
     /**
      * Returns a formatted message ready to send to the topology view
@@ -176,17 +179,24 @@ public final class TopoJson {
     public static ObjectNode json(PropertyPanel pp) {
         ObjectNode result = objectNode()
                 .put(TITLE, pp.title())
-                .put(TYPE, pp.typeId())
+                .put(GLYPH_ID, pp.glyphId())
                 .put(ID, pp.id());
 
-        ObjectNode pnode = objectNode();
+        if (pp.navPath() != null) {
+            result.put(NAV_PATH, pp.navPath());
+        }
+
+        ObjectNode plabels = objectNode();
+        ObjectNode pvalues = objectNode();
         ArrayNode porder = arrayNode();
         for (PropertyPanel.Prop p : pp.properties()) {
             porder.add(p.key());
-            pnode.put(p.key(), p.value());
+            plabels.put(p.key(), p.label());
+            pvalues.put(p.key(), p.value());
         }
         result.set(PROP_ORDER, porder);
-        result.set(PROPS, pnode);
+        result.set(PROP_LABELS, plabels);
+        result.set(PROP_VALUES, pvalues);
 
         ArrayNode buttons = arrayNode();
         for (ButtonId b : pp.buttons()) {

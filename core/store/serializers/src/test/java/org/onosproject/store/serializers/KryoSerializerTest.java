@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import org.junit.Test;
 import org.onlab.packet.VlanId;
 import org.onlab.util.Bandwidth;
 import org.onlab.util.Frequency;
+import org.onlab.util.KryoNamespace;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.cluster.RoleInfo;
 import org.onosproject.core.DefaultApplicationId;
@@ -53,7 +54,7 @@ import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.FlowId;
 import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.FlowRuleBatchEntry;
+import org.onosproject.net.flow.oldbatch.FlowRuleBatchEntry;
 import org.onosproject.net.intent.IntentId;
 import org.onosproject.net.resource.ResourceAllocation;
 import org.onosproject.net.resource.ResourceConsumerId;
@@ -127,6 +128,29 @@ public class KryoSerializerTest {
     public void tearDown() throws Exception {
     }
 
+    private byte[] serialize(Object object) {
+        return serialize(object, serializer);
+    }
+
+    private byte[] serialize(Object object, StoreSerializer serializer) {
+        ByteBuffer buffer = ByteBuffer.allocate(1024);
+        serializer.encode(object, buffer);
+        buffer.flip();
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.get(bytes);
+        return bytes;
+    }
+
+    private <T> T deserialize(byte[] bytes, StoreSerializer serializer) {
+        return serializer.decode(bytes);
+    }
+
+    private <T> void testBytesEqual(T expected, T actual) {
+        byte[] expectedBytes = serialize(expected);
+        byte[] actualBytes = serialize(actual);
+        assertArrayEquals(expectedBytes, actualBytes);
+    }
+
     private <T> void testSerializedEquals(T original) {
         ByteBuffer buffer = ByteBuffer.allocate(1 * 1024 * 1024);
         serializer.encode(original, buffer);
@@ -146,6 +170,66 @@ public class KryoSerializerTest {
         assertNotNull(copy);
     }
 
+    public static class Versioned1 {
+        private int value1;
+    }
+
+    public static class Versioned2 {
+        private int value1;
+        private int value2;
+        private int value3;
+    }
+
+    public static class Versioned3 {
+        private int value1;
+        private int value3;
+    }
+
+    @Test
+    public void testVersioned() {
+        StoreSerializer serializer1 = StoreSerializer.using(KryoNamespace.newBuilder()
+                .register(KryoNamespaces.BASIC)
+                .register(Versioned1.class)
+                .setCompatible(true)
+                .build());
+
+        StoreSerializer serializer2 = StoreSerializer.using(KryoNamespace.newBuilder()
+                .register(KryoNamespaces.BASIC)
+                .register(Versioned2.class)
+                .setCompatible(true)
+                .build());
+
+        StoreSerializer serializer3 = StoreSerializer.using(KryoNamespace.newBuilder()
+                .register(KryoNamespaces.BASIC)
+                .register(Versioned3.class)
+                .setCompatible(true)
+                .build());
+
+        Versioned1 versioned1 = new Versioned1();
+        versioned1.value1 = 1;
+
+        Versioned2 versioned2 = new Versioned2();
+        versioned2.value1 = 1;
+        versioned2.value2 = 2;
+        versioned2.value3 = 3;
+
+        Versioned3 versioned3 = new Versioned3();
+        versioned3.value1 = 1;
+        versioned3.value3 = 3;
+
+        Versioned2 versioned1Upgrade = deserialize(serialize(versioned1, serializer1), serializer2);
+        assertEquals(versioned1.value1, versioned1Upgrade.value1);
+
+        Versioned1 versioned2Downgrade = deserialize(serialize(versioned2, serializer2), serializer1);
+        assertEquals(versioned2.value1, versioned2Downgrade.value1);
+
+        Versioned3 versioned2Upgrade = deserialize(serialize(versioned2, serializer2), serializer3);
+        assertEquals(versioned2.value1, versioned2Upgrade.value1);
+        assertEquals(versioned2.value3, versioned2Upgrade.value3);
+
+        Versioned2 versioned3Downgrade = deserialize(serialize(versioned3, serializer3), serializer2);
+        assertEquals(versioned3.value1, versioned3Downgrade.value1);
+    }
 
     @Test
     public void testConnectPoint() {
@@ -196,6 +280,7 @@ public class KryoSerializerTest {
 
     @Test
     public void testImmutableList() {
+        testBytesEqual(ImmutableList.of(DID1, DID2), ImmutableList.of(DID1, DID2, DID1, DID2).subList(0, 2));
         testSerializedEquals(ImmutableList.of(DID1, DID2));
         testSerializedEquals(ImmutableList.of(DID1));
         testSerializedEquals(ImmutableList.of());

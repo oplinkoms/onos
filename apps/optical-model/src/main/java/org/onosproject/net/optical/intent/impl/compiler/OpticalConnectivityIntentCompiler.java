@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,12 +24,12 @@ import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.onlab.util.Frequency;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.ChannelSpacing;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DefaultOchSignalComparator;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.GridType;
 import org.onosproject.net.Link;
 import org.onosproject.net.OchSignal;
 import org.onosproject.net.OchSignalType;
@@ -42,8 +42,8 @@ import org.onosproject.net.intent.IntentExtensionService;
 import org.onosproject.net.intent.OpticalConnectivityIntent;
 import org.onosproject.net.intent.OpticalPathIntent;
 import org.onosproject.net.optical.OchPort;
-import org.onosproject.net.resource.ResourceAllocation;
 import org.onosproject.net.resource.Resource;
+import org.onosproject.net.resource.ResourceAllocation;
 import org.onosproject.net.resource.ResourceService;
 import org.onosproject.net.resource.Resources;
 import org.onosproject.net.topology.AdapterLinkWeigher;
@@ -64,9 +64,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static org.onosproject.net.OchSignal.toFlexGrid;
 import static org.onosproject.net.optical.device.OpticalDeviceServiceView.opticalView;
 
 /**
@@ -108,10 +108,9 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
         // Check if source and destination are optical OCh ports
         ConnectPoint src = intent.getSrc();
         ConnectPoint dst = intent.getDst();
-        Port srcPort = deviceService.getPort(src.deviceId(), src.port());
-        Port dstPort = deviceService.getPort(dst.deviceId(), dst.port());
-        checkArgument(srcPort instanceof OchPort);
-        checkArgument(dstPort instanceof OchPort);
+        checkArgument(deviceService.getPort(src.deviceId(), src.port()) instanceof OchPort);
+        checkArgument(deviceService.getPort(dst.deviceId(), dst.port()) instanceof OchPort);
+        List<Resource> resources = new LinkedList<>();
 
         log.debug("Compiling optical connectivity intent between {} and {}", src, dst);
 
@@ -121,104 +120,30 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
         resourceService.release(intent.key());
 
         // Check OCh port availability
+        // If ports are not available, compilation fails
+        // Else add port to resource reservation list
         Resource srcPortResource = Resources.discrete(src.deviceId(), src.port()).resource();
         Resource dstPortResource = Resources.discrete(dst.deviceId(), dst.port()).resource();
-        // If ports are not available, compilation fails
         if (!Stream.of(srcPortResource, dstPortResource).allMatch(resourceService::isAvailable)) {
             log.error("Ports for the intent are not available. Intent: {}", intent);
             throw new OpticalIntentCompilationException("Ports for the intent are not available. Intent: " + intent);
         }
-
-        List<Resource> resources = new ArrayList<>();
         resources.add(srcPortResource);
         resources.add(dstPortResource);
 
-        // Calculate available light paths
+        // Find first path that has the required resources
         Stream<Path> paths = getOpticalPaths(intent);
-
-        // Static or dynamic lambda allocation
-        String staticLambda = srcPort.annotations().value(AnnotationKeys.STATIC_LAMBDA);
-        OchPort srcOchPort = (OchPort) srcPort;
-        OchPort dstOchPort = (OchPort) dstPort;
-
-        // FIXME: need to actually reserve the lambda for static lambda's
-        // static lambda case: early return
-        if (staticLambda != null) {
-
-            OchSignal lambda = new OchSignal(Frequency.ofHz(Long.parseLong(staticLambda)),
-                                             srcOchPort.lambda().channelSpacing(),
-                                             srcOchPort.lambda().slotGranularity());
-            log.debug("Using statically assigned lambda : {}", lambda);
-
-            List<Resource> res = new ArrayList<>();
-
-            Path satPath = paths.filter(path -> {
-                // FIXME trimming both ends (staticLambda assigned ports)
-                // Proper fix is to let device advertise static lambda as resource.
-                LinkedList<Link> links = new LinkedList<>(path.links());
-                links.pollFirst();
-                links.pollLast();
-
-                List<Resource> r = convertToResources(links, toFlexGrid(lambda));
-                if (r.stream().allMatch(resourceService::isAvailable)) {
-                    // FIXME bad practice to have side-effect during stream
-                    res.addAll(r);
-                    return true;
-                }
-                return false;
-            }).findFirst().orElse(null);
-
-            if (satPath == null) {
-                // FIXME doing something very wrong to preserve old behavior
-                // as a fallback
-                log.warn("No feasible path between {}-{} using {}",
-                         src, dst, lambda);
-
-                satPath = getOpticalPaths(intent).iterator().next();
-                if (satPath == null) {
-                    throw new OpticalIntentCompilationException(
-                        "Unable to find suitable lightpath for intent " + intent);
-                }
-                return ImmutableList.of(createIntent(intent, satPath, lambda));
-            }
-
-            resources.addAll(res);
-            allocateResources(intent, resources);
-
-            return ImmutableList.of(createIntent(intent, satPath, lambda));
-        }
-
-        // FIXME: also check destination OCh port
-        // non-tunable case: early return
-        if (!srcOchPort.isTunable() || !dstOchPort.isTunable()) {
-            Path firstPath = paths.findAny().orElse(null);
-            if (firstPath == null) {
-                log.error("Unable to find suitable lightpath for intent {}", intent);
-                throw new OpticalIntentCompilationException("Unable to find suitable lightpath for intent " + intent);
-            }
-            OchSignal lambda = srcOchPort.lambda();
-            // TODO apply the same as static lambda case above
-            // - pick feasible path
-            // - allocate resources
-            //resources.addAll(convertToResources(firstPath.links(), toFlexGrid(lambda)));
-            allocateResources(intent, resources);
-            return ImmutableList.of(createIntent(intent, firstPath, lambda));
-        }
-
-        // remaining cases
-        // Use first path that the required resources are available
         Optional<Map.Entry<Path, List<OchSignal>>> found = paths
-                .map(path -> Maps.immutableEntry(path, findFirstAvailableOch(path)))
+                .map(path -> Maps.immutableEntry(path, findFirstAvailableLambda(intent, path)))
                 .filter(entry -> !entry.getValue().isEmpty())
-                .filter(entry -> convertToResources(entry.getKey().links(),
-                        entry.getValue()).stream().allMatch(resourceService::isAvailable))
+                .filter(entry -> convertToResources(entry.getKey(),
+                                                    entry.getValue()).stream().allMatch(resourceService::isAvailable))
                 .findFirst();
 
+        // Allocate resources and create optical path intent
         if (found.isPresent()) {
-            resources.addAll(convertToResources(found.get().getKey().links(), found.get().getValue()));
-
+            resources.addAll(convertToResources(found.get().getKey(), found.get().getValue()));
             allocateResources(intent, resources);
-
             OchSignal ochSignal = OchSignal.toFixedGrid(found.get().getValue(), ChannelSpacing.CHL_50GHZ);
             return ImmutableList.of(createIntent(intent, found.get().getKey(), ochSignal));
         } else {
@@ -227,9 +152,16 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
         }
     }
 
+    /**
+     * Create installable optical path intent.
+     * Only supports fixed grid for now.
+     *
+     * @param parentIntent this intent (used for resource tracking)
+     * @param path the path to use
+     * @param lambda the lambda to use
+     * @return optical path intent
+     */
     private Intent createIntent(OpticalConnectivityIntent parentIntent, Path path, OchSignal lambda) {
-        // Create installable optical path intent
-        // Only support fixed grid for now
         OchSignalType signalType = OchSignalType.FIXED_GRID;
 
         return OpticalPathIntent.builder()
@@ -245,37 +177,77 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
                 .build();
     }
 
-    private void allocateResources(Intent intent, List<Resource> resources) {
-        // reserve all of required resources
-        List<ResourceAllocation> allocations = resourceService.allocate(intent.key(), resources);
-        if (allocations.isEmpty()) {
-            log.error("Resource allocation for {} failed (resource request: {})", intent.key(), resources);
-            if (log.isDebugEnabled()) {
-                log.debug("requested resources:\n\t{}", resources.stream()
-                                  .map(Resource::toString)
-                                  .collect(Collectors.joining("\n\t")));
-            }
-            throw new OpticalIntentCompilationException("Unable to allocate resources: " + resources);
-        }
-    }
-
-    private List<OchSignal> findFirstAvailableOch(Path path) {
-        Set<OchSignal> lambdas = findCommonLambdasOverLinks(path.links());
-        if (lambdas.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        return findFirstLambda(lambdas, slotCount());
-    }
-
-    private List<Resource> convertToResources(List<Link> links, Collection<OchSignal> lambda) {
-        return links.stream()
+    /**
+     * Convert given lambda as discrete resource of all path ports.
+     *
+     * @param path the path
+     * @param lambda the lambda
+     * @return list of discrete resources
+     */
+    private List<Resource> convertToResources(Path path, Collection<OchSignal> lambda) {
+        return path.links().stream()
                 .flatMap(x -> Stream.of(
                         Resources.discrete(x.src().deviceId(), x.src().port()).resource(),
                         Resources.discrete(x.dst().deviceId(), x.dst().port()).resource()
                 ))
                 .flatMap(x -> lambda.stream().map(x::child))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Reserve all required resources for this intent.
+     *
+     * @param intent the intent
+     * @param resources list of resources to reserve
+     */
+    private void allocateResources(Intent intent, List<Resource> resources) {
+        List<ResourceAllocation> allocations = resourceService.allocate(intent.key(), resources);
+        if (allocations.isEmpty()) {
+            log.error("Resource allocation for {} failed (resource request: {})", intent.key(), resources);
+            if (log.isDebugEnabled()) {
+                log.debug("requested resources:\n\t{}", resources.stream()
+                        .map(Resource::toString)
+                        .collect(Collectors.joining("\n\t")));
+            }
+            throw new OpticalIntentCompilationException("Unable to allocate resources: " + resources);
+        }
+    }
+
+    /**
+     * Find the first available lambda on the given path by checking all the port resources.
+     *
+     * @param path the path
+     * @return list of consecutive and available OChSignals
+     */
+    private List<OchSignal> findFirstAvailableLambda(OpticalConnectivityIntent intent, Path path) {
+        if (intent.ochSignal().isPresent()) {
+            //create lambdas w.r.t. slotGanularity/slotWidth
+            OchSignal ochSignal = intent.ochSignal().get();
+            if (ochSignal.gridType() == GridType.FLEX) {
+                // multiplier sits in the middle of slots
+                int startMultiplier = ochSignal.spacingMultiplier() - (ochSignal.slotGranularity() / 2);
+                return IntStream.range(0, ochSignal.slotGranularity())
+                        .mapToObj(x -> OchSignal.newFlexGridSlot(startMultiplier + (2 * x)))
+                        .collect(Collectors.toList());
+            } else if (ochSignal.gridType() == GridType.DWDM) {
+                int startMultiplier = (int) (1 - ochSignal.slotGranularity() +
+                        ochSignal.spacingMultiplier() * ochSignal.channelSpacing().frequency().asHz() /
+                                ChannelSpacing.CHL_6P25GHZ.frequency().asHz());
+                return IntStream.range(0, ochSignal.slotGranularity())
+                        .mapToObj(x -> OchSignal.newFlexGridSlot(startMultiplier + (2 * x)))
+                        .collect(Collectors.toList());
+            }
+            //TODO: add support for other gridTypes
+            log.error("Grid type: {} not supported for user defined signal intents", ochSignal.gridType());
+            return Collections.emptyList();
+        }
+
+        Set<OchSignal> lambdas = findCommonLambdas(path);
+        if (lambdas.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return findFirstLambda(lambdas, slotCount());
     }
 
     /**
@@ -290,8 +262,14 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
         return SLOT_COUNT;
     }
 
-    private Set<OchSignal> findCommonLambdasOverLinks(List<Link> links) {
-        return links.stream()
+    /**
+     * Find common lambdas on all ports that compose the path.
+     *
+     * @param path the path
+     * @return set of common lambdas
+     */
+    private Set<OchSignal> findCommonLambdas(Path path) {
+        return path.links().stream()
                 .flatMap(x -> Stream.of(
                         Resources.discrete(x.src().deviceId(), x.src().port()).id(),
                         Resources.discrete(x.dst().deviceId(), x.dst().port()).id()
@@ -351,6 +329,7 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
     private Stream<Path> getOpticalPaths(OpticalConnectivityIntent intent) {
         // Route in WDM topology
         Topology topology = topologyService.currentTopology();
+        //TODO: refactor with LinkWeigher class Implementation
         LinkWeight weight = new LinkWeight() {
 
             @Override
@@ -384,18 +363,22 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
 
         ConnectPoint start = intent.getSrc();
         ConnectPoint end = intent.getDst();
+        //head link's src port should be same as intent src port and tail link dst port
+        //should be same as intent dst port in the path.
         Stream<Path> paths = topologyService.getKShortestPaths(topology,
-                                                            start.deviceId(),
-                                                            end.deviceId(),
-                                                            AdapterLinkWeigher.adapt(weight));
+                start.deviceId(),
+                end.deviceId(),
+                AdapterLinkWeigher.adapt(weight))
+                .filter(p -> p.links().get(0).src().port().equals(start.port()) &&
+                        p.links().get(p.links().size() - 1).dst().port().equals(end.port()));
         if (log.isDebugEnabled()) {
             return paths
                     .map(path -> {
                         // no-op map stage to add debug logging
                         log.debug("Candidate path: {}",
                                   path.links().stream()
-                                      .map(lk -> lk.src() + "-" + lk.dst())
-                                      .collect(Collectors.toList()));
+                                          .map(lk -> lk.src() + "-" + lk.dst())
+                                          .collect(Collectors.toList()));
                         return path;
                     });
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -152,8 +152,11 @@ public class ModelCacheTest extends AbstractTopoModelTest {
         // see AbstractUiImplTest Mock Environment for expected values...
         assertEquals("wrong id str", C1, member.idAsString());
         assertEquals("wrong id", nodeId(C1), member.id());
-        assertEquals("not online", true, member.isOnline());
-        assertEquals("not ready", true, member.isReady());
+
+        // TODO make assertions through the cluster service; state no longer
+        //   cached in the UiModel...
+//        assertEquals("not online", true, member.isOnline());
+//        assertEquals("not ready", true, member.isReady());
     }
 
 

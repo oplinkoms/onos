@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,19 @@
  */
 
 /*
- ONOS GUI -- Topology Layout Module.
- Module that contains the d3.force.layout logic
+ ONOS GUI -- Topo2 Hosts Panel
+ Module that builds the Hosts Panel for the selected Host
  */
 
 (function () {
     'use strict';
 
     // Injected Services
-    var panel, gs, flash, ls;
+    var panel, gs, flash, ls, ns;
 
     // Internal State
-    var hostPanel, hostData;
+    var hostPath = 'host',
+        hostPanel, hostData;
 
     function init() {
         hostPanel = panel();
@@ -40,8 +41,8 @@
                 '-': '',
                 'MAC': data.get('id'),
                 'IP': data.get('ips')[0],
-                'VLAN': 'None' // TODO: VLAN is not currently in the data received from backend
-            }
+                'VLAN': 'None', // TODO: VLAN is not currently in the data received from backend
+            },
         };
 
         if (data.get('location')) {
@@ -64,10 +65,16 @@
         hostPanel.show();
         hostPanel.emptyRegions();
 
+        var navFn = function () {
+            ns.navTo(hostPath, { hostId: hostData.title });
+        };
+
         var svg = hostPanel.appendToHeader('div')
                 .classed('icon', true)
                 .append('svg'),
-            title = hostPanel.appendToHeader('h2'),
+            title = hostPanel.appendToHeader('h2')
+                .on('click', navFn)
+                .classed('clickable', true),
             table = hostPanel.appendToBody('table'),
             tbody = table.append('tbody');
 
@@ -97,12 +104,14 @@
     angular.module('ovTopo2')
     .factory('Topo2HostsPanelService', [
         'Topo2DetailsPanelService', 'GlyphService', 'FlashService', 'ListService',
-        function (_ps_, _gs_, _flash_, _ls_) {
+        'NavService',
+        function (_ps_, _gs_, _flash_, _ls_, _ns_) {
 
             panel = _ps_;
             gs = _gs_;
             flash = _flash_;
             ls = _ls_;
+            ns = _ns_;
 
             return {
                 displayPanel: displayPanel,
@@ -111,9 +120,9 @@
                 hide: hide,
                 toggle: toggle,
                 destroy: destroy,
-                isVisible: function () { return hostPanel.isVisible(); }
+                isVisible: function () { return hostPanel.isVisible(); },
             };
-        }
+        },
     ]);
 
 })();

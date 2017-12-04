@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,15 @@ package org.onosproject.net.domain;
 
 import org.onlab.util.Identifier;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+
 /**
  * Representation of a domain identity.
  */
 public class DomainId extends Identifier<String> {
+
+    private static final int DOMAIN_ID_MAX_LENGTH = 1024;
 
     /**
      * Represents the domain directly managed by ONOS.
@@ -44,6 +49,9 @@ public class DomainId extends Identifier<String> {
      * @return instance of the class DomainId
      */
     public static DomainId domainId(String identifier) {
+        checkNotNull(identifier, "identifier cannot be null");
+        checkArgument(identifier.length() <= DOMAIN_ID_MAX_LENGTH,
+                "identifier exceeds maximum length " + DOMAIN_ID_MAX_LENGTH);
         return new DomainId(identifier);
     }
 }

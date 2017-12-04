@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -135,6 +135,8 @@ public abstract class FlowModBuilder {
         case OF_13:
         case OF_14:
             return new FlowModBuilderVer13(flowRule, factory, xid, driverService);
+        case OF_15:
+            return new FlowModBuilderVer15(flowRule, factory, xid, driverService);
         default:
             throw new UnsupportedOperationException(
                     "No flow mod builder for protocol version " + factory.getVersion());

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -133,7 +133,6 @@ public class VirtualNetworkIntentManagerTest extends TestDeviceParams {
         manager = new VirtualNetworkManager();
         manager.store = virtualNetworkManagerStore;
         NetTestTools.injectEventDispatcher(manager, new TestEventDispatcher());
-        manager.intentService = intentService;
         intentService.addListener(listener);
 
         // Register a compiler and an installer both setup for success.
@@ -218,9 +217,7 @@ public class VirtualNetworkIntentManagerTest extends TestDeviceParams {
         virtualNetworkManagerStore.updateLink(link4, link4.tunnelId(), Link.State.ACTIVE);
 
         vnetIntentService = new VirtualNetworkIntentManager(manager, virtualNetwork.id());
-        vnetIntentService.intentService = intentService;
         vnetIntentService.intentStore = intentStore;
-        vnetIntentService.partitionService = workPartitionService;
         return virtualNetwork;
     }
 

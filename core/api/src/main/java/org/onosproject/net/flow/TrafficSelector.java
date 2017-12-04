@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package org.onosproject.net.flow;
 
+import com.google.common.annotations.Beta;
 import org.onlab.packet.Ip4Address;
 import org.onlab.packet.Ip6Address;
 import org.onlab.packet.IpPrefix;
@@ -26,6 +27,7 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.ExtensionSelector;
+import org.onosproject.net.flow.criteria.PiCriterion;
 
 import java.util.Set;
 
@@ -455,6 +457,15 @@ public interface TrafficSelector {
          * @return a selection builder
          */
         Builder matchArpOp(int arpOp);
+
+        /**
+         * Matches protocol independent fields.
+         *
+         * @param piCriterion protocol-independent criterion
+         * @return a selection builder
+         */
+        @Beta
+        Builder matchPi(PiCriterion piCriterion);
 
         /**
          * Uses an extension selector.

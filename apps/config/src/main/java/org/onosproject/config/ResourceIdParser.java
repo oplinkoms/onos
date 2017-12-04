@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,10 @@
  */
 package org.onosproject.config;
 
+import java.util.Arrays;
 import java.util.Iterator;
 
+import java.util.LinkedList;
 import java.util.List;
 
 import org.onosproject.yang.model.KeyLeaf;
@@ -24,18 +26,48 @@ import org.onosproject.yang.model.LeafListKey;
 import org.onosproject.yang.model.ListKey;
 import org.onosproject.yang.model.NodeKey;
 import org.onosproject.yang.model.ResourceId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.Beta;
+
+// FIXME add non-trivial examples
 /**
  * Utilities to work on the ResourceId.
+ * <p>
+ * Examples:
+ * <dl>
+ *  <dt>root node</dt>
+ *   <dd>root</dd>
+ * </dl>
+ *
  */
 //FIXME add javadocs
+@Beta
 public final class ResourceIdParser {
 
+    private static final Logger log = LoggerFactory.getLogger(ResourceIdParser.class);
+
+    /**
+     * root node name.
+     */
     public static final String ROOT = "root";
+
+    /**
+     * Separator between SchemaId components and value part.
+     */
     public static final String NM_SEP = "#";
+    // TODO not used in #parseResId(ResourceId)??
     public static final String VAL_SEP = "@";
+    /**
+     * Separator between ListKey schemaId and keyLeafs.
+     */
     public static final String KEY_SEP = "$";
+    /**
+     * Separator between {@code NodeKey}s (~=tree nodes).
+     */
     public static final String EL_SEP = "|";
+
     public static final String VAL_CHK = "\\@";
     public static final String KEY_CHK = "\\$";
     public static final String NM_CHK = "\\#";
@@ -44,12 +76,6 @@ public final class ResourceIdParser {
 
     private ResourceIdParser() {
 
-    }
-
-    public static ResourceId getParent(ResourceId path) {
-        int last = path.nodeKeys().size();
-        path.nodeKeys().remove(last - 1);
-        return path;
     }
 
     public static NodeKey getInstanceKey(ResourceId path) {
@@ -92,15 +118,18 @@ public final class ResourceIdParser {
         return ret;
     }
 
-
     public static String appendMultiInstKey(String path, String leaf) {
         return (path + leaf.substring(leaf.indexOf(KEY_SEP)));
     }
 
+    // 1.12.0 - not used by anyone
+    @Deprecated
     public static String appendKeyLeaf(String path, String key) {
         return (path + EL_SEP + key);
     }
 
+    // 1.12.0 - not used by anyone
+    @Deprecated
     public static String appendKeyLeaf(String path, KeyLeaf key) {
         StringBuilder bldr = new StringBuilder();
         bldr.append(key.leafSchema().name());
@@ -112,6 +141,7 @@ public final class ResourceIdParser {
     }
 
     public static String appendNodeKey(String path, NodeKey key) {
+        // FIXME this is not handling root path exception
         return (path + EL_SEP + key.schemaId().name() + NM_SEP + key.schemaId().namespace());
     }
 
@@ -140,6 +170,8 @@ public final class ResourceIdParser {
         return (path + bldr.toString());
     }
 
+    // 1.12.0 - not used by anyone
+    @Deprecated
     public static String parseNodeKey(NodeKey key) {
         if (key == null) {
             return null;
@@ -155,13 +187,37 @@ public final class ResourceIdParser {
         return bldr.toString();
     }
 
+    /**
+     * Gets String representation of ResourceId.
+     * <p>
+     * <pre>
+     *   ResourceId := 'root' ('|' element)*
+     *   element := LeafListKey | ListKey | NodeKey
+     *   SchemaId := [string SchemaId#name] '#' [string SchemaId#namespace]
+     *   LeafListKey := SchemaId '#' [string representation of LeafListKey#value]
+     *   ListKey := SchemaId (KeyLeaf)*
+     *   KeyLeaf := '$' SchemaId '#' [string representation of KeyLeaf#leafValue]
+     *   NodeKey := SchemaId
+     * </pre>
+     *
+     * @param path to convert
+     * @return String representation
+     */
     public static String parseResId(ResourceId path) {
         StringBuilder bldr = new StringBuilder();
         bldr.append(ROOT);
         if (path == null) {
             return bldr.toString();
         }
-        List<NodeKey> nodeKeyList = path.nodeKeys();
+        List<NodeKey> nodeKeyList = new LinkedList<>();
+        Iterator<NodeKey> itr = path.nodeKeys().iterator();
+        while (itr.hasNext()) {
+            nodeKeyList.add(itr.next());
+        }
+        // exception for dealing with root
+        if (nodeKeyList.get(0).schemaId().name().equals("/")) {
+            nodeKeyList.remove(0);
+        }
         for (NodeKey key : nodeKeyList) {
             bldr.append(EL_SEP);
             if (key instanceof LeafListKey) {
@@ -173,6 +229,17 @@ public final class ResourceIdParser {
             }
         }
         return bldr.toString();
+    }
+
+    public static String[] getService(ResourceId path) {
+        String[] res = new String[2];
+        if (path == null) {
+            return res;
+        }
+        int last = path.nodeKeys().size() - 1;
+        res[0] = path.nodeKeys().get(last - 1).schemaId().name();
+        res[1] = path.nodeKeys().get(last).schemaId().name();
+        return res;
     }
 
     private static void parseLeafList(LeafListKey key, StringBuilder bldr) {
@@ -213,6 +280,7 @@ public final class ResourceIdParser {
         while (itr.hasNext()) {
             String name = itr.next();
             if (name.contains(VAL_SEP)) {
+                // dead branch? VAL_SEP never used in parseResId
                 resBldr.addLeafListBranchPoint(name.substring(0, name.indexOf(NM_SEP)),
                         name.substring(name.indexOf(NM_SEP) + 1, name.indexOf(VAL_SEP)),
                         name.substring(name.indexOf(VAL_SEP) + 1));
@@ -226,7 +294,15 @@ public final class ResourceIdParser {
                     if (el.length != 3) {
                         throw new FailedException("Malformed event subject, cannot parse");
                     }
+                    try {
                     resBldr.addKeyLeaf(el[0], el[1], el[2]);
+                    } catch (Exception e) {
+                        log.error("dpath={}", dpath);
+                        log.error("name={}", name);
+                        log.error("key={}", key);
+                        log.error("el={}", Arrays.asList(el));
+                        throw e;
+                    }
                 }
             } else {
                 resBldr.addBranchPointSchema(name.substring(0, name.indexOf(NM_SEP)),

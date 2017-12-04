@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import org.onlab.util.ItemNotFoundException;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
+import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.behaviour.NextGroup;
 import org.onosproject.net.behaviour.Pipeliner;
@@ -38,7 +39,9 @@ import org.onosproject.net.behaviour.PipelinerContext;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.driver.DriverEvent;
 import org.onosproject.net.driver.DriverHandler;
+import org.onosproject.net.driver.DriverListener;
 import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.flow.FlowRuleService;
 import org.onosproject.net.flowobjective.FilteringObjective;
@@ -68,6 +71,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 import static org.onlab.util.Tools.groupedThreads;
+import static org.onosproject.net.AnnotationKeys.DRIVER;
 import static org.onosproject.security.AppGuard.checkPermission;
 import static org.onosproject.security.AppPermission.Type.FLOWRULE_WRITE;
 
@@ -124,6 +128,7 @@ public class FlowObjectiveManager implements FlowObjectiveService {
 
     private final PipelinerContext context = new InnerPipelineContext();
     private final DeviceListener deviceListener = new InnerDeviceListener();
+    private final DriverListener driverListener = new InnerDriverListener();
 
     protected ServiceDirectory serviceDirectory = new DefaultServiceDirectory();
 
@@ -149,6 +154,7 @@ public class FlowObjectiveManager implements FlowObjectiveService {
                                              groupedThreads(GROUP_THREAD_NAME, WORKER_PATTERN, log));
         flowObjectiveStore.setDelegate(delegate);
         deviceService.addListener(deviceListener);
+        driverService.addListener(driverListener);
         log.info("Started");
     }
 
@@ -157,6 +163,7 @@ public class FlowObjectiveManager implements FlowObjectiveService {
         cfgService.unregisterProperties(getClass(), false);
         flowObjectiveStore.unsetDelegate(delegate);
         deviceService.removeListener(deviceListener);
+        driverService.removeListener(driverListener);
         executorService.shutdown();
         pipeliners.clear();
         driverHandlers.clear();
@@ -270,7 +277,8 @@ public class FlowObjectiveManager implements FlowObjectiveService {
     }
 
     @Override
-    public void initPolicy(String policy) {}
+    public void initPolicy(String policy) {
+    }
 
     private boolean queueFwdObjective(DeviceId deviceId, ForwardingObjective fwd) {
         boolean queued = false;
@@ -291,7 +299,7 @@ public class FlowObjectiveManager implements FlowObjectiveService {
             }
         }
         if (queued) {
-            log.debug("Queued forwarding objective {} for nextId {} meant for device {}",
+            log.info("Queued forwarding objective {} for nextId {} meant for device {}",
                       fwd.id(), fwd.nextId(), deviceId);
         }
         return queued;
@@ -319,7 +327,7 @@ public class FlowObjectiveManager implements FlowObjectiveService {
             }
         }
         if (queued) {
-            log.debug("Queued next objective {} with operation {} meant for device {}",
+            log.info("Queued next objective {} with operation {} meant for device {}",
                       next.id(), next.op(), deviceId);
         }
         return queued;
@@ -402,6 +410,24 @@ public class FlowObjectiveManager implements FlowObjectiveService {
         return pipeliner;
     }
 
+    private void invalidatePipelinerIfNecessary(Device device) {
+        DriverHandler handler = driverHandlers.get(device.id());
+        if (handler != null &&
+                !Objects.equals(handler.driver().name(),
+                                device.annotations().value(DRIVER))) {
+            invalidatePipeliner(device.id());
+        }
+    }
+
+    private void invalidatePipeliner(DeviceId id) {
+        log.info("Invalidating cached pipeline behaviour for {}", id);
+        driverHandlers.remove(id);
+        pipeliners.remove(id);
+        if (deviceService.isAvailable(id)) {
+            getAndInitDevicePipeliner(id);
+        }
+    }
+
     // Triggers driver setup when a device is (re)detected.
     private class InnerDeviceListener implements DeviceListener {
         @Override
@@ -419,6 +445,9 @@ public class FlowObjectiveManager implements FlowObjectiveService {
                     }
                     break;
                 case DEVICE_UPDATED:
+                    // Invalidate pipeliner and handler caches if the driver name
+                    // device annotation changed.
+                    invalidatePipelinerIfNecessary(event.subject());
                     break;
                 case DEVICE_REMOVED:
                     // evict Pipeliner and Handler cache, when
@@ -441,6 +470,22 @@ public class FlowObjectiveManager implements FlowObjectiveService {
                 default:
                     break;
             }
+        }
+    }
+
+    // Monitors driver configuration changes and invalidates the pipeliner cache entries.
+    // Note that this may leave stale entries on the device if the driver changes
+    // in manner where the new driver does not produce backward compatible flow objectives.
+    // In such cases, it is the operator's responsibility to force device re-connect.
+    private class InnerDriverListener implements DriverListener {
+        @Override
+        public void event(DriverEvent event) {
+            String driverName = event.subject().name();
+            driverHandlers.entrySet().stream()
+                    .filter(e -> driverName.equals(e.getValue().driver().name()))
+                    .map(Map.Entry::getKey)
+                    .distinct()
+                    .forEach(FlowObjectiveManager.this::invalidatePipeliner);
         }
     }
 

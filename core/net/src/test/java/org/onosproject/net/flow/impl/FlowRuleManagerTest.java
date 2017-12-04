@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowEntry.FlowEntryState;
 import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.FlowRuleBatchOperation;
+import org.onosproject.net.flow.oldbatch.FlowRuleBatchOperation;
 import org.onosproject.net.flow.FlowRuleEvent;
 import org.onosproject.net.flow.FlowRuleListener;
 import org.onosproject.net.flow.FlowRuleProgrammable;
@@ -360,7 +360,7 @@ public class FlowRuleManagerTest {
                            f3, FlowEntryState.PENDING_ADD)));
 
         validateEvents(RULE_ADD_REQUESTED, RULE_ADD_REQUESTED, RULE_ADD_REQUESTED,
-                       RULE_ADDED, RULE_ADDED);
+                       RULE_ADDED, RULE_ADDED, RULE_ADD_REQUESTED);
     }
 
     @Test
@@ -664,8 +664,18 @@ public class FlowRuleManagerTest {
         }
 
         @Override
+        public Instructions.StatTriggerInstruction statTrigger() {
+            return null;
+        }
+
+        @Override
         public Instructions.MeterInstruction metered() {
             return null;
+        }
+
+        @Override
+        public Set<Instructions.MeterInstruction> meters() {
+            return Sets.newHashSet();
         }
 
     }

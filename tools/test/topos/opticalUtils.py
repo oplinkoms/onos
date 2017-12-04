@@ -263,8 +263,8 @@ class LINCSwitch(OpticalSwitch):
     ### sys.config path ###
     sysConfig = "/home/{}/linc-oe/rel/linc/releases/1.0/sys.config".format(user)
     ### dict of containing dpids as key and corresponding LINC switchId as values ###
-    dpidsToLINCSwitchId = dpids_to_ids.__func__(sysConfig)
-    
+    dpidsToLINCSwitchId = dpids_to_ids(sysConfig)
+
     ### ONOS Directory ###
     try:
         onosDir = os.environ[ 'ONOS_ROOT' ]
@@ -274,6 +274,12 @@ class LINCSwitch(OpticalSwitch):
             error('Please set ONOS_ROOT environment variable!\n')
         else:
             os.environ[ 'ONOS_ROOT' ] = onosDir
+    ### ONOS-netcfg directory ###
+    try:
+        runPackDir = os.environ[ 'RUN_PACK_PATH' ]
+    except:
+        runPackDir = onosDir+"/tools/package/runtime/bin"
+        os.environ[ 'RUN_PACK_PATH' ] = runPackDir
     ### REST USER/PASS ###
     try:
         restUser = os.environ[ 'ONOS_WEB_USER' ]
@@ -286,11 +292,11 @@ class LINCSwitch(OpticalSwitch):
         os.environ[ 'ONOS_WEB_USER' ] = restUser
         os.environ[ 'ONOS_WEB_PASS' ] = restPass
     ### LINC-directory
-    lincDir = findDir.__func__('linc-oe', user)
+    lincDir = findDir('linc-oe', user)
     if not lincDir:
         error("***ERROR: Could not find linc-oe in user's home directory\n")
     ### LINC config generator directory###
-    configGen = findDir.__func__('LINC-config-generator', user)
+    configGen = findDir('LINC-config-generator', user)
     if not configGen:
         error("***ERROR: Could not find LINC-config-generator in user's home directory\n")
     # list of all the controllers
@@ -412,8 +418,8 @@ class LINCSwitch(OpticalSwitch):
         with open("crossConnect.json", 'w') as fd:
             json.dump(crossConnectJSON, fd, indent=4, separators=(',', ': '))
         info('*** Pushing crossConnect.json to ONOS\n')
-        output = quietRun('%s/tools/test/bin/onos-netcfg %s\
-         Topology.json' % (self.onosDir, self.controllers[ 0 ].ip), shell=True)
+        output = quietRun('%s/onos-netcfg %s\
+         Topology.json' % (self.runPackDir, self.controllers[ 0 ].ip), shell=True)
 
     def stop_oe(self):
         '''
@@ -490,7 +496,7 @@ class LINCSwitch(OpticalSwitch):
 
         topoConfigJson = {}
 
-        topoConfigJson["switchConfig"] = LINCSwitch.getSwitchConfig(net.switches)
+        topoConfigJson["switchConfig"] = getSwitchConfig(net.switches)
         topoConfigJson["linkConfig"] = getLinkConfig(net.links)
 
         #Writing to TopoConfig.json
@@ -578,8 +584,8 @@ class LINCSwitch(OpticalSwitch):
 
         info('*** Pushing Topology.json to ONOS\n')
         for index in range(len(LINCSwitch.controllers)):
-            output = quietRun('%s/tools/test/bin/onos-netcfg %s Topology.json &'\
-                               % (LINCSwitch.onosDir, LINCSwitch.controllers[ index ].ip), shell=True)
+            output = quietRun('%s/onos-netcfg %s Topology.json &'\
+                               % (LINCSwitch.runPackDir, LINCSwitch.controllers[ index ].ip), shell=True)
             # successful output contains the two characters '{}'
             # if there is more output than this, there is an issue
             if output.strip('{}'):

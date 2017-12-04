@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,25 +18,28 @@ package org.onosproject.drivers.ciena;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.apache.commons.configuration.HierarchicalConfiguration;
+import org.onlab.packet.ChassisId;
 import org.onosproject.drivers.utilities.XmlConfigParser;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.ChannelSpacing;
 import org.onosproject.net.CltSignalType;
 import org.onosproject.net.DefaultAnnotations;
+import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.GridType;
 import org.onosproject.net.OchSignal;
 import org.onosproject.net.OduSignalType;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.SparseAnnotations;
+import org.onosproject.net.device.DefaultDeviceDescription;
 import org.onosproject.net.device.DeviceDescription;
 import org.onosproject.net.device.DeviceDescriptionDiscovery;
+import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.device.PortDescription;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.protocol.rest.RestSBController;
 import org.slf4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -47,6 +50,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Discovers the ports from a Ciena WaveServer Rest device.
  */
+//TODO: Use CienaRestDevice
 public class CienaWaveserverDeviceDescription extends AbstractHandlerBehaviour
         implements DeviceDescriptionDiscovery {
 
@@ -60,17 +64,36 @@ public class CienaWaveserverDeviceDescription extends AbstractHandlerBehaviour
     private static final String PORT_IN = "properties.line-system.cmd.port-in";
     private static final String PORT_OUT = "properties.line-system.cmd.port-out";
 
-    private static final ArrayList<String> LINESIDE_PORT_ID = Lists.newArrayList(
-            "4", "48");
+    private static final String CHANNEL_ID =
+            "properties.transmitter.line-system-channel-number";
 
     private static final String PORT_REQUEST =
             "ciena-ws-ptp:ws-ptps?config=true&format=xml&depth=unbounded";
 
     @Override
     public DeviceDescription discoverDeviceDetails() {
-        log.info("No description to be added for device");
-        //TODO to be implemented if needed.
-        return null;
+        log.debug("getting device description");
+        DeviceService deviceService = checkNotNull(handler().get(DeviceService.class));
+        DeviceId deviceId = handler().data().deviceId();
+        Device device = deviceService.getDevice(deviceId);
+
+        if (device == null) {
+            return new DefaultDeviceDescription(deviceId.uri(),
+                                                Device.Type.OTN,
+                                                "Ciena",
+                                                "WaveServer",
+                                                "Unknown",
+                                                "Unknown",
+                                                new ChassisId());
+        } else {
+            return new DefaultDeviceDescription(device.id().uri(),
+                                                Device.Type.OTN,
+                                                device.manufacturer(),
+                                                device.hwVersion(),
+                                                device.swVersion(),
+                                                device.serialNumber(),
+                                                device.chassisId());
+        }
     }
 
     @Override
@@ -79,6 +102,18 @@ public class CienaWaveserverDeviceDescription extends AbstractHandlerBehaviour
     }
 
     private List<PortDescription> getPorts() {
+        /*
+         * Relationship between ptp-index and port number shown in Ciena Wave Server
+         * CLI:
+         *      ptp-index = 4 * port_number (without decimal) + decimal
+         *      e.g
+         *          if port_number is 5 then ptp-index = 5 * 4 + 0 = 20
+         *          if port_number is 5.1 then ptp-index = 5 * 4 + 1 = 21
+         *
+         * Relationship between channelId and in/out port:
+         *      in_port = channelId * 2
+         *      out_port = channelId * 2 -1
+         */
         List<PortDescription> ports = Lists.newArrayList();
         RestSBController controller = checkNotNull(handler().get(RestSBController.class));
         DeviceId deviceId = handler().data().deviceId();
@@ -90,21 +125,16 @@ public class CienaWaveserverDeviceDescription extends AbstractHandlerBehaviour
         portsConfig.forEach(sub -> {
             String portId = sub.getString(PORT_ID);
             DefaultAnnotations.Builder annotations = DefaultAnnotations.builder();
-
-            if (LINESIDE_PORT_ID.contains(portId)) {
-                // TX port
-                annotations.set(AnnotationKeys.PORT_NAME, portId + " TX");
+            if (CienaRestDevice.getLinesidePortId().contains(portId)) {
+                annotations.set(AnnotationKeys.CHANNEL_ID, sub.getString(CHANNEL_ID));
+                // TX/OUT and RX/IN ports
+                annotations.set(AnnotationKeys.PORT_OUT, sub.getString(PORT_OUT));
+                annotations.set(AnnotationKeys.PORT_IN, sub.getString(PORT_IN));
                 ports.add(parseWaveServerCienaOchPorts(
-                        sub.getLong(PORT_OUT),
+                        Long.valueOf(portId),
                         sub,
                         annotations.build()));
 
-                // RX port
-                annotations.set(AnnotationKeys.PORT_NAME, portId + " RX");
-                ports.add(parseWaveServerCienaOchPorts(
-                        sub.getLong(PORT_IN),
-                        sub,
-                        annotations.build()));
             } else if (!portId.equals("5") && !portId.equals("49")) {
                 DefaultAnnotations.builder()
                         .set(AnnotationKeys.PORT_NAME, portId);
@@ -139,8 +169,8 @@ public class CienaWaveserverDeviceDescription extends AbstractHandlerBehaviour
 
         //Working in Ghz //(Nominal central frequency - 193.1)/channelSpacing = spacingMultiplier
         final int baseFrequency = 193100;
-        int spacingMult = (int) (toGbps(((int) config.getDouble(frequency) -
-                baseFrequency)) / toGbpsFromHz(chSpacing.frequency().asHz())); //FIXME is there a better way ?
+        int spacingMult = ((int) (toGbps(((int) config.getDouble(frequency) -
+                baseFrequency)) / toGbpsFromHz(chSpacing.frequency().asHz()))); //FIXME is there a better way ?
 
         return ochPortDescription(PortNumber.portNumber(portNumber), isEnabled, OduSignalType.ODU4, isTunable,
                                   new OchSignal(gridType, chSpacing, spacingMult, 1), annotations);

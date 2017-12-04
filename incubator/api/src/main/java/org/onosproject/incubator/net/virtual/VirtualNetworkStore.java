@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -166,6 +166,17 @@ public interface VirtualNetworkStore
                         PortNumber portNumber, ConnectPoint realizedBy);
 
     /**
+     * Updates port state of an existing virtual port.
+     *
+     * @param networkId  network identifier
+     * @param deviceId   device identifier
+     * @param portNumber port number
+     * @param isEnabled  indicator whether the port is up and active
+     */
+     void updatePortState(NetworkId networkId, DeviceId deviceId,
+                        PortNumber portNumber, boolean isEnabled);
+
+    /**
      * Removes the specified port from the given device and network.
      *
      * @param networkId  network identifier
@@ -239,7 +250,9 @@ public interface VirtualNetworkStore
      *
      * @param intent   intent
      * @param tunnelId tunnel identifier
+     * @deprecated in Kingfisher Release (1.10)
      */
+    @Deprecated
     void addTunnelId(Intent intent, TunnelId tunnelId);
 
     /**
@@ -247,7 +260,9 @@ public interface VirtualNetworkStore
      *
      * @param intent intent
      * @return set of tunnel identifiers
+     * @deprecated in Kingfisher Release (1.10)
      */
+    @Deprecated
     Set<TunnelId> getTunnelIds(Intent intent);
 
     /**
@@ -255,6 +270,8 @@ public interface VirtualNetworkStore
      *
      * @param intent   intent
      * @param tunnelId tunnel identifier
+     * @deprecated in Kingfisher Release (1.10)
      */
+    @Deprecated
     void removeTunnelId(Intent intent, TunnelId tunnelId);
 }

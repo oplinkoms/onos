@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,13 +26,13 @@
 
     var remappedDeviceTypes = {
         switch: 'm_switch',
-        virtual: 'cord'
+        virtual: 'cord',
     };
 
     function createDeviceCollection(data) {
 
         var DeviceCollection = Collection.extend({
-            model: Model
+            model: Model,
         });
 
         var devices = [];
@@ -58,7 +58,7 @@
                     nodeType: 'device',
                     multiSelectEnabled: true,
                     events: {
-                        'click': 'onClick'
+                        'click': 'onClick',
                     },
 
                     initialize: function () {
@@ -88,11 +88,12 @@
                         var id = this.mastershipService.mastership(),
                             suppress = id ? this.get('master') !== id : false;
 
-                        this.set({mastership: suppress});
+                        this.set({ mastership: suppress });
                     },
                     setOfflineVisibility: function () {
                         var showOffline = ps.getPrefs('topo2_prefs')['offline_devices'],
                             display = this.get('online') || showOffline;
+
                         this.el.style('visibility', display ? 'visible' : 'hidden');
                     },
                     onExit: function () {
@@ -107,13 +108,13 @@
                             .style('stroke-fill', '#555')
                             .style('fill', '#888')
                             .style('opacity', 0.5);
-                    }
+                    },
                 });
 
                 return {
-                    createDeviceCollection: createDeviceCollection
+                    createDeviceCollection: createDeviceCollection,
                 };
-            }
+            },
         ]);
 
 })();

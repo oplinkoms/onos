@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,16 +39,16 @@
         light: {
             baseColor: '#939598',
             inColor: '#66f',
-            outColor: '#f00'
+            outColor: '#f00',
         },
         dark: {
             // TODO : theme
             baseColor: '#939598',
             inColor: '#66f',
-            outColor: '#f00'
+            outColor: '#f00',
         },
         inWidth: 12,
-        outWidth: 10
+        outWidth: 10,
     };
 
     function createLink() {
@@ -62,8 +62,8 @@
                 x1: 0,
                 y1: 0,
                 x2: 0,
-                y2: 0
-            }
+                y2: 0,
+            },
             // functions to aggregate dual link state
             // extra: link.extra
         });
@@ -109,7 +109,7 @@
 
         return {
             source: sourceNode,
-            target: targetNode
+            target: targetNode,
         };
     }
 
@@ -134,7 +134,7 @@
                     {
                         enhanced: this.get('enhanced'),
                         selected: this.get('selected'),
-                        suppressedmax: this.get('mastership')
+                        suppressedmax: this.get('mastership'),
                     },
                     (this.linkLabel) ? this.linkLabel.linkLabelCSSClass() : null
                 );
@@ -163,12 +163,17 @@
                 var data = [],
                     point;
 
+                var hostsVisible = ps.getPrefs('topo2_prefs')['hosts'];
+                if (!hostsVisible && this.get('type') === 'UiEdgeLink') {
+                    return;
+                }
+
                 if (showPort()) {
                     this.set('enhanced', true);
                     point = this.locatePortLabel();
                     angular.extend(point, {
                         id: 'topo2-port-tgt',
-                        num: this.get('portB')
+                        num: this.get('portB'),
                     });
                     data.push(point);
 
@@ -176,7 +181,7 @@
                         point = this.locatePortLabel(1);
                         angular.extend(point, {
                             id: 'topo2-port-src',
-                            num: this.get('portA')
+                            num: this.get('portA'),
                         });
                         data.push(point);
                     }
@@ -224,8 +229,8 @@
                     x1: this.get('source').x,
                     y1: this.get('source').y,
                     x2: this.get('target').x,
-                    y2: this.get('target').y
-                }
+                    y2: this.get('target').y,
+                };
             },
             calcMovement: function (amt, flipped) {
                 var pos = this.defaultPosition(),
@@ -238,7 +243,7 @@
                     x1: pos.x1 + (mult * dy / length),
                     y1: pos.y1 + (mult * -dx / length),
                     x2: pos.x2 + (mult * dy / length),
-                    y2: pos.y2 + (mult * -dx / length)
+                    y2: pos.y2 + (mult * -dx / length),
                 };
             },
             setPosition: function () {
@@ -282,7 +287,7 @@
             deselect: function () {
                 this.set({
                     'selected': false,
-                    'enhanced': false
+                    'enhanced': false,
                 });
             },
             showDetails: function () {
@@ -394,7 +399,7 @@
                 this.el.style('visibility', visible ? 'visible' : 'hidden');
             },
             displayMastership: function () {
-                this.set({ mastership: t2mss.mastership() !== null});
+                this.set({ mastership: t2mss.mastership() !== null });
             },
             remove: function () {
 
@@ -407,11 +412,11 @@
                     .transition()
                     .delay(1000)
                     .style('opacity', 0);
-            }
+            },
         });
 
         var LinkCollection = Collection.extend({
-            model: LinkModel
+            model: LinkModel,
         });
 
         return new LinkCollection(data);
@@ -444,8 +449,8 @@
             t2ts = _t2ts_;
 
             return {
-                createLinkCollection: createLinkCollection
+                createLinkCollection: createLinkCollection,
             };
-        }
+        },
     ]);
 })();

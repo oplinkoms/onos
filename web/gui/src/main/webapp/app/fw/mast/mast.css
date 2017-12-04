@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,7 +88,7 @@ html[data-platform='iPad'] #mast {
     height: 7px;
     width: 9px;
     margin-left: 10px;
-    background: url('../../../data/img/dropdown-icon.png') no-repeat;
+    background: url('/onos/ui/data/img/dropdown-icon.png') no-repeat;
 }
 
 #mast .dropdown {

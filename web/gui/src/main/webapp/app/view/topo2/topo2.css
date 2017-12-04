@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -83,6 +83,13 @@
 
 .breadcrumb--hidden #topo2-p-instance.floatpanel {
     top: 64px;
+}
+
+#topo2-p-instance .instTitle {
+    font-size: 11pt;
+    font-weight: bold;
+    font-variant: small-caps;
+    text-transform: uppercase;
 }
 
 /* -- Base Device Styles -- */

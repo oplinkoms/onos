@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,5 @@ public class UiClusterMemberTest extends AbstractUiModelTest {
 
         assertEquals("wrong id", NODE_ID, member.id());
         assertEquals("wrong IP", NODE_IP, member.ip());
-        assertEquals("unex. online", false, member.isOnline());
-        assertEquals("unex. ready", false, member.isReady());
     }
 }

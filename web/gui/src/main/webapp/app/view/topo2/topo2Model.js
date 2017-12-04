@@ -1,5 +1,5 @@
 /*
-* Copyright 2016-present Open Networking Laboratory
+* Copyright 2016-present Open Networking Foundation
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -117,7 +117,7 @@ Visualization of the topology in an SVG layer, using a D3 Force Layout.
             if (this.collection) {
                 this.collection.remove(this);
             }
-        }
+        },
     };
 
     angular.module('ovTopo2')
@@ -127,6 +127,6 @@ Visualization of the topology in an SVG layer, using a D3 Force Layout.
             Model.extend = fn.extend;
 
             return Model;
-        }
+        },
     ]);
 })();

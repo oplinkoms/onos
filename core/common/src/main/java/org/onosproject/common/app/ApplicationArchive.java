@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -199,13 +199,11 @@ public class ApplicationArchive
             checkState(!appFile(desc.name(), APP_XML).exists(),
                     "Application %s already installed", desc.name());
 
-            boolean isSelfContainedJar = false;
-
             if (plainXml) {
                 expandPlainApplication(cache, desc);
             } else {
                 bis.reset();
-                isSelfContainedJar = expandZippedApplication(bis, desc);
+                boolean isSelfContainedJar = expandZippedApplication(bis, desc);
 
                 if (isSelfContainedJar) {
                     bis.reset();
@@ -254,7 +252,7 @@ public class ApplicationArchive
 
     /**
      * Returns application archive stream for the specified application. This
-     * will be either the application ZIP file or the application XML file.
+     * will be either the application OAR file, JAR file or the plain XML file.
      *
      * @param appName application name
      * @return application archive stream
@@ -262,6 +260,9 @@ public class ApplicationArchive
     public synchronized InputStream getApplicationInputStream(String appName) {
         try {
             File appFile = appFile(appName, appName + OAR);
+            if (!appFile.exists()) {
+                appFile = appFile(appName, appName + JAR);
+            }
             return new FileInputStream(appFile.exists() ? appFile : appFile(appName, APP_XML));
         } catch (FileNotFoundException e) {
             throw new ApplicationException("Application " + appName + " not found");
@@ -327,10 +328,22 @@ public class ApplicationArchive
         // put short description to description field
         String desc = compactDescription(readme);
 
-        return new DefaultApplicationDescription(name, version, title, desc, origin,
-                                                 category, url, readme, icon,
-                                                 role, perms, featuresRepo,
-                                                 features, requiredApps);
+        return DefaultApplicationDescription.builder()
+            .withName(name)
+            .withVersion(version)
+            .withTitle(title)
+            .withDescription(desc)
+            .withOrigin(origin)
+            .withCategory(category)
+            .withUrl(url)
+            .withReadme(readme)
+            .withIcon(icon)
+            .withRole(role)
+            .withPermissions(perms)
+            .withFeaturesRepo(featuresRepo)
+            .withFeatures(features)
+            .withRequiredApps(requiredApps)
+            .build();
     }
 
     // Expands the specified ZIP stream into app-specific directory.
@@ -383,7 +396,7 @@ public class ApplicationArchive
 
         // Create the file directory structure and copy the file there.
         File jar = appFile(desc.name(), jarName);
-        boolean ok = jar.getParentFile().mkdirs();
+        boolean ok = jar.getParentFile().exists() || jar.getParentFile().mkdirs();
         if (ok) {
             Files.write(toByteArray(stream), jar);
             Files.copy(appFile(desc.name(), FEATURES_XML), appFile(desc.name(), featuresName));
@@ -402,7 +415,9 @@ public class ApplicationArchive
             cfg.setAttributeSplittingDisabled(true);
             cfg.setDelimiterParsingDisabled(true);
             cfg.load(appFile(desc.name(), FEATURES_XML));
-            return cfg.getString("feature.bundle");
+            return cfg.getString("feature.bundle")
+                    .replaceFirst("wrap:", "")
+                    .replaceFirst("\\$Bundle-.*$", "");
         } catch (ConfigurationException e) {
             log.warn("Self-contained application {} has no features.xml", desc.name());
             return null;

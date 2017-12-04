@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,34 +18,34 @@ package org.onosproject.drivers.huawei;
 
 import org.onosproject.l3vpn.netl3vpn.BgpDriverInfo;
 import org.onosproject.l3vpn.netl3vpn.BgpInfo;
-import org.onosproject.l3vpn.netl3vpn.BgpModelIdLevel;
+import org.onosproject.l3vpn.netl3vpn.ModelIdLevel;
 import org.onosproject.l3vpn.netl3vpn.ProtocolInfo;
 import org.onosproject.l3vpn.netl3vpn.RouteProtocol;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.DefaultDevices;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.Devices;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.DefaultDevice;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.Device;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.DeviceKeys;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.Bgp;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.DefaultBgp;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.Bgpcomm;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.DefaultBgpcomm;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.BgpVrfs;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.DefaultBgpVrfs;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.BgpVrf;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.BgpVrfKeys;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.DefaultBgpVrf;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.BgpVrfAfs;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.DefaultBgpVrfAfs;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.BgpVrfAf;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.BgpVrfAfKeys;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.DefaultBgpVrfAf;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.bgpvrfaf.DefaultImportRoutes;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.bgpvrfaf.ImportRoutes;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.bgpvrfaf.importroutes.DefaultImportRoute;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.bgpvrfaf.importroutes.ImportRoute;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.type.rev20141225.nebgpcommtype.BgpcommImRouteProtocol;
-import org.onosproject.yang.gen.v1.ne.bgpcomm.type.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.DefaultDevices;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.Devices;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.DefaultDevice;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.Device;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.DeviceKeys;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.Bgp;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.DefaultBgp;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.Bgpcomm;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.DefaultBgpcomm;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.BgpVrfs;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.DefaultBgpVrfs;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.BgpVrf;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.BgpVrfKeys;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.DefaultBgpVrf;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.BgpVrfAfs;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.DefaultBgpVrfAfs;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.BgpVrfAf;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.BgpVrfAfKeys;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.DefaultBgpVrfAf;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.bgpvrfaf.DefaultImportRoutes;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.bgpvrfaf.ImportRoutes;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.bgpvrfaf.importroutes.DefaultImportRoute;
+import org.onosproject.yang.gen.v1.nebgpcomm.rev20141225.nebgpcomm.devices.device.bgp.bgpcomm.bgpvrfs.bgpvrf.bgpvrfafs.bgpvrfaf.importroutes.ImportRoute;
+import org.onosproject.yang.gen.v1.nebgpcommtype.rev20141225.nebgpcommtype.BgpcommImRouteProtocol;
+import org.onosproject.yang.gen.v1.nebgpcommtype.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum;
 import org.onosproject.yang.model.InnerModelObject;
 import org.onosproject.yang.model.ModelObjectData;
 import org.onosproject.yang.model.ModelObjectId;
@@ -56,14 +56,14 @@ import java.util.Map;
 
 import static org.onosproject.drivers.huawei.DriverUtil.UNSUPPORTED_MODEL_LVL;
 import static org.onosproject.drivers.huawei.DriverUtil.getData;
-import static org.onosproject.yang.gen.v1.ne.bgpcomm.type.rev20141225.nebgpcommtype.BgpcommPrefixType.of;
-import static org.onosproject.yang.gen.v1.ne.bgpcomm.type.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum.DIRECT;
-import static org.onosproject.yang.gen.v1.ne.bgpcomm.type.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum.OSPF;
-import static org.onosproject.yang.gen.v1.ne.bgpcomm.type.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum.RIP;
-import static org.onosproject.yang.gen.v1.ne.bgpcomm.type.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum.RIPNG;
-import static org.onosproject.yang.gen.v1.ne.bgpcomm.type.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum.STATIC;
-import static org.onosproject.yang.gen.v1.ne.bgpcomm.type.rev20141225.nebgpcommtype.bgpcommprefixtype.BgpcommPrefixTypeEnum.IPV4UNI;
-import static org.onosproject.yang.gen.v1.ne.bgpcomm.type.rev20141225.nebgpcommtype.bgpcommprefixtype.BgpcommPrefixTypeEnum.IPV6UNI;
+import static org.onosproject.yang.gen.v1.nebgpcommtype.rev20141225.nebgpcommtype.BgpcommPrefixType.of;
+import static org.onosproject.yang.gen.v1.nebgpcommtype.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum.DIRECT;
+import static org.onosproject.yang.gen.v1.nebgpcommtype.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum.OSPF;
+import static org.onosproject.yang.gen.v1.nebgpcommtype.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum.RIP;
+import static org.onosproject.yang.gen.v1.nebgpcommtype.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum.RIPNG;
+import static org.onosproject.yang.gen.v1.nebgpcommtype.rev20141225.nebgpcommtype.bgpcommimrouteprotocol.BgpcommImRouteProtocolEnum.STATIC;
+import static org.onosproject.yang.gen.v1.nebgpcommtype.rev20141225.nebgpcommtype.bgpcommprefixtype.BgpcommPrefixTypeEnum.IPV4UNI;
+import static org.onosproject.yang.gen.v1.nebgpcommtype.rev20141225.nebgpcommtype.bgpcommprefixtype.BgpcommPrefixTypeEnum.IPV6UNI;
 
 /**
  * Representation of utility for BGP creation and deletion.
@@ -91,7 +91,7 @@ public final class BgpConstructionUtil {
     static ModelObjectData getCreateBgp(BgpInfo bgpInfo,
                                         BgpDriverInfo config) {
         String devId = config.devId();
-        BgpModelIdLevel modIdLevel = config.modIdLevel();
+        ModelIdLevel modIdLevel = config.modIdLevel();
 
         Bgp bgp = new DefaultBgp();
         Bgpcomm bgpBuilder = new DefaultBgpcomm();
@@ -246,7 +246,7 @@ public final class BgpConstructionUtil {
      * @param route      import route object
      * @return model object data
      */
-    public static ModelObjectData getModObjData(BgpModelIdLevel modIdLevel,
+    public static ModelObjectData getModObjData(ModelIdLevel modIdLevel,
                                                 Bgp bgp, String devId,
                                                 BgpVrf bgpVrf, ImportRoute route) {
         switch (modIdLevel) {
@@ -371,7 +371,7 @@ public final class BgpConstructionUtil {
      */
     static ModelObjectData getDeleteBgp(BgpInfo bgpInfo,
                                         BgpDriverInfo bgpConfig) {
-        BgpModelIdLevel modIdLvl = bgpConfig.modIdLevel();
+        ModelIdLevel modIdLvl = bgpConfig.modIdLevel();
         switch (modIdLvl) {
             case ROOT:
                 return getDelRootModObj();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,16 +32,16 @@ import org.onlab.packet.VlanId;
 import org.onosproject.TestApplicationId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreServiceAdapter;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceEvent;
-import org.onosproject.incubator.net.intf.InterfaceListener;
-import org.onosproject.incubator.net.intf.InterfaceService;
-import org.onosproject.incubator.net.intf.InterfaceServiceAdapter;
-import org.onosproject.incubator.net.routing.ResolvedRoute;
-import org.onosproject.incubator.net.routing.Route;
-import org.onosproject.incubator.net.routing.RouteEvent;
-import org.onosproject.incubator.net.routing.RouteListener;
-import org.onosproject.incubator.net.routing.RouteServiceAdapter;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceEvent;
+import org.onosproject.net.intf.InterfaceListener;
+import org.onosproject.net.intf.InterfaceService;
+import org.onosproject.net.intf.InterfaceServiceAdapter;
+import org.onosproject.routeservice.ResolvedRoute;
+import org.onosproject.routeservice.Route;
+import org.onosproject.routeservice.RouteEvent;
+import org.onosproject.routeservice.RouteListener;
+import org.onosproject.routeservice.RouteServiceAdapter;
 import org.onosproject.intentsync.IntentSynchronizationService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;

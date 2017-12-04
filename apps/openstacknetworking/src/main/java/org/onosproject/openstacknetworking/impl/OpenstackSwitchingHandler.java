@@ -1,5 +1,5 @@
 /*
-* Copyright 2016-present Open Networking Laboratory
+* Copyright 2016-present Open Networking Foundation
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -23,33 +23,53 @@ import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onlab.packet.Ethernet;
+import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
-import org.onosproject.net.flowobjective.FlowObjectiveService;
-import org.onosproject.net.flowobjective.ForwardingObjective;
+import org.onosproject.net.flow.instructions.ExtensionTreatment;
 import org.onosproject.openstacknetworking.api.InstancePort;
 import org.onosproject.openstacknetworking.api.InstancePortEvent;
 import org.onosproject.openstacknetworking.api.InstancePortListener;
 import org.onosproject.openstacknetworking.api.InstancePortService;
+import org.onosproject.openstacknetworking.api.OpenstackFlowRuleService;
+import org.onosproject.openstacknetworking.api.OpenstackNetworkEvent;
+import org.onosproject.openstacknetworking.api.OpenstackNetworkListener;
 import org.onosproject.openstacknetworking.api.OpenstackNetworkService;
-import org.onosproject.openstacknode.OpenstackNodeService;
+import org.onosproject.openstacknetworking.api.OpenstackSecurityGroupService;
+import org.onosproject.openstacknode.api.OpenstackNode;
+import org.onosproject.openstacknode.api.OpenstackNodeService;
 import org.openstack4j.model.network.Network;
+import org.openstack4j.model.network.NetworkType;
+import org.openstack4j.model.network.Port;
 import org.slf4j.Logger;
 
 import java.util.concurrent.ExecutorService;
 
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.openstacknetworking.api.Constants.*;
+import static org.onosproject.openstacknetworking.api.Constants.ACL_TABLE;
+import static org.onosproject.openstacknetworking.api.Constants.FORWARDING_TABLE;
+import static org.onosproject.openstacknetworking.api.Constants.OPENSTACK_NETWORKING_APP_ID;
+import static org.onosproject.openstacknetworking.api.Constants.PRIORITY_ADMIN_RULE;
+import static org.onosproject.openstacknetworking.api.Constants.PRIORITY_SWITCHING_RULE;
+import static org.onosproject.openstacknetworking.api.Constants.PRIORITY_TUNNEL_TAG_RULE;
+import static org.onosproject.openstacknetworking.api.Constants.SRC_VNI_TABLE;
+import static org.onosproject.openstacknetworking.api.OpenstackNetworkEvent.Type.OPENSTACK_NETWORK_CREATED;
+import static org.onosproject.openstacknetworking.api.OpenstackNetworkEvent.Type.OPENSTACK_NETWORK_REMOVED;
+import static org.onosproject.openstacknetworking.api.OpenstackNetworkEvent.Type.OPENSTACK_NETWORK_UPDATED;
+import static org.onosproject.openstacknetworking.api.OpenstackNetworkEvent.Type.OPENSTACK_PORT_CREATED;
+import static org.onosproject.openstacknetworking.api.OpenstackNetworkEvent.Type.OPENSTACK_PORT_REMOVED;
+import static org.onosproject.openstacknetworking.api.OpenstackNetworkEvent.Type.OPENSTACK_PORT_UPDATED;
 import static org.onosproject.openstacknetworking.impl.RulePopulatorUtil.buildExtension;
-import static org.onosproject.openstacknode.OpenstackNodeService.NodeType.COMPUTE;
+import static org.onosproject.openstacknode.api.OpenstackNode.NodeType.COMPUTE;
 import static org.slf4j.LoggerFactory.getLogger;
 
 
@@ -74,7 +94,7 @@ public final class OpenstackSwitchingHandler {
     protected DeviceService deviceService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected FlowObjectiveService flowObjectiveService;
+    protected OpenstackFlowRuleService osFlowRuleService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected InstancePortService instancePortService;
@@ -85,15 +105,24 @@ public final class OpenstackSwitchingHandler {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected OpenstackNodeService osNodeService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected DriverService driverService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected OpenstackSecurityGroupService securityGroupService;
+
     private final ExecutorService eventExecutor = newSingleThreadExecutor(
             groupedThreads(this.getClass().getSimpleName(), "event-handler"));
     private final InstancePortListener instancePortListener = new InternalInstancePortListener();
+    private final InternalOpenstackNetworkListener osNetworkListener =
+            new InternalOpenstackNetworkListener();
     private ApplicationId appId;
 
     @Activate
     protected void activate() {
         appId = coreService.registerApplication(OPENSTACK_NETWORKING_APP_ID);
         instancePortService.addListener(instancePortListener);
+        osNetworkService.addListener(osNetworkListener);
 
         log.info("Started");
     }
@@ -101,6 +130,7 @@ public final class OpenstackSwitchingHandler {
     @Deactivate
     protected void deactivate() {
         instancePortService.removeListener(instancePortListener);
+        osNetworkService.removeListener(osNetworkListener);
         eventExecutor.shutdown();
 
         log.info("Stopped");
@@ -134,38 +164,41 @@ public final class OpenstackSwitchingHandler {
                 .setOutput(instPort.portNumber())
                 .build();
 
-        RulePopulatorUtil.setRule(
-                flowObjectiveService,
+        osFlowRuleService.setRule(
                 appId,
                 instPort.deviceId(),
                 selector,
                 treatment,
-                ForwardingObjective.Flag.SPECIFIC,
                 PRIORITY_SWITCHING_RULE,
+                FORWARDING_TABLE,
                 install);
 
         // switching rules for the instPorts in the remote node
-        osNodeService.completeNodes().stream()
-                .filter(osNode -> osNode.type() == COMPUTE)
-                .filter(osNode -> !osNode.intBridge().equals(instPort.deviceId()))
-                .forEach(osNode -> {
+        OpenstackNode localNode = osNodeService.node(instPort.deviceId());
+        if (localNode == null) {
+            final String error = String.format("Cannot find openstack node for %s",
+                    instPort.deviceId());
+            throw new IllegalStateException(error);
+        }
+        osNodeService.completeNodes(COMPUTE).stream()
+                .filter(remoteNode -> !remoteNode.intgBridge().equals(localNode.intgBridge()))
+                .forEach(remoteNode -> {
                     TrafficTreatment treatmentToRemote = DefaultTrafficTreatment.builder()
                             .extension(buildExtension(
                                     deviceService,
-                                    osNode.intBridge(),
-                                    osNodeService.dataIp(instPort.deviceId()).get().getIp4Address()),
-                                    osNode.intBridge())
-                            .setOutput(osNodeService.tunnelPort(osNode.intBridge()).get())
+                                    remoteNode.intgBridge(),
+                                    localNode.dataIp().getIp4Address()),
+                                    remoteNode.intgBridge())
+                            .setOutput(remoteNode.tunnelPortNum())
                             .build();
 
-                    RulePopulatorUtil.setRule(
-                            flowObjectiveService,
+                    osFlowRuleService.setRule(
                             appId,
-                            osNode.intBridge(),
+                            remoteNode.intgBridge(),
                             selector,
                             treatmentToRemote,
-                            ForwardingObjective.Flag.SPECIFIC,
                             PRIORITY_SWITCHING_RULE,
+                            FORWARDING_TABLE,
                             install);
                 });
     }
@@ -184,37 +217,33 @@ public final class OpenstackSwitchingHandler {
                 .setOutput(instPort.portNumber())
                 .build();
 
-        RulePopulatorUtil.setRule(
-                flowObjectiveService,
+        osFlowRuleService.setRule(
                 appId,
                 instPort.deviceId(),
                 selector,
                 treatment,
-                ForwardingObjective.Flag.SPECIFIC,
                 PRIORITY_SWITCHING_RULE,
+                FORWARDING_TABLE,
                 install);
 
         // switching rules for the instPorts in the remote node
-        osNodeService.completeNodes().stream()
-                .filter(osNode -> osNode.type() == COMPUTE)
-                .filter(osNode -> !osNode.intBridge().equals(instPort.deviceId()))
-                .filter(osNode -> osNode.vlanPort().isPresent())
-                .forEach(osNode -> {
+        osNodeService.completeNodes(COMPUTE).stream()
+                .filter(remoteNode -> !remoteNode.intgBridge().equals(instPort.deviceId()) &&
+                        remoteNode.vlanIntf() != null)
+                .forEach(remoteNode -> {
                     TrafficTreatment treatmentToRemote = DefaultTrafficTreatment.builder()
-                                    .setOutput(osNodeService.vlanPort(osNode.intBridge()).get())
+                                    .setOutput(remoteNode.vlanPortNum())
                                     .build();
 
-                    RulePopulatorUtil.setRule(
-                            flowObjectiveService,
+                    osFlowRuleService.setRule(
                             appId,
-                            osNode.intBridge(),
+                            remoteNode.intgBridge(),
                             selector,
                             treatmentToRemote,
-                            ForwardingObjective.Flag.SPECIFIC,
                             PRIORITY_SWITCHING_RULE,
+                            FORWARDING_TABLE,
                             install);
                 });
-
     }
 
     private void setTunnelTagFlowRules(InstancePort instPort, boolean install) {
@@ -223,18 +252,26 @@ public final class OpenstackSwitchingHandler {
                 .matchInPort(instPort.portNumber())
                 .build();
 
-        TrafficTreatment treatment = DefaultTrafficTreatment.builder()
-                .setTunnelId(getVni(instPort))
-                .build();
+        // XXX All egress traffic needs to go through connection tracking module, which might hurt its performance.
+        ExtensionTreatment ctTreatment =
+                RulePopulatorUtil.niciraConnTrackTreatmentBuilder(driverService, instPort.deviceId())
+                        .commit(true).build();
 
-        RulePopulatorUtil.setRule(
-                flowObjectiveService,
+        TrafficTreatment.Builder tb = DefaultTrafficTreatment.builder()
+                .setTunnelId(getVni(instPort))
+                .transition(ACL_TABLE);
+
+        if (securityGroupService.isSecurityGroupEnabled()) {
+            tb.extension(ctTreatment, instPort.deviceId());
+        }
+
+        osFlowRuleService.setRule(
                 appId,
                 instPort.deviceId(),
                 selector,
-                treatment,
-                ForwardingObjective.Flag.SPECIFIC,
+                tb.build(),
                 PRIORITY_TUNNEL_TAG_RULE,
+                SRC_VNI_TABLE,
                 install);
     }
 
@@ -247,18 +284,69 @@ public final class OpenstackSwitchingHandler {
         TrafficTreatment treatment = DefaultTrafficTreatment.builder()
                 .pushVlan()
                 .setVlanId(getVlanId(instPort))
+                .transition(ACL_TABLE)
                 .build();
 
-        RulePopulatorUtil.setRule(
-                flowObjectiveService,
+        osFlowRuleService.setRule(
                 appId,
                 instPort.deviceId(),
                 selector,
                 treatment,
-                ForwardingObjective.Flag.SPECIFIC,
                 PRIORITY_TUNNEL_TAG_RULE,
+                SRC_VNI_TABLE,
                 install);
 
+    }
+
+    private void setNetworkAdminRules(Network network, boolean install) {
+        TrafficSelector selector;
+        if (network.getNetworkType() == NetworkType.VXLAN) {
+
+            selector = DefaultTrafficSelector.builder()
+                    .matchTunnelId(Long.valueOf(network.getProviderSegID()))
+                    .build();
+        } else {
+            selector = DefaultTrafficSelector.builder()
+                    .matchVlanId(VlanId.vlanId(network.getProviderSegID()))
+                    .build();
+        }
+
+        TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+                .drop()
+                .build();
+
+        osNodeService.completeNodes().stream()
+                .filter(osNode -> osNode.type() == COMPUTE)
+                .forEach(osNode -> {
+                    osFlowRuleService.setRule(
+                            appId,
+                            osNode.intgBridge(),
+                            selector,
+                            treatment,
+                            PRIORITY_ADMIN_RULE,
+                            ACL_TABLE,
+                            install);
+                });
+    }
+
+    private void setPortAdminRules(Port port, boolean install) {
+        InstancePort instancePort = instancePortService.instancePort(MacAddress.valueOf(port.getMacAddress()));
+        TrafficSelector selector = DefaultTrafficSelector.builder()
+                .matchInPort(instancePort.portNumber())
+                .build();
+
+        TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+                .drop()
+                .build();
+
+        osFlowRuleService.setRule(
+                appId,
+                instancePort.deviceId(),
+                selector,
+                treatment,
+                PRIORITY_ADMIN_RULE,
+                SRC_VNI_TABLE,
+                install);
     }
 
     private VlanId getVlanId(InstancePort instPort) {
@@ -328,6 +416,34 @@ public final class OpenstackSwitchingHandler {
         private void instPortRemoved(InstancePort instPort) {
             setNetworkRules(instPort, false);
             // TODO add something else if needed
+        }
+    }
+
+    private class InternalOpenstackNetworkListener implements OpenstackNetworkListener {
+
+        @Override
+        public boolean isRelevant(OpenstackNetworkEvent event) {
+            return !(event.subject() == null && event.port() == null);
+        }
+
+        @Override
+        public void event(OpenstackNetworkEvent event) {
+
+            if ((event.type() == OPENSTACK_NETWORK_CREATED ||
+                    event.type() == OPENSTACK_NETWORK_UPDATED) && !event.subject().isAdminStateUp()) {
+                setNetworkAdminRules(event.subject(), true);
+            } else if ((event.type() == OPENSTACK_NETWORK_UPDATED && event.subject().isAdminStateUp()) ||
+                    (event.type() == OPENSTACK_NETWORK_REMOVED && !event.subject().isAdminStateUp())) {
+                setNetworkAdminRules(event.subject(), false);
+            }
+
+            if ((event.type() == OPENSTACK_PORT_CREATED ||
+                    event.type() == OPENSTACK_PORT_UPDATED) && !event.port().isAdminStateUp()) {
+                setPortAdminRules(event.port(), true);
+            } else if ((event.type() == OPENSTACK_PORT_UPDATED && event.port().isAdminStateUp()) ||
+                    (event.type() == OPENSTACK_PORT_REMOVED && !event.port().isAdminStateUp())) {
+                setPortAdminRules(event.port(), false);
+            }
         }
     }
 }

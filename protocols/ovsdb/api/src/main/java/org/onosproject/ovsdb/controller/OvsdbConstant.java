@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -103,4 +103,10 @@ public final class OvsdbConstant {
 
     /** Ovsdb port. */
     public static final int OVSDBPORT = 6640;
+
+    /** Ovsdb Bridge table, Controller column name. */
+    public static final String BRIDGE_CONTROLLER = "controller";
+
+    /** Openflow port Error. */
+    public static final int OFPORT_ERROR = -1;
 }

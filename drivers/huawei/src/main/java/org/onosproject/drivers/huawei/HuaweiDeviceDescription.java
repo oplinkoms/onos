@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DefaultDeviceDescription;
 import org.onosproject.net.device.DeviceDescription;
+import org.onosproject.net.device.DeviceDescriptionDiscovery;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.device.PortDescription;
 import org.onosproject.net.device.PortStatistics;
@@ -32,7 +33,6 @@ import org.onosproject.netconf.NetconfException;
 import org.onosproject.netconf.NetconfSession;
 import org.slf4j.Logger;
 
-import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
@@ -56,7 +56,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * routers.
  */
 public class HuaweiDeviceDescription extends AbstractHandlerBehaviour
-        implements PortStatisticsDiscovery {
+        implements PortStatisticsDiscovery, DeviceDescriptionDiscovery {
 
     private final Logger log = getLogger(getClass());
 
@@ -78,7 +78,7 @@ public class HuaweiDeviceDescription extends AbstractHandlerBehaviour
         String sysInfo;
         try {
             sysInfo = session.get(getVersionReq());
-        } catch (IOException e) {
+        } catch (NetconfException e) {
             throw new IllegalArgumentException(
                     new NetconfException(DEV_INFO_FAILURE));
         }
@@ -190,7 +190,7 @@ public class HuaweiDeviceDescription extends AbstractHandlerBehaviour
         String interfaces = null;
         try {
             interfaces = session.get(getInterfacesReq());
-        } catch (IOException e) {
+        } catch (NetconfException e) {
             log.info("Failed to retrive interface {} ", e.getMessage());
         }
         return interfaces;

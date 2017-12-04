@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016 Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ import org.onosproject.netconf.NetconfController;
 import org.onosproject.netconf.NetconfException;
 import org.onosproject.netconf.NetconfSession;
 
-import java.io.IOException;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -69,7 +68,7 @@ public final class OplinkNetconfUtility {
         String reply;
         try {
             reply = session.get(filter, null);
-        } catch (IOException e) {
+        } catch (NetconfException e) {
             throw new RuntimeException(new NetconfException("Failed to retrieve configuration.", e));
         }
         return reply;
@@ -88,7 +87,7 @@ public final class OplinkNetconfUtility {
         String reply;
         try {
             reply = session.getConfig(DatastoreId.RUNNING, filter);
-        } catch (IOException e) {
+        } catch (NetconfException e) {
             throw new RuntimeException(new NetconfException("Failed to retrieve configuration.", e));
         }
         return reply;
@@ -108,7 +107,7 @@ public final class OplinkNetconfUtility {
         boolean reply = false;
         try {
             reply = session.editConfig(DatastoreId.RUNNING, mode, cfg);
-        } catch (IOException e) {
+        } catch (NetconfException e) {
             throw new RuntimeException(new NetconfException("Failed to edit configuration.", e));
         }
         return reply;

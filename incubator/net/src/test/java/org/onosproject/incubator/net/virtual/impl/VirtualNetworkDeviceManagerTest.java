@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,12 +40,11 @@ import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.NetTestTools;
+import org.onosproject.net.Port;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
-import org.onosproject.net.intent.FakeIntentManager;
-import org.onosproject.net.intent.TestableIntentService;
 import org.onosproject.store.service.TestStorageService;
 
 import java.util.ArrayList;
@@ -65,7 +64,6 @@ public class VirtualNetworkDeviceManagerTest extends VirtualNetworkTestUtil {
     private VirtualNetworkManager manager;
     private DistributedVirtualNetworkStore virtualNetworkManagerStore;
     private CoreService coreService;
-    private TestableIntentService intentService = new FakeIntentManager();
     private TestServiceDirectory testDirectory;
     private TestListener testListener = new TestListener();
     private TestEventDispatcher dispatcher = new TestEventDispatcher();
@@ -81,7 +79,6 @@ public class VirtualNetworkDeviceManagerTest extends VirtualNetworkTestUtil {
 
         manager = new VirtualNetworkManager();
         manager.store = virtualNetworkManagerStore;
-        manager.intentService = intentService;
         manager.coreService = coreService;
         NetTestTools.injectEventDispatcher(manager, dispatcher);
 
@@ -384,6 +381,21 @@ public class VirtualNetworkDeviceManagerTest extends VirtualNetworkTestUtil {
         Set<VirtualPort> virtualPorts = manager.getVirtualPorts(virtualNetwork.id(), device2.id());
         assertNotNull("The virtual port set should not be null", virtualPorts);
         assertEquals("The virtual port set size did not match.", 2, virtualPorts.size());
+        virtualPorts.forEach(vp -> assertFalse("Initial virtual port state should be disabled", vp.isEnabled()));
+
+        // verify change state of virtual port (disabled -> enabled)
+        manager.updatePortState(virtualNetwork.id(), device2.id(), PortNumber.portNumber(1), true);
+        Port changedPort = deviceService.getPort(device2.id(), PortNumber.portNumber(1));
+        assertNotNull("The changed virtual port should not be null", changedPort);
+        assertEquals("Virtual port state should be enabled", true, changedPort.isEnabled());
+        expectedEventTypes.add(DeviceEvent.Type.PORT_UPDATED);
+
+        // verify change state of virtual port (disabled -> disabled)
+        manager.updatePortState(virtualNetwork.id(), device2.id(), PortNumber.portNumber(2), false);
+        changedPort = deviceService.getPort(device2.id(), PortNumber.portNumber(2));
+        assertNotNull("The changed virtual port should not be null", changedPort);
+        assertEquals("Virtual port state should be disabled", false, changedPort.isEnabled());
+        // no VIRTUAL_PORT_UPDATED event is expected - the requested state (disabled) is same as previous state.
 
         // remove 2 virtual ports
         for (VirtualPort virtualPort : virtualPorts) {

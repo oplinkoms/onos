@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,6 @@ import org.onlab.graph.DefaultEdgeWeigher;
 import org.onlab.graph.ScalarWeight;
 import org.onlab.graph.Weight;
 import org.onlab.util.Bandwidth;
-import org.onlab.util.GuavaCollectors;
 import org.onlab.util.KryoNamespace;
 import org.onlab.util.Tools;
 import org.onosproject.cluster.ClusterService;
@@ -274,7 +273,7 @@ public class OpticalPathProvisioner
     public Collection<OpticalConnectivity> listConnectivity() {
         return connectivityMap.values().stream()
             .map(Versioned::value)
-            .collect(GuavaCollectors.toImmutableList());
+            .collect(ImmutableList.toImmutableList());
     }
 
     @Override

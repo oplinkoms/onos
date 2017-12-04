@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,8 +23,6 @@ import org.onosproject.netconf.NetconfSession;
 import org.onosproject.netconf.NetconfSessionFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
 
 /**
  * Default implementation of a NETCONF device.
@@ -54,7 +52,7 @@ public class DefaultNetconfDevice implements NetconfDevice {
         sessionFactory = new NetconfSessionMinaImpl.MinaSshNetconfSessionFactory();
         try {
             netconfSession = sessionFactory.createNetconfSession(deviceInfo);
-        } catch (IOException e) {
+        } catch (NetconfException e) {
             deviceState = false;
             throw new NetconfException("Cannot create connection and session for device " +
                                                deviceInfo, e);
@@ -78,7 +76,7 @@ public class DefaultNetconfDevice implements NetconfDevice {
         sessionFactory = factory;
         try {
             netconfSession = sessionFactory.createNetconfSession(deviceInfo);
-        } catch (IOException e) {
+        } catch (NetconfException e) {
             deviceState = false;
             throw new NetconfException("Cannot create connection and session for device " +
                                                deviceInfo, e);
@@ -100,7 +98,7 @@ public class DefaultNetconfDevice implements NetconfDevice {
         deviceState = false;
         try {
             netconfSession.close();
-        } catch (IOException e) {
+        } catch (NetconfException e) {
             log.warn("Cannot communicate with the device {} session already closed", netconfDeviceInfo);
         }
     }

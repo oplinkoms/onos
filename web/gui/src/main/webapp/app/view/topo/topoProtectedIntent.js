@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,12 @@
     'use strict';
 
     // injected refs
-    var $log, fs, flash, wss, api;
+    var flash, wss;
+
+    // function to be replaced by the localization bundle function
+    var topoLion = function (x) {
+        return '#tproti#' + x + '#';
+    };
 
     // internal state
     var showingProtectedIntent = null;
@@ -38,14 +43,14 @@
 
         showingProtectedIntent = false;
         wss.sendEvent('cancelProtectedIntentHighlight');
-        flash.flash('Monitoring canceled');
+        flash.flash(topoLion('fl_monitoring_canceled'));
         return true;
     }
 
     // force the system to create a single intent selection
     function showProtectedIntent(data) {
         wss.sendEvent('selectProtectedIntent', data);
-        flash.flash('Selecting Intent ' + data.key);
+        flash.flash(topoLion('fl_selecting_intent') + ' ' + data.key);
         showingProtectedIntent = true;
     }
 
@@ -54,21 +59,21 @@
 
     angular.module('ovTopo')
     .factory('TopoProtectedIntentsService',
-        ['$log', 'FnService', 'FlashService', 'WebSocketService',
+        ['FlashService', 'WebSocketService',
 
-        function (_$log_, _fs_, _flash_, _wss_) {
-            $log = _$log_;
-            fs = _fs_;
+        function (_flash_, _wss_) {
             flash = _flash_;
             wss = _wss_;
 
             return {
-                initProtectedIntents: function (_api_) { api = _api_; },
+                // TODO: Remove references
+                initProtectedIntents: function (_api_) {},
                 destroyProtectedIntents: function () { },
+                setLionBundle: function (bundle) { topoLion = bundle; },
 
                 // invoked from toolbar overlay buttons or keystrokes
                 cancelHighlights: cancelHighlights,
-                showProtectedIntent: showProtectedIntent
+                showProtectedIntent: showProtectedIntent,
             };
         }]);
 }());

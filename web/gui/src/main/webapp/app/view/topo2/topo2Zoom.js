@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@
     'use strict';
 
     // injected references
-    var fs, zs, ps;
+    var fs, zs;
 
     // internal state
     var zoomer,
@@ -91,12 +91,11 @@
 
     angular.module('ovTopo2')
     .factory('Topo2ZoomService', [
-        'FnService', 'ZoomService', 'PrefsService',
-        function (_fs_, _zs_, _ps_) {
+        'FnService', 'ZoomService',
+        function (_fs_, _zs_) {
 
             fs = _fs_;
             zs = _zs_;
-            ps = _ps_;
 
             return {
                 getZoomer: getZoomer,
@@ -106,7 +105,7 @@
 
                 scale: scale,
                 adjustmentScale: adjustmentScale,
-                panAndZoom: panAndZoom
+                panAndZoom: panAndZoom,
             };
         }]);
 })();

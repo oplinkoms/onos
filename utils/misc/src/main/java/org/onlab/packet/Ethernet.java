@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,9 +24,10 @@ import org.onlab.packet.ndp.Redirect;
 import org.onlab.packet.ndp.RouterAdvertisement;
 import org.onlab.packet.ndp.RouterSolicitation;
 
+import com.google.common.collect.ImmutableMap;
+
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -60,15 +61,18 @@ public class Ethernet extends BasePacket {
 
     public static final short DATALAYER_ADDRESS_LENGTH = 6; // bytes
 
-    private static final Map<Short, Deserializer<? extends IPacket>> ETHERTYPE_DESERIALIZER_MAP =
-            new HashMap<>();
+    private static final Map<Short, Deserializer<? extends IPacket>> ETHERTYPE_DESERIALIZER_MAP;
 
     static {
+        ImmutableMap.Builder<Short, Deserializer<? extends IPacket>> builder =
+                ImmutableMap.builder();
+
        for (EthType.EtherType ethType : EthType.EtherType.values()) {
            if (ethType.deserializer() != null) {
-               ETHERTYPE_DESERIALIZER_MAP.put(ethType.ethType().toShort(), ethType.deserializer());
+               builder.put(ethType.ethType().toShort(), ethType.deserializer());
            }
        }
+       ETHERTYPE_DESERIALIZER_MAP = builder.build();
     }
 
     protected MacAddress destinationMACAddress;
@@ -383,80 +387,6 @@ public class Ethernet extends BasePacket {
             Arrays.fill(data, bb.position(), data.length, (byte) 0x0);
         }
         return data;
-    }
-
-    @Override
-    public IPacket deserialize(final byte[] data, final int offset,
-                               final int length) {
-        if (length <= 0) {
-            return null;
-        }
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        if (this.destinationMACAddress == null) {
-            this.destinationMACAddress = MacAddress.valueOf(new byte[6]);
-        }
-        final byte[] dstAddr = new byte[MacAddress.MAC_ADDRESS_LENGTH];
-        bb.get(dstAddr);
-        this.destinationMACAddress = MacAddress.valueOf(dstAddr);
-
-        if (this.sourceMACAddress == null) {
-            this.sourceMACAddress = MacAddress.valueOf(new byte[6]);
-        }
-        final byte[] srcAddr = new byte[MacAddress.MAC_ADDRESS_LENGTH];
-        bb.get(srcAddr);
-        this.sourceMACAddress = MacAddress.valueOf(srcAddr);
-
-        short ethType = bb.getShort();
-        if (ethType == TYPE_QINQ) {
-            final short tci = bb.getShort();
-            this.qInQPriorityCode = (byte) (tci >> 13 & 0x07);
-            this.qinqVID = (short) (tci & 0x0fff);
-            this.qinqTPID = TYPE_QINQ;
-            ethType = bb.getShort();
-        }
-
-        if (ethType == TYPE_VLAN) {
-            final short tci = bb.getShort();
-            this.priorityCode = (byte) (tci >> 13 & 0x07);
-            this.vlanID = (short) (tci & 0x0fff);
-            ethType = bb.getShort();
-
-            // there might be one more tag with 1q TPID
-            if (ethType == TYPE_VLAN) {
-                // packet is double tagged with 1q TPIDs
-                // We handle only double tagged packets here and assume that in this case
-                // TYPE_QINQ above was not hit
-                // We put the values retrieved above with TYPE_VLAN in
-                // qInQ fields
-                this.qInQPriorityCode = this.priorityCode;
-                this.qinqVID = this.vlanID;
-                this.qinqTPID = TYPE_VLAN;
-
-                final short innerTci = bb.getShort();
-                this.priorityCode = (byte) (innerTci >> 13 & 0x07);
-                this.vlanID = (short) (innerTci & 0x0fff);
-                ethType = bb.getShort();
-            }
-        } else {
-            this.vlanID = Ethernet.VLAN_UNTAGGED;
-        }
-        this.etherType = ethType;
-
-        IPacket payload;
-        Deserializer<? extends IPacket> deserializer;
-        if (Ethernet.ETHERTYPE_DESERIALIZER_MAP.containsKey(ethType)) {
-            deserializer = Ethernet.ETHERTYPE_DESERIALIZER_MAP.get(ethType);
-        } else {
-            deserializer = Data.deserializer();
-        }
-        try {
-            this.payload = deserializer.deserialize(data, bb.position(),
-                                                    bb.limit() - bb.position());
-            this.payload.setParent(this);
-        } catch (DeserializationException e) {
-            return this;
-        }
-        return this;
     }
 
     /**
@@ -857,5 +787,20 @@ public class Ethernet extends BasePacket {
 
             return eth;
         };
+    }
+
+    /**
+     * Make an exact copy of the ethernet packet.
+     *
+     * @return copy of the packet
+     */
+    public Ethernet duplicate() {
+        try {
+            byte[] data = serialize();
+            return deserializer().deserialize(data, 0, data.length);
+        } catch (DeserializationException dex) {
+            // If we can't make an object out of the serialized data, its a defect
+            throw new IllegalStateException(dex);
+        }
     }
 }

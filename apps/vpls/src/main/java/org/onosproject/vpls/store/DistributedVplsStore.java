@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.net.intf.Interface;
+import org.onosproject.net.intf.Interface;
 import org.onosproject.net.config.NetworkConfigService;
 import org.onosproject.store.AbstractStore;
 import org.onosproject.store.StoreDelegate;
@@ -100,6 +100,7 @@ public class DistributedVplsStore
     @Deactivate
     protected  void deactive() {
         vplsDataStore.removeListener(vplsDataListener);
+        networkConfigService.removeConfig(appId);
         log.info("Stopped");
     }
 
@@ -216,6 +217,10 @@ public class DistributedVplsStore
                     }
                     break;
                 case REMOVE:
+                    if (vplsData == null) {
+                        vplsData = VplsData.of(event.key());
+                    }
+                    vplsData.state(VplsData.VplsState.REMOVING);
                     VplsStoreEvent vplsStoreEvent =
                             new VplsStoreEvent(VplsStoreEvent.Type.REMOVE, vplsData);
                     notifyDelegate(vplsStoreEvent);

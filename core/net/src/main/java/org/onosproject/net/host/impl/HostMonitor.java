@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,17 @@
  */
 package org.onosproject.net.host.impl;
 
-import org.jboss.netty.util.Timeout;
-import org.jboss.netty.util.TimerTask;
 import org.onlab.packet.ARP;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.IPv6;
+import org.onlab.packet.Ip4Address;
+import org.onlab.packet.Ip6Address;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onlab.packet.ndp.NeighborSolicitation;
-import org.onlab.util.Timer;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onlab.util.SharedScheduledExecutors;
+import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Host;
 import org.onosproject.net.edge.EdgePortService;
@@ -44,6 +44,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -54,7 +55,7 @@ import java.util.concurrent.TimeUnit;
  * probe for hosts that have not yet been detected (specified by IP address).
  * </p>
  */
-public class HostMonitor implements TimerTask {
+public class HostMonitor implements Runnable {
 
     private Logger log = LoggerFactory.getLogger(getClass());
 
@@ -71,7 +72,7 @@ public class HostMonitor implements TimerTask {
     private static final byte[] ZERO_MAC_ADDRESS = MacAddress.ZERO.toBytes();
     private long probeRate = DEFAULT_PROBE_RATE;
 
-    private Timeout timeout;
+    private ScheduledFuture<?> timeout;
 
     /**
      * Creates a new host monitor.
@@ -122,7 +123,7 @@ public class HostMonitor implements TimerTask {
     void start() {
         synchronized (this) {
             if (timeout == null) {
-                timeout = Timer.getTimer().newTimeout(this, 0, TimeUnit.MILLISECONDS);
+                timeout = SharedScheduledExecutors.newTimeout(this, 0, TimeUnit.MILLISECONDS);
             }
         }
     }
@@ -132,7 +133,7 @@ public class HostMonitor implements TimerTask {
      */
     void shutdown() {
         synchronized (this) {
-            timeout.cancel();
+            timeout.cancel(true);
             timeout = null;
         }
     }
@@ -155,11 +156,11 @@ public class HostMonitor implements TimerTask {
     }
 
     @Override
-    public void run(Timeout timeout) throws Exception {
+    public void run() {
         monitoredAddresses.forEach(this::probe);
 
         synchronized (this) {
-            this.timeout = Timer.getTimer().newTimeout(this, probeRate, TimeUnit.MILLISECONDS);
+            this.timeout = SharedScheduledExecutors.newTimeout(this, probeRate, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -195,28 +196,26 @@ public class HostMonitor implements TimerTask {
             intf.ipAddressesList().stream()
                     .filter(ia -> ia.subnetAddress().contains(targetIp))
                     .forEach(ia -> {
-                        log.debug("Sending probe for target:{} out of intf:{} vlan:{}",
-                                targetIp, intf.connectPoint(), intf.vlan());
-                        sendProbe(intf.connectPoint(), targetIp, ia.ipAddress(),
-                                intf.mac(), intf.vlan());
+                        MacAddress probeMac = intf.mac();
+                        IpAddress probeIp = !probeMac.equals(MacAddress.ONOS) ?
+                                ia.ipAddress() :
+                                (ia.ipAddress().isIp4() ? Ip4Address.ZERO : Ip6Address.ZERO);
+                        sendProbe(intf.connectPoint(), targetIp, probeIp, probeMac, intf.vlan());
+
                         // account for use-cases where tagged-vlan config is used
                         if (!intf.vlanTagged().isEmpty()) {
                             intf.vlanTagged().forEach(tag -> {
-                                log.debug("Sending probe for target:{} out of intf:{} vlan:{}",
-                                        targetIp, intf.connectPoint(), tag);
-                                sendProbe(intf.connectPoint(), targetIp, ia.ipAddress(),
-                                        intf.mac(), tag);
+                                sendProbe(intf.connectPoint(), targetIp, probeIp, probeMac, tag);
                             });
                         }
                     });
         });
     }
 
-    public void sendProbe(ConnectPoint connectPoint,
-                          IpAddress targetIp,
-                          IpAddress sourceIp,
-                          MacAddress sourceMac,
-                          VlanId vlan) {
+    public void sendProbe(ConnectPoint connectPoint, IpAddress targetIp, IpAddress sourceIp,
+                          MacAddress sourceMac, VlanId vlan) {
+        log.debug("Sending probe for target:{} out of intf:{} vlan:{}", targetIp, connectPoint, vlan);
+
         Ethernet probePacket;
 
         if (targetIp.isIp4()) {

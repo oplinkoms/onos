@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright 2017-present Open Networking Laboratory
+  ~ Copyright 2017-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 <drivers>
     <driver name="huawei" extends="" manufacturer="Huawei"
             hwVersion="" swVersion="">
-        <behaviour api="org.onosproject.net.behaviour.L3VpnConfig"
+        <behaviour api="org.onosproject.l3vpn.netl3vpn.L3VpnConfig"
                    impl="org.onosproject.drivers.huawei.HuaweiL3VpnConfig"/>
         <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
                    impl="org.onosproject.drivers.huawei.HuaweiDeviceDescription"/>

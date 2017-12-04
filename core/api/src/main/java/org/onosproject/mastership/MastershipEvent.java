@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 package org.onosproject.mastership;
 
-import org.joda.time.LocalDateTime;
+import org.onlab.util.Tools;
 import org.onosproject.cluster.RoleInfo;
 import org.onosproject.event.AbstractEvent;
 import org.onosproject.net.DeviceId;
@@ -114,7 +114,7 @@ public class MastershipEvent extends AbstractEvent<MastershipEvent.Type, DeviceI
     @Override
     public String toString() {
         return MoreObjects.toStringHelper(getClass())
-                .add("time", new LocalDateTime(time()))
+                .add("time", Tools.defaultOffsetDataTime(time()))
                 .add("type", type())
                 .add("subject", subject())
                 .add("roleInfo", roleInfo)

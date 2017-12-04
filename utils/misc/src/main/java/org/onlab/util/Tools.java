@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,12 @@
  */
 package org.onlab.util;
 
-import static java.nio.file.Files.delete;
-import static java.nio.file.Files.walkFileTree;
-import static org.onlab.util.GroupedThreadFactory.groupedThreadFactory;
-import static org.slf4j.LoggerFactory.getLogger;
+import com.google.common.base.Charsets;
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.primitives.UnsignedLongs;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.slf4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
@@ -30,6 +32,9 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Dictionary;
@@ -51,13 +56,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-import org.slf4j.Logger;
-
-import com.google.common.base.Charsets;
-import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
-import com.google.common.primitives.UnsignedLongs;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import static java.nio.file.Files.delete;
+import static java.nio.file.Files.walkFileTree;
+import static org.onlab.util.GroupedThreadFactory.groupedThreadFactory;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Miscellaneous utility methods.
@@ -242,6 +244,17 @@ public abstract class Tools {
      */
     public static String toHex(long value, int width) {
         return Strings.padStart(UnsignedLongs.toString(value, 16), width, '0');
+    }
+
+    /**
+     * Returns a string encoding in hex of the given long value with prefix
+     * '0x'.
+     *
+     * @param value long value to encode as hex string
+     * @return hex string
+     */
+    public static String toHexWithPrefix(long value) {
+        return "0x" + Long.toHexString(value);
     }
 
     /**
@@ -666,7 +679,7 @@ public abstract class Tools {
             return future;
         }
 
-        BlockingAwareFuture<T> newFuture = new BlockingAwareFuture<T>();
+        BlockingAwareFuture<T> newFuture = new BlockingAwareFuture<>();
         future.whenComplete((result, error) -> {
             Runnable completer = () -> {
                 if (future.isCompletedExceptionally()) {
@@ -815,6 +828,18 @@ public abstract class Tools {
             Files.copy(file, dst.resolve(src.relativize(file)), copyOption);
             return FileVisitResult.CONTINUE;
         }
+    }
+
+    /**
+     * Creates OffsetDateTime instance from epoch milliseconds,
+     * using system default time zone.
+     *
+     * @param epochMillis to convert
+     * @return OffsetDateTime
+     */
+    public static OffsetDateTime defaultOffsetDataTime(long epochMillis) {
+        return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMillis),
+                                        ZoneId.systemDefault());
     }
 
 }

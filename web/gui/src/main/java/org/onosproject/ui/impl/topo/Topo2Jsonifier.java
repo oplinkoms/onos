@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import com.google.common.base.Strings;
 import org.onlab.osgi.ServiceDirectory;
 import org.onlab.packet.IpAddress;
 import org.onosproject.cluster.ClusterService;
+import org.onosproject.cluster.ControllerNode;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.incubator.net.PortStatisticsService;
 import org.onosproject.incubator.net.tunnel.TunnelService;
@@ -41,6 +42,7 @@ import org.onosproject.net.link.LinkService;
 import org.onosproject.net.region.Region;
 import org.onosproject.net.statistic.StatisticService;
 import org.onosproject.net.topology.TopologyService;
+import org.onosproject.ui.GlyphConstants;
 import org.onosproject.ui.JsonUtils;
 import org.onosproject.ui.UiExtensionService;
 import org.onosproject.ui.UiPreferencesService;
@@ -202,11 +204,12 @@ public class Topo2Jsonifier {
 
     private ObjectNode json(UiClusterMember member, boolean isUiAttached) {
         int switchCount = mastershipService.getDevicesOf(member.id()).size();
+        ControllerNode.State state = clusterService.getState(member.id());
         return objectNode()
                 .put("id", member.id().toString())
                 .put("ip", member.ip().toString())
-                .put("online", member.isOnline())
-                .put("ready", member.isReady())
+                .put("online", state.isActive())
+                .put("ready", state.isReady())
                 .put("uiAttached", isUiAttached)
                 .put("switches", switchCount);
     }
@@ -397,8 +400,9 @@ public class Topo2Jsonifier {
         if (element instanceof UiLink) {
             return json((UiLink) element);
         }
-
-        // TODO: UiClusterMember
+        if (element instanceof UiClusterMember) {
+            return json((UiClusterMember) element);
+        }
 
         // Unrecognized UiElement class
         return objectNode()
@@ -453,11 +457,11 @@ public class Topo2Jsonifier {
                 .put("online", deviceService.isAvailable(device.id()))
                 .put("master", master(device.id()))
                 .put("layer", device.layer());
-
         Device d = device.backingDevice();
-
-        addProps(node, d);
-        addGeoGridLocation(node, d);
+        if (d != null) {
+            addProps(node, d);
+            addGeoGridLocation(node, d);
+        }
         addMetaUi(node, ridStr, device.idAsString());
 
         return node;
@@ -634,6 +638,16 @@ public class Topo2Jsonifier {
         return data;
     }
 
+    private ObjectNode json(UiClusterMember member) {
+        ControllerNode.State state = clusterService.getState(member.id());
+        return objectNode()
+                .put("id", member.idAsString())
+                .put("ip", member.ip().toString())
+                .put("online", state.isActive())
+                .put("ready", state.isReady())
+                .put(GlyphConstants.UI_ATTACHED,
+                     member.backingNode().equals(clusterService.getLocalNode()));
+    }
 
     private ObjectNode jsonClosedRegion(String ridStr, UiRegion region) {
         ObjectNode node = objectNode()

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 package org.onosproject.drivers.fujitsu;
 
 
-import org.onosproject.netconf.TargetConfig;
+import org.onosproject.netconf.DatastoreId;
 
 public interface FujitsuNetconfSessionListenerTest {
 
@@ -50,7 +50,7 @@ public interface FujitsuNetconfSessionListenerTest {
      * @param newConfiguration    configuration to set
      * @return true if everuthing as expected
      */
-    boolean verifyEditConfig(TargetConfig targetConfiguration, String mode, String newConfiguration);
+    boolean verifyEditConfig(DatastoreId targetConfiguration, String mode, String newConfiguration);
 
     /**
      * Verify get request arguments.

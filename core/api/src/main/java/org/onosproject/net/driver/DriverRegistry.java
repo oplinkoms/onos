@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,15 @@
  */
 package org.onosproject.net.driver;
 
+import org.onosproject.event.ListenerService;
+
 import java.util.Set;
 
 /**
  * Service for obtaining drivers and driver behaviour implementations.
  */
-public interface DriverRegistry extends DriverPrimordialResolver, DriverResolver {
+public interface DriverRegistry extends DriverPrimordialResolver, DriverResolver,
+        ListenerService<DriverEvent, DriverListener> {
 
     /**
      * Returns the overall set of drivers being provided.

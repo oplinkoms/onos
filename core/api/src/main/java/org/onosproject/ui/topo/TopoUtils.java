@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -99,14 +99,14 @@ public final class TopoUtils {
 
     /**
      * Returns a value representing a count of bits per second,
-     * (clipped to a maximum of 10 Gbps).
+     * (clipped to a maximum of 100 Gbps).
      * Note that the input is bytes per second.
      *
      * @param bytes bytes per second
      * @return value representing bits per second
      */
     public static ValueLabel formatClippedBitRate(long bytes) {
-        return new ValueLabel(bytes * 8, BITS_UNIT).perSec().clipG(10.0);
+        return new ValueLabel(bytes * 8, BITS_UNIT).perSec().clipG(100.0);
     }
 
     /**

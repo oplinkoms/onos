@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@
                         instance = this;
                         this.appendElement('#topo2', 'g')
                             .attr({
-                                transform: sus.translate(500, 500)
+                                transform: sus.translate(500, 500),
                             });
 
                         this.render();
@@ -49,16 +49,16 @@
                         g = this.node().append('g');
                         gs.addGlyph(g, 'bird', 100).attr('class', 'noDevsBird');
                         g.append('text').text('No devices are connected')
-                            .attr({ x: 120, y: 80});
+                            .attr({ x: 120, y: 80 });
 
                         box = g.node().getBBox();
                         box.x -= box.width/2;
                         box.y -= box.height/2;
                         g.attr('transform', sus.translate(box.x, box.y));
-                    }
+                    },
                 });
 
                 return instance || new NoDevicesConnected();
-            }
+            },
         ]);
 })();

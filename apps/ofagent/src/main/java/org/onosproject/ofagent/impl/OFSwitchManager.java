@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package org.onosproject.ofagent.impl;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import io.netty.channel.ChannelOutboundInvoker;
 import io.netty.channel.nio.NioEventLoopGroup;
 import org.apache.felix.scr.annotations.Activate;
@@ -33,14 +34,25 @@ import org.onosproject.incubator.net.virtual.NetworkId;
 import org.onosproject.incubator.net.virtual.VirtualNetworkEvent;
 import org.onosproject.incubator.net.virtual.VirtualNetworkListener;
 import org.onosproject.incubator.net.virtual.VirtualNetworkService;
+import org.onosproject.incubator.net.virtual.VirtualPort;
+import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.Link;
+import org.onosproject.net.Port;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.device.PortStatistics;
+import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowRuleEvent;
 import org.onosproject.net.flow.FlowRuleListener;
 import org.onosproject.net.flow.FlowRuleService;
+import org.onosproject.net.flow.TableStatisticsEntry;
+import org.onosproject.net.group.Group;
+import org.onosproject.net.group.GroupService;
+import org.onosproject.net.link.LinkService;
 import org.onosproject.net.packet.PacketContext;
 import org.onosproject.net.packet.PacketProcessor;
 import org.onosproject.net.packet.PacketService;
@@ -58,6 +70,8 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -157,14 +171,82 @@ public class OFSwitchManager implements OFSwitchService {
         return ImmutableSet.copyOf(ofSwitches);
     }
 
+    @Override
+    public OFSwitch ofSwitch(NetworkId networkId, DeviceId deviceId) {
+        return ofSwitchMap.get(deviceId);
+    }
+
+    @Override
+    public Set<Port> ports(NetworkId networkId, DeviceId deviceId) {
+        Set<Port> ports = virtualNetService.getVirtualPorts(networkId, deviceId)
+                .stream()
+                .collect(Collectors.toSet());
+        return ImmutableSet.copyOf(ports);
+    }
+
+    @Override
+    public List<PortStatistics> getPortStatistics(NetworkId networkId, DeviceId deviceId) {
+        DeviceService deviceService = virtualNetService.get(networkId, DeviceService.class);
+        List<PortStatistics> portStatistics = deviceService.getPortStatistics(deviceId);
+        return portStatistics;
+    }
+
+    @Override
+    public ConnectPoint neighbour(NetworkId networkId, DeviceId deviceId, PortNumber portNumber) {
+        ConnectPoint cp = new ConnectPoint(deviceId, portNumber);
+        LinkService linkService = virtualNetService.get(networkId, LinkService.class);
+        Set<Link> links = linkService.getEgressLinks(cp);
+        log.trace("neighbour cp {} egressLinks {}", cp, links);
+        if (links != null && links.size() > 0) {
+            Link link = links.iterator().next();
+            return link.src();
+        }
+        return null;
+    }
+
+    @Override
+    public ApplicationId appId() {
+        return appId;
+    }
+
+    @Override
+    public List<FlowEntry> getFlowEntries(NetworkId networkId, DeviceId deviceId) {
+        FlowRuleService flowRuleService = virtualNetService.get(networkId, FlowRuleService.class);
+        Iterable<FlowEntry> entries = flowRuleService.getFlowEntries(deviceId);
+        return Lists.newArrayList(entries);
+    }
+
+    @Override
+    public List<TableStatisticsEntry> getFlowTableStatistics(NetworkId networkId, DeviceId deviceId) {
+        FlowRuleService flowRuleService = virtualNetService.get(networkId, FlowRuleService.class);
+        Iterable<TableStatisticsEntry> entries = flowRuleService.getFlowTableStatistics(deviceId);
+        if (entries == null) {
+            entries = new ArrayList<>();
+        }
+        return Lists.newArrayList(entries);
+    }
+
+    @Override
+    public List<Group> getGroups(NetworkId networkId, DeviceId deviceId) {
+        GroupService groupService = virtualNetService.get(networkId, GroupService.class);
+        Iterable<Group> entries = groupService.getGroups(deviceId);
+        return Lists.newArrayList(entries);
+    }
+
     private void addOFSwitch(NetworkId networkId, DeviceId deviceId) {
         OFSwitch ofSwitch = DefaultOFSwitch.of(
                 dpidWithDeviceId(deviceId),
-                DEFAULT_CAPABILITIES);
+                DEFAULT_CAPABILITIES, networkId, deviceId,
+                virtualNetService.getServiceDirectory());
         ofSwitchMap.put(deviceId, ofSwitch);
         log.info("Added virtual OF switch for {}", deviceId);
 
         OFAgent ofAgent = ofAgentService.agent(networkId);
+        if (ofAgent == null) {
+            log.error("OFAgent for network {} does not exist", networkId);
+            return;
+        }
+
         if (ofAgent.state() == STARTED) {
             connectController(ofSwitch, ofAgent.controllers());
         }
@@ -284,6 +366,7 @@ public class OFSwitchManager implements OFSwitchService {
 
         @Override
         public void event(VirtualNetworkEvent event) {
+            log.trace("Vnet event {}", event);
             switch (event.type()) {
                 case VIRTUAL_DEVICE_ADDED:
                     eventExecutor.execute(() -> {
@@ -307,13 +390,58 @@ public class OFSwitchManager implements OFSwitchService {
                 case NETWORK_UPDATED:
                 case NETWORK_REMOVED:
                 case NETWORK_ADDED:
+                    break;
                 case VIRTUAL_PORT_ADDED:
+                    eventExecutor.execute(() -> {
+                        OFSwitch ofSwitch = ofSwitch(event.virtualPort());
+                        if (ofSwitch != null) {
+                            ofSwitch.processPortAdded(event.virtualPort());
+                            log.debug("Virtual port {} added to network {}",
+                                      event.virtualPort(),
+                                      event.subject());
+                        }
+                    });
+                    break;
                 case VIRTUAL_PORT_UPDATED:
+                    eventExecutor.execute(() -> {
+                        OFSwitch ofSwitch = ofSwitch(event.virtualPort());
+                        if (ofSwitch != null) {
+                            if (event.virtualPort().isEnabled()) {
+                                ofSwitch.processPortUp(event.virtualPort());
+                            } else {
+                                ofSwitch.processPortDown(event.virtualPort());
+                            }
+                            log.debug("Virtual port {} updated in network {}",
+                                      event.virtualPort(),
+                                      event.subject());
+                        }
+                    });
+                    break;
                 case VIRTUAL_PORT_REMOVED:
+                    eventExecutor.execute(() -> {
+                        OFSwitch ofSwitch = ofSwitch(event.virtualPort());
+                        if (ofSwitch != null) {
+                            ofSwitch.processPortRemoved(event.virtualPort());
+                            log.debug("Virtual port {} removed from network {}",
+                                      event.virtualPort(),
+                                      event.subject());
+                        }
+                    });
+                    break;
                 default:
                     // do nothing
                     break;
             }
+        }
+
+        private OFSwitch ofSwitch(VirtualPort virtualPort) {
+            OFSwitch ofSwitch = ofSwitchMap.get(virtualPort.element().id());
+            if (ofSwitch == null) {
+                log.warn("Switch does not exist for port {}", virtualPort);
+            } else {
+                log.trace("Switch exists for port {}", virtualPort);
+            }
+            return ofSwitch;
         }
     }
 

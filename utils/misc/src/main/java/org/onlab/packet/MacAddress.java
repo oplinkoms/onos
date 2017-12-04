@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,18 @@
  */
 package org.onlab.packet;
 
-import com.google.common.collect.Sets;
-
+import com.google.common.collect.ImmutableSet;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The class representing MAC address.
  */
 public class MacAddress {
 
+    private static final Pattern MAC_PATTERN = Pattern.compile("^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$");
     /**
      * First MAC address in ONOS OUI range.
      */
@@ -54,9 +56,17 @@ public class MacAddress {
      */
     public static final MacAddress IPV4_MULTICAST_MASK = valueOf("ff:ff:ff:80:00:00");
     /**
+     * IPv6 multicast MAC address.
+     */
+    public static final MacAddress IPV6_MULTICAST = valueOf("33:33:00:00:00:00");
+    /**
+     * IPv6 multicast MAC mask.
+     */
+    public static final MacAddress IPV6_MULTICAST_MASK = valueOf("FF:FF:00:00:00:00");
+    /**
      * A set of LLDP MAC addresses.
      */
-    public static final Set<MacAddress> LLDP = Sets.newHashSet(
+    public static final Set<MacAddress> LLDP = ImmutableSet.of(
             MacAddress.valueOf("01:80:c2:00:00:00"),
             MacAddress.valueOf("01:80:c2:00:00:03"),
             MacAddress.valueOf("01:80:c2:00:00:0e"));
@@ -78,13 +88,12 @@ public class MacAddress {
      * @throws IllegalArgumentException if the string cannot be parsed as a MAC address.
      */
     public static MacAddress valueOf(final String address) {
-        final String[] elements = address.split(":");
-        if (elements.length != MacAddress.MAC_ADDRESS_LENGTH) {
+        if (!isValid(address)) {
             throw new IllegalArgumentException(
                     "Specified MAC Address must contain 12 hex digits"
                             + " separated pairwise by :'s.");
         }
-
+        final String[] elements = address.split(":");
         final byte[] addressInBytes = new byte[MacAddress.MAC_ADDRESS_LENGTH];
         for (int i = 0; i < MacAddress.MAC_ADDRESS_LENGTH; i++) {
             final String element = elements[i];
@@ -273,5 +282,10 @@ public class MacAddress {
             builder.append(String.format("%02X", b & 0xFF));
         }
         return builder.toString();
+    }
+
+    private static boolean isValid(final String mac) {
+        Matcher matcher = MAC_PATTERN.matcher(mac);
+        return matcher.matches();
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,8 @@ import org.onosproject.event.EventDeliveryService;
 import org.onosproject.event.EventListener;
 import org.onosproject.event.EventSink;
 import org.onosproject.incubator.net.virtual.NetworkId;
+import org.onosproject.incubator.net.virtual.TenantId;
+import org.onosproject.incubator.net.virtual.VirtualNetwork;
 import org.onosproject.incubator.net.virtual.VirtualNetworkService;
 import org.onosproject.incubator.net.virtual.VirtualNetworkServiceAdapter;
 
@@ -251,6 +253,16 @@ public class AbstractVirtualListenerManagerTest {
 
         public TestVirtualNetworkManager() {
             serviceDirectory.add(EventDeliveryService.class, dispatcher);
+        }
+
+        @Override
+        public VirtualNetwork getVirtualNetwork(NetworkId networkId) {
+            return null;
+        }
+
+        @Override
+        public TenantId getTenantId(NetworkId networkId) {
+            return null;
         }
 
         @Override

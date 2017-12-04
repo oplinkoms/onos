@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,9 @@ import org.onosproject.incubator.net.virtual.event.VirtualListenerRegistryManage
 import org.onosproject.incubator.net.virtual.provider.VirtualNetworkProvider;
 import org.onosproject.incubator.net.virtual.provider.VirtualNetworkProviderRegistry;
 import org.onosproject.incubator.net.virtual.provider.VirtualNetworkProviderService;
+import org.onosproject.mastership.MastershipAdminService;
 import org.onosproject.mastership.MastershipService;
+import org.onosproject.mastership.MastershipTermService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.HostId;
@@ -65,6 +67,7 @@ import org.onosproject.net.group.GroupService;
 import org.onosproject.net.host.HostService;
 import org.onosproject.net.intent.IntentService;
 import org.onosproject.net.link.LinkService;
+import org.onosproject.net.meter.MeterService;
 import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.provider.AbstractListenerProviderRegistry;
 import org.onosproject.net.provider.AbstractProviderService;
@@ -105,9 +108,6 @@ public class VirtualNetworkManager
     protected VirtualNetworkStore store;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected IntentService intentService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected CoreService coreService;
 
     private VirtualNetworkStoreDelegate delegate = this::post;
@@ -124,16 +124,6 @@ public class VirtualNetworkManager
      */
     public void setStore(VirtualNetworkStore store) {
         this.store = store;
-    }
-
-    /**
-     * Only used for Junit test methods outside of this package.
-     *
-     * @param intentService intent service
-     */
-
-    public void setIntentService(IntentService intentService) {
-        this.intentService = intentService;
     }
 
     @Activate
@@ -301,6 +291,16 @@ public class VirtualNetworkManager
     }
 
     @Override
+    public void updatePortState(NetworkId networkId, DeviceId deviceId,
+                PortNumber portNumber, boolean isEnabled) {
+        checkNotNull(networkId, NETWORK_NULL);
+        checkNotNull(deviceId, DEVICE_NULL);
+        checkNotNull(portNumber, "Port description cannot be null");
+
+        store.updatePortState(networkId, deviceId, portNumber, isEnabled);
+    }
+
+    @Override
     public void removeVirtualPort(NetworkId networkId, DeviceId deviceId,
                                   PortNumber portNumber) {
         checkNotNull(networkId, NETWORK_NULL);
@@ -320,15 +320,17 @@ public class VirtualNetworkManager
         return store.getNetworks(tenantId);
     }
 
-    /**
-     * Returns the virtual network matching the network identifier.
-     *
-     * @param networkId network identifier
-     * @return virtual network
-     */
-    private VirtualNetwork getVirtualNetwork(NetworkId networkId) {
+    @Override
+    public VirtualNetwork getVirtualNetwork(NetworkId networkId) {
         checkNotNull(networkId, NETWORK_NULL);
         return store.getNetwork(networkId);
+    }
+
+    @Override
+    public TenantId getTenantId(NetworkId networkId) {
+        VirtualNetwork virtualNetwork = getVirtualNetwork(networkId);
+        checkNotNull(virtualNetwork, "The network does not exist.");
+        return virtualNetwork.tenantId();
     }
 
     @Override
@@ -442,9 +444,13 @@ public class VirtualNetworkManager
             service = new VirtualNetworkPacketManager(this, network.id());
         } else if (serviceKey.serviceClass.equals(GroupService.class)) {
             service = new VirtualNetworkGroupManager(this, network.id());
+        } else if (serviceKey.serviceClass.equals(MeterService.class)) {
+            service = new VirtualNetworkMeterManager(this, network.id());
         } else if (serviceKey.serviceClass.equals(FlowObjectiveService.class)) {
             service = new VirtualNetworkFlowObjectiveManager(this, network.id());
-        } else if (serviceKey.serviceClass.equals(MastershipService.class)) {
+        } else if (serviceKey.serviceClass.equals(MastershipService.class) ||
+                serviceKey.serviceClass.equals(MastershipAdminService.class) ||
+                serviceKey.serviceClass.equals(MastershipTermService.class)) {
             service = new VirtualNetworkMastershipManager(this, network.id());
         } else {
             return null;

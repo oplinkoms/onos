@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright 2017-present Open Networking Laboratory
+  ~ Copyright 2017-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
     <parent>
         <groupId>org.onosproject</groupId>
         <artifactId>onos-restconf-parent</artifactId>
-        <version>1.11.0-SNAPSHOT</version>
+        <version>1.13.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -32,7 +32,6 @@
         <dependency>
             <groupId>org.onosproject</groupId>
             <artifactId>onos-yang-model</artifactId>
-            <version>1.12.0-b8</version>
         </dependency>
         <dependency>
             <groupId>org.onosproject</groupId>
@@ -41,7 +40,7 @@
         </dependency>
         <dependency>
             <groupId>org.onosproject</groupId>
-            <artifactId>onos-app-config</artifactId>
+            <artifactId>onos-apps-config</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

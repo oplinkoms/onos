@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onlab.packet.ChassisId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.net.config.basics.ConfigException;
+import org.onosproject.net.config.ConfigException;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.Device;
@@ -109,7 +109,7 @@ public class SnmpDeviceProvider extends AbstractProvider
     protected final List<ConfigFactory> factories = ImmutableList.of(
             new ConfigFactory<ApplicationId, SnmpProviderConfig>(APP_SUBJECT_FACTORY,
                                                                  SnmpProviderConfig.class,
-                                                                 "devices",
+                                                                 "snmp_devices",
                                                                  true) {
                 @Override
                 public SnmpProviderConfig createConfig() {
@@ -310,7 +310,7 @@ public class SnmpDeviceProvider extends AbstractProvider
                 log.info("Added device to ONOS core. Device Info: "
                                  + device.deviceInfo() + " " + did.uri().toString());
                 //FIXME this description will be populated only if driver is pushed from outside
-                // becuase otherwise default driver is used
+                // because otherwise default driver is used
                 Device d = deviceService.getDevice(did);
                 if (d.is(DeviceDescriptionDiscovery.class)) {
                     DeviceDescriptionDiscovery descriptionDiscovery = d.as(DeviceDescriptionDiscovery.class);

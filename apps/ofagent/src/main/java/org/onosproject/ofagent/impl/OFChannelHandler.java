@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,6 +51,7 @@ public final class OFChannelHandler extends ChannelDuplexHandler {
             @Override
             void processOFMessage(final OFChannelHandler handler,
                                   final OFMessage msg) {
+                logProcessOFMessageDetails(handler, msg, this);
                 // TODO implement
             }
         },
@@ -58,6 +59,7 @@ public final class OFChannelHandler extends ChannelDuplexHandler {
             @Override
             void processOFMessage(final OFChannelHandler handler,
                                   final OFMessage msg) {
+                logProcessOFMessageDetails(handler, msg, this);
                 switch (msg.getType()) {
                     case HELLO:
                         handler.setState(ChannelState.WAIT_FEATURE_REQUEST);
@@ -72,6 +74,7 @@ public final class OFChannelHandler extends ChannelDuplexHandler {
             @Override
             void processOFMessage(final OFChannelHandler handler,
                                   final OFMessage msg) {
+                logProcessOFMessageDetails(handler, msg, this);
                 switch (msg.getType()) {
                     case FEATURES_REQUEST:
                         handler.ofSwitch.processFeaturesRequest(handler.channel, msg);
@@ -94,24 +97,43 @@ public final class OFChannelHandler extends ChannelDuplexHandler {
             @Override
             void processOFMessage(final OFChannelHandler handler,
                                   final OFMessage msg) {
+                logProcessOFMessageDetails(handler, msg, this);
                 // TODO implement
                 // TODO add this channel to ofSwitch role service
                 switch (msg.getType()) {
                     case STATS_REQUEST:
                         //TODO implement
                         //TODO: use vNetService to build OFPortDesc.
+                        handler.ofSwitch.processStatsRequest(handler.channel, msg);
                         break;
                     case SET_CONFIG:
                         //TODO implement
+                        handler.ofSwitch.processSetConfigMessage(handler.channel, msg);
                         break;
                     case GET_CONFIG_REQUEST:
                         //TODO implement
+                        handler.ofSwitch.processGetConfigRequest(handler.channel, msg);
                         break;
                     case BARRIER_REQUEST:
                         //TODO implement
+                        handler.ofSwitch.processBarrierRequest(handler.channel, msg);
                         break;
                     case ECHO_REQUEST:
                         handler.ofSwitch.processEchoRequest(handler.channel, msg);
+                        break;
+                    case ROLE_REQUEST:
+                        handler.ofSwitch.processRoleRequest(handler.channel, msg);
+                        break;
+                    case PACKET_OUT:
+                        // TODO: check if this is lldp - ignore if it is not lldp
+                        handler.ofSwitch.processLldp(handler.channel, msg);
+                        break;
+                    case FLOW_MOD:
+                    case PORT_MOD:
+                    case GROUP_MOD:
+                    case METER_MOD:
+                    case TABLE_MOD:
+                        handler.ofSwitch.processControllerCommand(handler.channel, msg);
                         break;
                     case ERROR:
                         handler.logErrorClose((OFErrorMsg) msg);
@@ -124,6 +146,12 @@ public final class OFChannelHandler extends ChannelDuplexHandler {
         };
 
         abstract void processOFMessage(final OFChannelHandler handler, final OFMessage msg);
+
+        private static void logProcessOFMessageDetails(final OFChannelHandler handler,
+                                            final OFMessage msg, ChannelState chnState) {
+            handler.log.trace("Channel state: {} dpid: {} processOFMessage type: {} nsg: {}",
+                              chnState, handler.ofSwitch.dpid(), msg.getType(), msg);
+        }
     }
 
     /**
@@ -199,12 +227,12 @@ public final class OFChannelHandler extends ChannelDuplexHandler {
     }
 
     private void illegalMessageReceived(OFMessage ofMessage) {
-        log.warn("Controller should never send this message {} in current state {}",
-                ofMessage.getType(), state);
+        log.warn("Controller should never send message {} to switch {} in current state {}",
+                ofMessage.getType(), ofSwitch.dpid(), state);
     }
 
     private void unhandledMessageReceived(OFMessage ofMessage) {
-        log.warn("Unexpected message {} received in state {}",
-                ofMessage.getType(), state);
+        log.warn("Unexpected message {} received for switch {} in state {}",
+                ofMessage.getType(), ofSwitch.dpid(), state);
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -341,12 +341,23 @@ public class IpAddress implements Comparable<IpAddress> {
     /**
      * Check if this IP address is a multicast address.
      *
-     * @return true if this address a multicast address
+     * @return true if this address is a multicast address
      */
     public boolean isMulticast() {
         return isIp4() ?
                 Ip4Prefix.IPV4_MULTICAST_PREFIX.contains(this.getIp4Address()) :
                 Ip6Prefix.IPV6_MULTICAST_PREFIX.contains(this.getIp6Address());
+    }
+
+    /**
+     * Check if this IP address is a link-local address.
+     *
+     * @return true if this address is a link-local address
+     */
+    public boolean isLinkLocal() {
+        return isIp4() ?
+                Ip4Prefix.IPV4_LINK_LOCAL_PREFIX.contains(this.getIp4Address()) :
+                Ip6Prefix.IPV6_LINK_LOCAL_PREFIX.contains(this.getIp6Address());
     }
 
     @Override

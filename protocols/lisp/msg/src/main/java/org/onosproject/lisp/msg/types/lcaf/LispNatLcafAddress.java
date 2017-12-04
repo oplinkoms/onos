@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -329,8 +329,8 @@ public final class LispNatLcafAddress extends LispLcafAddress {
 
             List<LispAfiAddress> rtrRlocAddresses = address.getRtrRlocAddresses();
 
-            for (int i = 0; i < rtrRlocAddresses.size(); i++) {
-                writer.writeTo(byteBuf, rtrRlocAddresses.get(i));
+            for (LispAfiAddress rtrRlocAddress : rtrRlocAddresses) {
+                writer.writeTo(byteBuf, rtrRlocAddress);
             }
 
             updateLength(lcafIndex, byteBuf);

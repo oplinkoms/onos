@@ -1,5 +1,5 @@
 /*
- *  Copyright 2016-present Open Networking Laboratory
+ *  Copyright 2016-present Open Networking Foundation
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -112,6 +112,7 @@ public class UiDevice extends UiNode {
      * @return the device type
      */
     public String type() {
-        return backingDevice().type().toString().toLowerCase();
+        Device device = backingDevice();
+        return device == null ? null : device.type().toString().toLowerCase();
     }
 }

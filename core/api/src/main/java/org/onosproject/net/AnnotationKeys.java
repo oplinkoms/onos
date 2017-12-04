@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -101,7 +101,7 @@ public final class AnnotationKeys {
 
     /**
      * Annotation key for latency.
-     * The value of this key is expected to be latency in microsecond.
+     * The value of this key is expected to be latency in nanosecond.
      */
     public static final String LATENCY = "latency";
 
@@ -122,9 +122,26 @@ public final class AnnotationKeys {
     public static final String PORT_NAME = "portName";
 
     /**
+     * Annotation key for the optical channel receiving/in port (RX).
+     */
+    public static final String PORT_IN = "portIn";
+
+    /**
+     * Annotation key for the optical channel port transmitting/out port (TX).
+     */
+
+    public static final String PORT_OUT = "portOut";
+    /**
      * Annotation key for the port mac.
      */
     public static final String PORT_MAC = "portMac";
+
+    /**
+     * Annotation key for the admin state.
+     * The value of this key is expected to be "enabled" or "disabled"
+     *
+     */
+    public static final String ADMIN_STATE = "adminState";
 
     /**
      * Annotation key for the router ID.

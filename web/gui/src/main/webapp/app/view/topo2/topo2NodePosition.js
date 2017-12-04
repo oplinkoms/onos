@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,7 +72,7 @@
             if (!loc.latOrY && !loc.longOrX) {
                 loc = {
                     longOrX: -20,
-                    latOrY: 10 * node.index()
+                    latOrY: 10 * node.index(),
                 };
             }
 
@@ -101,14 +101,14 @@
         function rand() {
             return {
                 x: rs.randDim(dim[0]),
-                y: rs.randDim(dim[1])
+                y: rs.randDim(dim[1]),
             };
         }
 
         function near(node) {
             return {
                 x: node.x + nearDist + rs.spread(nearDist),
-                y: node.y + nearDist + rs.spread(nearDist)
+                y: node.y + nearDist + rs.spread(nearDist),
             };
         }
 
@@ -176,8 +176,8 @@
 
                 return {
                     positionNode: positionNode,
-                    setLongLat: setLongLat
+                    setLongLat: setLongLat,
                 };
-            }
+            },
         ]);
 })();

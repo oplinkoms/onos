@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import org.onosproject.provider.nil.CustomTopologySimulator;
 import org.onosproject.provider.nil.NullProviders;
 import org.onosproject.provider.nil.TopologySimulator;
 
+import java.util.HashSet;
 import java.util.Iterator;
 
 /**
@@ -88,6 +89,7 @@ public class CreateNullHost extends AbstractShellCommand {
         BasicHostConfig cfg = cfgService.addConfig(id, BasicHostConfig.class);
 
         cfg.locType(locType);
+        cfg.setLocations(new HashSet<HostLocation>() {{ add(location); }});
 
         if (GEO.equals(locType)) {
             cfg.latitude(latOrY).longitude(longOrX);

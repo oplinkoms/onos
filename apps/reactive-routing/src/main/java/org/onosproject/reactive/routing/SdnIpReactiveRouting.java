@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,10 +31,10 @@ import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceService;
-import org.onosproject.incubator.net.routing.Route;
-import org.onosproject.incubator.net.routing.RouteService;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceService;
+import org.onosproject.routeservice.Route;
+import org.onosproject.routeservice.RouteService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Host;
 import org.onosproject.net.flow.DefaultTrafficSelector;

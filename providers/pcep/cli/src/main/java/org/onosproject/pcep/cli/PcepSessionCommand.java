@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +19,9 @@ package org.onosproject.pcep.cli;
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.pcep.controller.PcepClientController;
-import org.onosproject.pcep.controller.PcepErrorDetail;
-import org.onosproject.pcep.controller.PcepErrorType;
+import org.onosproject.pcep.server.PcepClientController;
+import org.onosproject.pcep.server.PcepErrorDetail;
+import org.onosproject.pcep.server.PcepErrorType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

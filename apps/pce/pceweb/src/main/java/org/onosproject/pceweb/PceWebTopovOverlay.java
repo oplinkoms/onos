@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -164,7 +164,7 @@ public class PceWebTopovOverlay extends UiTopoOverlay {
         try {
             Thread.sleep(100);
         } catch (InterruptedException e) {
-            log.error("Exception occured while getting the bandwidth.");
+            log.error("Exception occurred while getting the bandwidth.");
         }
         Set<Resource> resources = resService.getRegisteredResources(devResource.id());
         for (Resource res : resources) {

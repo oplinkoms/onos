@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,9 @@ import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.net.config.basics.ConfigException;
+import org.onosproject.net.Port;
+import org.onosproject.net.behaviour.PortAdmin;
+import org.onosproject.net.config.ConfigException;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.DefaultAnnotations;
@@ -49,6 +51,7 @@ import org.onosproject.net.config.NetworkConfigListener;
 import org.onosproject.net.config.NetworkConfigRegistry;
 import org.onosproject.net.config.basics.SubjectFactories;
 import org.onosproject.net.device.DefaultDeviceDescription;
+import org.onosproject.net.device.DefaultPortDescription;
 import org.onosproject.net.device.DeviceDescription;
 import org.onosproject.net.device.DeviceDescriptionDiscovery;
 import org.onosproject.net.device.DeviceEvent;
@@ -65,8 +68,10 @@ import org.onosproject.net.key.DeviceKeyId;
 import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.netconf.NetconfController;
+import org.onosproject.netconf.NetconfDevice;
 import org.onosproject.netconf.NetconfDeviceListener;
 import org.onosproject.netconf.NetconfException;
+import org.onosproject.netconf.config.NetconfDeviceConfig;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 
@@ -78,12 +83,17 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Dictionary;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static org.onlab.util.Tools.groupedThreads;
@@ -140,7 +150,13 @@ public class NetconfDeviceProvider extends AbstractProvider
                     "default is 30 sec")
     private int pollFrequency = DEFAULT_POLL_FREQUENCY_SECONDS;
 
-    protected final ExecutorService executor =
+    private static final int DEFAULT_MAX_RETRIES = 5;
+    @Property(name = "maxRetries", intValue = DEFAULT_MAX_RETRIES,
+            label = "Configure maximum allowed number of retries for obtaining list of ports; " +
+                    "default is 5 times")
+    private int maxRetries = DEFAULT_MAX_RETRIES;
+
+    protected ExecutorService executor =
             Executors.newFixedThreadPool(5, groupedThreads("onos/netconfdeviceprovider",
                                                            "device-installer-%d", log));
     protected ScheduledExecutorService connectionExecutor
@@ -151,12 +167,14 @@ public class NetconfDeviceProvider extends AbstractProvider
     protected DeviceProviderService providerService;
     private NetconfDeviceListener innerNodeListener = new InnerNetconfDeviceListener();
     private InternalDeviceListener deviceListener = new InternalDeviceListener();
+    private final Map<DeviceId, AtomicInteger> retriedPortDiscoveryMap = new ConcurrentHashMap<>();
     protected ScheduledFuture<?> scheduledTask;
 
     protected final List<ConfigFactory> factories = ImmutableList.of(
+            // TODO consider moving Config registration to NETCONF ctl bundle
             new ConfigFactory<DeviceId, NetconfDeviceConfig>(
                     SubjectFactories.DEVICE_SUBJECT_FACTORY,
-                    NetconfDeviceConfig.class, SCHEME_NAME) {
+                    NetconfDeviceConfig.class, NetconfDeviceConfig.CONFIG_KEY) {
                 @Override
                 public NetconfDeviceConfig createConfig() {
                     return new NetconfDeviceConfig();
@@ -164,7 +182,7 @@ public class NetconfDeviceProvider extends AbstractProvider
             },
             new ConfigFactory<ApplicationId, NetconfProviderConfig>(APP_SUBJECT_FACTORY,
                                                                     NetconfProviderConfig.class,
-                                                                    "devices",
+                                                                    "netconf_devices",
                                                                     true) {
                 @Override
                 public NetconfProviderConfig createConfig() {
@@ -207,6 +225,7 @@ public class NetconfDeviceProvider extends AbstractProvider
         deviceService.removeListener(deviceListener);
         providerRegistry.unregister(this);
         providerService = null;
+        retriedPortDiscoveryMap.clear();
         factories.forEach(cfgService::unregisterConfigFactory);
         scheduledTask.cancel(true);
         executor.shutdown();
@@ -221,6 +240,10 @@ public class NetconfDeviceProvider extends AbstractProvider
             pollFrequency = Tools.getIntegerProperty(properties, "pollFrequency",
                                                      DEFAULT_POLL_FREQUENCY_SECONDS);
             log.info("Configured. Poll frequency is configured to {} seconds", pollFrequency);
+
+            maxRetries = Tools.getIntegerProperty(properties, "maxRetries",
+                    DEFAULT_MAX_RETRIES);
+            log.info("Configured. Number of retries is configured to {} times", maxRetries);
         }
         if (scheduledTask != null) {
             scheduledTask.cancel(false);
@@ -286,6 +309,15 @@ public class NetconfDeviceProvider extends AbstractProvider
 
     @Override
     public boolean isReachable(DeviceId deviceId) {
+
+        boolean sessionExists =
+                Optional.ofNullable(controller.getDevicesMap().get(deviceId))
+                    .map(NetconfDevice::isActive)
+                    .orElse(false);
+        if (sessionExists) {
+            return true;
+        }
+
         //FIXME this is a workaround util device state is shared
         // between controller instances.
         Device device = deviceService.getDevice(deviceId);
@@ -308,12 +340,16 @@ public class NetconfDeviceProvider extends AbstractProvider
                 port = Integer.parseInt(info[info.length - 1]);
             }
         }
+        // FIXME just opening TCP session probably is not the appropriate
+        // method to test reachability.
         //test connection to device opening a socket to it.
+        log.debug("Testing reachability for {}:{}", ip, port);
         try (Socket socket = new Socket(ip, port)) {
             log.debug("rechability of {}, {}, {}", deviceId, socket.isConnected(), !socket.isClosed());
             return socket.isConnected() && !socket.isClosed();
         } catch (IOException e) {
             log.info("Device {} is not reachable", deviceId);
+            log.debug("  error details", e);
             return false;
         }
     }
@@ -321,7 +357,36 @@ public class NetconfDeviceProvider extends AbstractProvider
     @Override
     public void changePortState(DeviceId deviceId, PortNumber portNumber,
                                 boolean enable) {
-        // TODO if required
+        Device device = deviceService.getDevice(deviceId);
+        if (mastershipService.isLocalMaster(deviceId)) {
+            if (device.is(PortAdmin.class)) {
+                PortAdmin portAdmin =
+                        device.as(PortAdmin.class);
+                CompletableFuture<Boolean> modified;
+                if (enable) {
+                    modified = portAdmin.enable(portNumber);
+                } else {
+                    modified = portAdmin.disable(portNumber);
+                }
+                modified.thenAccept(result -> {
+                    if (result) {
+                        Port port = deviceService.getPort(deviceId, portNumber);
+                        //rebuilding port description with admin state changed.
+                        providerService.portStatusChanged(deviceId,
+                                new DefaultPortDescription(portNumber, enable, false,
+                                        port.type(), port.portSpeed(),
+                                        (SparseAnnotations) port.annotations()));
+                    } else {
+                        log.warn("Your device {} port {} status can't be changed to {}",
+                                deviceId, portNumber, enable);
+                    }
+                });
+            } else {
+                log.warn("Device {} does not support Port Admin", deviceId);
+            }
+        } else {
+            log.debug("Not master but {}, not changing port state", mastershipService.getLocalRole(deviceId));
+        }
     }
 
     private class InnerNetconfDeviceListener implements NetconfDeviceListener {
@@ -339,6 +404,7 @@ public class NetconfDeviceProvider extends AbstractProvider
 
             if (deviceService.getDevice(deviceId) != null) {
                 providerService.deviceDisconnected(deviceId);
+                retriedPortDiscoveryMap.remove(deviceId);
                 log.debug("Netconf device {} removed from Netconf subController", deviceId);
             } else {
                 log.warn("Netconf device {} does not exist in the store, " +
@@ -351,67 +417,86 @@ public class NetconfDeviceProvider extends AbstractProvider
         Set<DeviceId> deviceSubjects =
                 cfgService.getSubjects(DeviceId.class, NetconfDeviceConfig.class);
         deviceSubjects.forEach(deviceId -> {
-            NetconfDeviceConfig config =
-                    cfgService.getConfig(deviceId, NetconfDeviceConfig.class);
-            DeviceDescription deviceDescription = createDeviceRepresentation(deviceId, config);
-            log.debug("Connecting NETCONF device {}, on {}:{} with username {}",
-                      deviceId, config.ip(), config.port(), config.username());
-            storeDeviceKey(config.sshKey(), config.username(), config.password(), deviceId);
-            if (deviceService.getDevice(deviceId) == null) {
-                providerService.deviceConnected(deviceId, deviceDescription);
-            }
-            try {
-                checkAndUpdateDevice(deviceId, deviceDescription);
-            } catch (Exception e) {
-                log.error("Unhandled exception checking {}", deviceId, e);
-            }
+            connectDevice(cfgService.getConfig(deviceId, NetconfDeviceConfig.class));
         });
     }
 
-    private void checkAndUpdateDevice(DeviceId deviceId, DeviceDescription deviceDescription) {
+
+    private void connectDevice(NetconfDeviceConfig config) {
+        if (config == null) {
+            return;
+        }
+        DeviceId deviceId = config.subject();
+        if (!deviceId.uri().getScheme().equals(SCHEME_NAME)) {
+            // not under my scheme, skipping
+            log.trace("{} not my scheme, skipping", deviceId);
+            return;
+        }
+        DeviceDescription deviceDescription = createDeviceRepresentation(deviceId, config);
+        log.debug("Connecting NETCONF device {}, on {}:{} with username {}",
+                  deviceId, config.ip(), config.port(), config.username());
+        storeDeviceKey(config.sshKey(), config.username(), config.password(), deviceId);
+        retriedPortDiscoveryMap.put(deviceId, new AtomicInteger(0));
+        if (deviceService.getDevice(deviceId) == null) {
+            providerService.deviceConnected(deviceId, deviceDescription);
+        }
+        try {
+            checkAndUpdateDevice(deviceId, deviceDescription, true);
+        } catch (Exception e) {
+            log.error("Unhandled exception checking {}", deviceId, e);
+        }
+    }
+
+    private void checkAndUpdateDevice(DeviceId deviceId, DeviceDescription deviceDescription, boolean newlyConnected) {
         Device device = deviceService.getDevice(deviceId);
         if (device == null) {
-            log.debug("Device {} has not been added to store, " +
-                             "since it's not reachable", deviceId);
-        } else {
-            boolean isReachable = isReachable(deviceId);
-            if (isReachable && !deviceService.isAvailable(deviceId)) {
-                if (device.is(DeviceDescriptionDiscovery.class)) {
-                    if (mastershipService.isLocalMaster(deviceId)) {
-                        DeviceDescriptionDiscovery deviceDescriptionDiscovery =
-                                device.as(DeviceDescriptionDiscovery.class);
-                        DeviceDescription updatedDeviceDescription =
-                                deviceDescriptionDiscovery.discoverDeviceDetails();
-                        if (updatedDeviceDescription != null &&
-                                !descriptionEquals(device, updatedDeviceDescription)) {
-                            providerService.deviceConnected(
-                                    deviceId, new DefaultDeviceDescription(
-                                            updatedDeviceDescription, true,
-                                            updatedDeviceDescription.annotations()));
-                        } else if (updatedDeviceDescription == null) {
-                            providerService.deviceConnected(
-                                    deviceId, new DefaultDeviceDescription(
-                                            deviceDescription, true,
-                                            deviceDescription.annotations()));
-                        }
-                        //if ports are not discovered, retry the discovery
-                        if (deviceService.getPorts(deviceId).isEmpty()) {
-                            discoverPorts(deviceId);
-                        }
-                    }
-                } else {
-                    log.warn("No DeviceDescriptionDiscovery behaviour for device {} " +
-                                     "using DefaultDeviceDescription", deviceId);
+            log.debug("Device {} has not been added to store, since it's not reachable", deviceId);
+            return;
+        }
+        boolean isReachable = isReachable(deviceId);
+        if (!isReachable && deviceService.isAvailable(deviceId)) {
+            providerService.deviceDisconnected(deviceId);
+            return;
+        } else if (newlyConnected) {
+            updateDeviceDescription(deviceId, deviceDescription, device);
+        }
+        if (isReachable && deviceService.isAvailable(deviceId) &&
+                mastershipService.isLocalMaster(deviceId)) {
+            //if ports are not discovered, retry the discovery
+            if (deviceService.getPorts(deviceId).isEmpty() &&
+                    retriedPortDiscoveryMap.get(deviceId).getAndIncrement() < maxRetries) {
+                discoverPorts(deviceId);
+            }
+            updatePortStatistics(device);
+        }
+    }
+
+    private void updateDeviceDescription(DeviceId deviceId, DeviceDescription deviceDescription, Device device) {
+        if (device.is(DeviceDescriptionDiscovery.class)) {
+            if (mastershipService.isLocalMaster(deviceId)) {
+                DeviceDescriptionDiscovery deviceDescriptionDiscovery =
+                        device.as(DeviceDescriptionDiscovery.class);
+                DeviceDescription updatedDeviceDescription =
+                        deviceDescriptionDiscovery.discoverDeviceDetails();
+                if (updatedDeviceDescription != null &&
+                        !descriptionEquals(device, updatedDeviceDescription)) {
                     providerService.deviceConnected(
                             deviceId, new DefaultDeviceDescription(
-                                    deviceDescription, true, deviceDescription.annotations()));
+                                    updatedDeviceDescription, true,
+                                    updatedDeviceDescription.annotations()));
+                } else if (updatedDeviceDescription == null) {
+                    providerService.deviceConnected(
+                            deviceId, new DefaultDeviceDescription(
+                                    deviceDescription, true,
+                                    deviceDescription.annotations()));
                 }
-            } else if (!isReachable && deviceService.isAvailable(deviceId)) {
-                providerService.deviceDisconnected(deviceId);
-            } else if (isReachable && deviceService.isAvailable(deviceId) &&
-                    mastershipService.isLocalMaster(deviceId)) {
-                updatePortStatistics(device);
             }
+        } else {
+            log.warn("No DeviceDescriptionDiscovery behaviour for device {} " +
+                             "using DefaultDeviceDescription", deviceId);
+            providerService.deviceConnected(
+                    deviceId, new DefaultDeviceDescription(
+                            deviceDescription, true, deviceDescription.annotations()));
         }
     }
 
@@ -448,7 +533,7 @@ public class NetconfDeviceProvider extends AbstractProvider
                     cfgService.getConfig(deviceId, NetconfDeviceConfig.class);
             DeviceDescription deviceDescription = createDeviceRepresentation(deviceId, config);
             storeDeviceKey(config.sshKey(), config.username(), config.password(), deviceId);
-            checkAndUpdateDevice(deviceId, deviceDescription);
+            checkAndUpdateDevice(deviceId, deviceDescription, false);
         });
     }
 
@@ -580,7 +665,7 @@ public class NetconfDeviceProvider extends AbstractProvider
         @Override
         public void event(NetworkConfigEvent event) {
             if (event.configClass().equals(NetconfDeviceConfig.class)) {
-                executor.execute(NetconfDeviceProvider.this::connectDevices);
+                executor.execute(() -> connectDevice((NetconfDeviceConfig) event.config().get()));
             } else {
                 log.warn("Injecting device via this Json is deprecated, " +
                                  "please put configuration under devices/ as shown in the wiki");
@@ -617,8 +702,8 @@ public class NetconfDeviceProvider extends AbstractProvider
             if (mastershipService.getMasterFor(event.subject().id()) == null) {
                 return true;
             }
-            return SCHEME_NAME.toUpperCase()
-                    .equals(event.subject().annotations().value(AnnotationKeys.PROTOCOL)) &&
+            return (SCHEME_NAME.equalsIgnoreCase(event.subject().annotations().value(AnnotationKeys.PROTOCOL)) ||
+                    (SCHEME_NAME.equalsIgnoreCase(event.subject().id().uri().getScheme()))) &&
                     mastershipService.isLocalMaster(event.subject().id());
         }
     }

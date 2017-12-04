@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,10 @@
 package org.onosproject.routing;
 
 import com.google.common.collect.Sets;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceEvent;
-import org.onosproject.incubator.net.intf.InterfaceListener;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceEvent;
+import org.onosproject.net.intf.InterfaceListener;
+import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceService;
 import org.slf4j.Logger;
@@ -96,6 +96,7 @@ public class Router {
         asyncDeviceFetcher.shutdown();
 
         interfaceService.removeListener(listener);
+        asyncDeviceFetcher.shutdown();
 
         unprovision();
     }

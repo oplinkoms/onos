@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import static org.onosproject.ui.model.topo.UiTopoLayoutId.layoutId;
 
 /**
  * Add a new UI layout.
- * <p>
+ *
  * <pre>
  * layout-add {layout-id} {bg-ref} \
  *   [ {region-id} {parent-layout-id} {scale} {offset-x} {offset-y} ]

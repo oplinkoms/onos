@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ import com.google.common.annotations.Beta;
 @Beta
 public class FailedException extends RuntimeException {
 
+    private static final long serialVersionUID = 266049754055616595L;
+
     /**
      * Constructs a new runtime exception with no error message.
      */
@@ -37,5 +39,15 @@ public class FailedException extends RuntimeException {
      */
     public FailedException(String message) {
         super(message);
+    }
+
+    /**
+     * Constructs a new runtime exception with the given error message.
+     *
+     * @param message error message
+     * @param cause cause
+     */
+    public FailedException(String message, Throwable cause) {
+        super(message, cause);
     }
 }

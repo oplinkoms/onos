@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -296,12 +296,12 @@ public class FlowsListCommand extends AbstractShellCommand {
         for (FlowEntry f : filteredFlows) {
             if (shortOutput) {
                 print(SHORT_FORMAT, f.state(), f.bytes(), f.packets(),
-                        f.tableId(), f.priority(), f.selector().criteria(),
+                        f.table(), f.priority(), f.selector().criteria(),
                         printTreatment(f.treatment()));
             } else {
                 ApplicationId appId = coreService.getAppId(f.appId());
                 print(LONG_FORMAT, Long.toHexString(f.id().value()), f.state(),
-                        f.bytes(), f.packets(), f.life(), f.liveType(), f.priority(), f.tableId(),
+                        f.bytes(), f.packets(), f.life(), f.liveType(), f.priority(), f.table(),
                         appId != null ? appId.name() : "<none>",
                         f.payLoad() == null ? null : f.payLoad().payLoad().toString(),
                         f.selector().criteria(), f.treatment());

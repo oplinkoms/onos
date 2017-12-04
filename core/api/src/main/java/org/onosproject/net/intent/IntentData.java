@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -450,6 +450,13 @@ public class IntentData { //FIXME need to make this "immutable"
                 return false;
             }
             // FALLTHROUGH
+        case REALLOCATING:
+            if (currentState == REALLOCATING) {
+                log.trace("{} update not acceptable: no-op REALLOCATING", newData.key());
+                return false;
+            } else if (currentState == INSTALLED) {
+                return true;
+            }
         case INSTALLED:
             if (currentState == INSTALLED) {
                 return false;

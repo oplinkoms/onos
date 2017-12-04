@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,158 +16,175 @@
 
 package org.onosproject.yang.web;
 
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.io.IOUtils;
-import org.glassfish.jersey.media.multipart.FormDataBodyPart;
-import org.glassfish.jersey.media.multipart.FormDataContentDisposition;
-import org.glassfish.jersey.media.multipart.FormDataMultiPart;
+import org.glassfish.jersey.media.multipart.FormDataParam;
+import org.onosproject.app.ApplicationAdminService;
 import org.onosproject.rest.AbstractWebResource;
-import org.onosproject.yang.compiler.api.YangCompilationParam;
-import org.onosproject.yang.compiler.api.YangCompilerService;
-import org.onosproject.yang.compiler.datamodel.YangNode;
+import org.onosproject.yang.YangLiveCompilerService;
+import org.onosproject.yang.model.DefaultYangModuleId;
 import org.onosproject.yang.model.YangModel;
-import org.onosproject.yang.runtime.DefaultModelRegistrationParam;
-import org.onosproject.yang.runtime.ModelRegistrationParam;
+import org.onosproject.yang.model.YangModule;
 import org.onosproject.yang.runtime.YangModelRegistry;
+import org.slf4j.Logger;
 
 import javax.ws.rs.Consumes;
+import javax.ws.rs.DefaultValue;
+import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
+import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.Set;
 
-import static org.onosproject.yang.compiler.datamodel.utils.DataModelUtils.deSerializeDataModel;
-import static org.onosproject.yang.compiler.utils.io.impl.YangIoUtils.deleteDirectory;
-import static org.onosproject.yang.runtime.helperutils.YangApacheUtils.processYangModel;
-
-//import org.onosproject.yang.compiler.tool.DefaultYangCompilationParam;
+import static javax.ws.rs.core.Response.Status.NOT_FOUND;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Yang files upload resource.
  */
-@Path("live-compiler")
+@Path("models")
 public class YangWebResource extends AbstractWebResource {
-    private static final String YANG_FILE_EXTENSION = ".yang";
-    private static final String SER_FILE_EXTENSION = ".ser";
-    private static final String REGISTER = "register";
-    private static final String UNREGISTER = "unregister";
-    private static final String CODE_GEN_DIR = "target/generated-sources/";
-    private static final String META_DATA_DIR = "target/yang/resources/";
-    private static final String SERIALIZED_FILE_NAME = "YangMetaData.ser";
-    private static final String UNKNOWN_KEY = "Key must be either register " +
-            "or unregister.";
+
+    private final Logger log = getLogger(getClass());
+    private YangModelRegistry modelRegistry = getService(YangModelRegistry.class);
 
     /**
      * Compiles and registers the given yang files.
      *
-     * @param formData YANG files or ser files
+     * @param modelId model identifier
+     * @param stream  YANG, ZIP or JAR file
      * @return 200 OK
      * @throws IOException when fails to generate a file
      */
-    @Path("upload")
     @POST
     @Consumes(MediaType.MULTIPART_FORM_DATA)
-    public Response upload(FormDataMultiPart formData) throws IOException {
-        Map<String, List<File>> input = parseInputData(formData);
-
-        for (Map.Entry<String, List<File>> entry : input.entrySet()) {
-            deleteDirectory(CODE_GEN_DIR);
-            deleteDirectory(META_DATA_DIR);
-
-            YangCompilerService liveCompiler = get(YangCompilerService.class);
-            liveCompiler.compileYangFiles(createCompilationParam(
-                    entry.getValue()));
-
-            YangModelRegistry modelRegistry = get(YangModelRegistry.class);
-            String key = entry.getKey();
-            if (key.equalsIgnoreCase(REGISTER)) {
-                modelRegistry.registerModel(getModelRegParam());
-            } else if (key.equalsIgnoreCase(UNREGISTER)) {
-                modelRegistry.unregisterModel(getModelRegParam());
-            } else {
-                return Response.serverError().entity(UNKNOWN_KEY).build();
-            }
-        }
-
-        // TODO : create bundles
-
-        return Response.status(200).build();
+    public Response upload(@QueryParam("modelId") @DefaultValue("org.onosproject.model.unknown") String modelId,
+                           @FormDataParam("file") InputStream stream) throws IOException {
+        YangLiveCompilerService compiler = get(YangLiveCompilerService.class);
+        ApplicationAdminService appService = get(ApplicationAdminService.class);
+        modelId = getValidModelId(modelId);
+        appService.install(compiler.compileYangFiles(modelId, stream));
+        appService.activate(appService.getId(modelId));
+        return Response.ok().build();
     }
 
-    private File getInputFile(InputStream stream, String fileName)
-            throws IOException {
-        byte[] content = IOUtils.toByteArray(stream);
-        File file = new File(fileName);
-        if (!file.exists()) {
-            file.createNewFile();
+    /**
+     * Returns the valid model id by removing the special character with
+     * underscore.
+     *
+     * @param id user given model id
+     * @return model id
+     * @throws IllegalArgumentException if user defined model id does not
+     *                                  contain at least a alphanumeric character
+     */
+    public static String getValidModelId(String id) throws
+            IllegalArgumentException {
+        // checking weather modelId contains the alphanumeric character or not.
+        if (id.matches(".*[A-Za-z0-9].*")) {
+            // replacing special characters with '_'
+            id = id.replaceAll("[\\s\\/:*?\"\\[\\]<>|$@!#%&(){}';.,-]", "_");
+            // remove leading and trailing underscore
+            id = id.replaceAll("^_+|_+$", "");
+            // replacing the consecutive underscores '_' to single _
+            id = id.replaceAll("_+", "_");
+            return id;
+        } else {
+            throw new IllegalArgumentException("Invalid model id " + id);
         }
-        FileOutputStream fop = new FileOutputStream(file);
-        fop.write(content);
-        fop.flush();
-        fop.close();
-        return file;
     }
 
-    private Map<String, List<File>> parseInputData(FormDataMultiPart formData)
-            throws IOException {
-        Map<String, List<File>> input = new HashMap<>();
-        Map<String, List<FormDataBodyPart>> fieldsByName = formData.getFields();
-        for (Map.Entry<String, List<FormDataBodyPart>> entry :
-                fieldsByName.entrySet()) {
-            List<File> inputFiles = new LinkedList<>();
-            for (FormDataBodyPart field : entry.getValue()) {
-                InputStream stream = field.getEntityAs(InputStream.class);
-                FormDataContentDisposition content = field
-                        .getFormDataContentDisposition();
-                String fileName = content.getFileName();
-                inputFiles.add(getInputFile(stream, fileName));
-            }
-            input.put(entry.getKey(), inputFiles);
+    /**
+     * Returns all models registered with YANG runtime. If the operation is
+     * successful, the JSON presentation of the resource plus HTTP status
+     * code "200 OK" is returned.Otherwise,
+     * HTTP error status code "400 Bad Request" is returned.
+     *
+     * @return HTTP response
+     */
+    @GET
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getModels() {
+
+        modelRegistry = getService(YangModelRegistry.class);
+        ObjectNode result = mapper().createObjectNode();
+        Set<YangModel> models = modelRegistry.getModels();
+        ArrayNode ids = result.putArray("Model_ids");
+        for (YangModel m : models) {
+            ids.add(m.getYangModelId());
         }
-        return input;
+        return Response.ok(result.toString()).build();
     }
 
-    private YangCompilationParam createCompilationParam(List<File> inputFiles)
-            throws IOException {
-        // TODO : uncomment when yang tools new verison is released.
-        /*YangCompilationParam param = new DefaultYangCompilationParam();
-        for (File file : inputFiles) {
-            if (file.getName().endsWith(YANG_FILE_EXTENSION)) {
-                param.addYangFile(Paths.get(file.getAbsolutePath()));
-            } else if (file.getName().endsWith(SER_FILE_EXTENSION)) {
-                param.addDependentSchema(Paths.get(file.getAbsolutePath()));
-            }
+    /**
+     * Returns all modules registered with YANG runtime under given model
+     * identifier.If the operation is successful, the JSON presentation of the
+     * resource plus HTTP status code "200 OK" is returned. Otherwise,
+     * HTTP error status code "400 Bad Request" is returned.
+     *
+     * @param id for model
+     * @return HTTP response
+     */
+    @GET
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("/{id}")
+    public Response getModules(@PathParam("id") String
+                                       id) {
+        modelRegistry = getService(YangModelRegistry.class);
+        ObjectNode result = mapper().createObjectNode();
+        YangModel model = modelRegistry.getModel(id);
+        if (model == null) {
+            return Response.status(NOT_FOUND).build();
         }
-        param.setCodeGenDir(Paths.get(CODE_GEN_DIR));
-        param.setMetadataGenDir(Paths.get(META_DATA_DIR));
-        return param;*/
-        return null;
+        Set<YangModule> modules = model.getYangModules();
+        ArrayNode ids = result.putArray(id);
+        for (YangModule m : modules) {
+            ids.add(m.getYangModuleId().moduleName() + "@" + m
+                    .getYangModuleId().revision());
+        }
+        return Response.ok(result).build();
     }
 
-    private ModelRegistrationParam getModelRegParam() throws IOException {
-        String metaPath = META_DATA_DIR + SERIALIZED_FILE_NAME;
-        List<YangNode> curNodes = getYangNodes(metaPath);
-        if (curNodes != null && !curNodes.isEmpty()) {
-            YangModel model = processYangModel(metaPath, curNodes);
-            return DefaultModelRegistrationParam.builder()
-                    .setYangModel(model).build();
-        }
-        return null;
-    }
+    /**
+     * Returns module registered with YANG runtime with given module
+     * identifier.
+     * If the operation is successful, the JSON presentation of the resource
+     * plus HTTP status code "200 OK" is returned. Otherwise,
+     * HTTP error status code "400 Bad Request" is returned.
+     *
+     * @param n for module name
+     * @param r for module revision
+     * @return HTTP response
+     */
+    @GET
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.TEXT_PLAIN)
+    @Path("/{name}@{revision}")
+    public String getModule(@PathParam("name") String n,
+                            @PathParam("revision") String r) {
 
-    private List<YangNode> getYangNodes(String path) throws IOException {
-        List<YangNode> nodes = new LinkedList<YangNode>();
-        File file = new File(path);
-        if (file.getName().endsWith(SER_FILE_EXTENSION)) {
-            nodes.addAll(deSerializeDataModel(file.toString()));
+        modelRegistry = getService(YangModelRegistry.class);
+        YangModule m = modelRegistry.getModule(new DefaultYangModuleId(n, r));
+        if (m == null) {
+            return Response.status(NOT_FOUND).build().toString();
         }
-        return nodes;
+        String x;
+        try {
+            x = IOUtils.toString(m.getYangSource(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            log.error("ERROR: handleModuleGetRequest", e.getMessage());
+            log.debug("Exception in handleModuleGetRequest:", e);
+            return e.getMessage();
+        }
+        return x;
     }
 }

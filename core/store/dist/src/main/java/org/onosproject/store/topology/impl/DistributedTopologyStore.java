@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -134,8 +134,9 @@ public class DistributedTopologyStore
             new InternalBroadcastPointListener();
 
     @Activate
-    protected void activate() {
+    protected void activate(ComponentContext context) {
         configService.registerProperties(getClass());
+        modified(context);
         KryoNamespace.Builder hostSerializer = KryoNamespace.newBuilder()
                 .register(KryoNamespaces.API);
 

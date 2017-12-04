@@ -1,5 +1,5 @@
 /*
-* Copyright 2016-present Open Networking Laboratory
+* Copyright 2016-present Open Networking Foundation
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -1051,7 +1051,7 @@ public class OspfNbrImpl implements OspfNbr {
     public boolean processReceivedLsa(LsaHeader recLsa,
                                       boolean receivedViaFlooding, Channel ch, Ip4Address sourceIp)
             throws Exception {
-        log.debug("OSPFNbr::processReceivedLsa(recLsa, recievedViaFlooding, ch)...!!!");
+        log.debug("OSPFNbr::processReceivedLsa(recLsa, receivedViaFlooding, ch)...!!!");
 
         //Validate the lsa checksum RFC 2328 13 (1)
         ChecksumCalculator checkSum = new ChecksumCalculator();

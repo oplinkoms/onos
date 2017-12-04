@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -307,7 +307,7 @@ public class PceManager implements PceService {
         return devList;
     }
 
-    //To dectect loops in the path i.e if the partial paths has intersection node avoid it.
+    //To detect loops in the path i.e if the partial paths has intersection node avoid it.
     private boolean pathValidation(List<Path> partialPath, Path path) {
 
         //List of devices in new path computed

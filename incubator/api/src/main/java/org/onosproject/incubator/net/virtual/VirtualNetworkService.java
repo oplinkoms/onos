@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,6 +44,24 @@ public interface VirtualNetworkService
      * @throws org.onlab.util.ItemNotFoundException if no such network found
      */
     Set<VirtualNetwork> getVirtualNetworks(TenantId tenantId);
+
+    /**
+     * Returns the virtual network matching the network identifier.
+     *
+     * @param networkId virtual network identifier
+     * @return virtual network instance
+     * @throws org.onlab.util.ItemNotFoundException if no such network found
+     */
+    VirtualNetwork getVirtualNetwork(NetworkId networkId);
+
+    /**
+     * Returns {@code tenantId} for specified virtual network id.
+     *
+     * @param networkId virtual network identifier
+     * @return tenantId tenant identifier
+     * @throws org.onlab.util.ItemNotFoundException if no such network found
+     */
+    TenantId getTenantId(NetworkId networkId);
 
     /**
      * Returns a collection of all virtual devices in the specified network.
@@ -111,6 +129,8 @@ public interface VirtualNetworkService
      * <li>{@link org.onosproject.net.flowobjective.FlowObjectiveService}</li>
      * <li>{@link org.onosproject.net.intent.IntentService}</li>
      * <li>{@link org.onosproject.mastership.MastershipService}</li>
+     * <li>{@link org.onosproject.mastership.MastershipAdminService}</li>
+     * <li>{@link org.onosproject.mastership.MastershipTermService}</li>
      * </ul>
      *
      * @param networkId    network identifier

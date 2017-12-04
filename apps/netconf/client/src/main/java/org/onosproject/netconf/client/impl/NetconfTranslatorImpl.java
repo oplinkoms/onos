@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ import org.onosproject.yang.runtime.DefaultRuntimeContext;
 import org.onosproject.yang.runtime.DefaultYangSerializerContext;
 import org.onosproject.yang.runtime.YangRuntimeService;
 import org.onosproject.yang.runtime.YangSerializerContext;
-import org.onosproject.yang.runtime.helperutils.SerializerHelper;
+import org.onosproject.yang.runtime.SerializerHelper;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,9 +69,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static org.onosproject.netconf.TargetConfig.RUNNING;
+import static org.onosproject.netconf.DatastoreId.RUNNING;
 import static org.onosproject.yang.model.DataNode.Type.SINGLE_INSTANCE_LEAF_VALUE_NODE;
-import static org.onosproject.yang.runtime.helperutils.SerializerHelper.addDataNode;
+import static org.onosproject.yang.runtime.SerializerHelper.addDataNode;
 
 /*FIXME these imports are not visible using OSGI*/
 
@@ -234,7 +234,7 @@ public class NetconfTranslatorImpl implements NetconfTranslator {
      * Returns a session for the specified deviceId if this node is its master,
      * returns null otherwise.
      *
-     * @param deviceId the id of node for witch we wish to retrieve a session
+     * @param deviceId the id of node for which we wish to retrieve a session
      * @return a NetconfSession with the specified node or null
      */
     private NetconfSession getNetconfSession(DeviceId deviceId) {

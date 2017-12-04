@@ -1,11 +1,15 @@
 COMPILE_DEPS = [
     '//lib:CORE_DEPS',
+    '//lib:KRYO',
     '//models/l3vpn:onos-models-l3vpn',
     '//apps/config:onos-apps-config',
     '//core/store/serializers:onos-core-serializers',
     '//lib:onos-yang-model',
     '//lib:onos-yang-runtime',
     '//apps/yang:onos-apps-yang',
+    '//apps/pce/app:onos-apps-pce-app',
+    '//incubator/api:onos-incubator-api',
+    '//models/common:onos-models-common',
 ]
 
 TEST_DEPS = [
@@ -18,11 +22,12 @@ APPS = [
     'org.onosproject.yang-gui',
     'org.onosproject.config',
     'org.onosproject.restconf',
-    'org.onosproject.yms',
     'org.onosproject.protocols.restconfserver',
     'org.onosproject.netconf',
     'org.onosproject.netconfsb',
+    'org.onosproject.models.common',
     'org.onosproject.models.l3vpn',
+    'org.onosproject.bgpcep',
 ]
 
 osgi_jar_with_tests(
@@ -32,7 +37,7 @@ osgi_jar_with_tests(
 
 onos_app(
     app_name = 'org.onosproject.l3vpn',
-    title = 'YANG L3VPN App',
+    title = 'YANG L3VPN',
     category = 'Traffic Steering',
     url = 'http://onosproject.org',
     description = 'L3VPN YANG Application',

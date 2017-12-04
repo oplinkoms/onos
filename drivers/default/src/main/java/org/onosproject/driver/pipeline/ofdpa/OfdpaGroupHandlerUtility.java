@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,8 @@ import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.instructions.Instruction;
 import org.onosproject.net.flow.instructions.Instructions;
+import org.onosproject.net.flow.instructions.L2ModificationInstruction;
+import org.onosproject.net.flow.instructions.L2ModificationInstruction.L2SubType;
 import org.onosproject.net.flowobjective.NextObjective;
 import org.onosproject.net.group.DefaultGroupBucket;
 import org.onosproject.net.group.DefaultGroupKey;
@@ -39,6 +41,7 @@ import org.onosproject.net.group.GroupKey;
 import org.onosproject.net.group.GroupService;
 import org.slf4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
@@ -105,6 +108,25 @@ public final class OfdpaGroupHandlerUtility {
     }
 
     /**
+     * Returns the MPLS label-id in a traffic treatment.
+     *
+     * @param tt the traffic treatment
+     * @return an integer representing the MPLS label-id, or -1 if not found
+     */
+    protected static int readLabelFromTreatment(TrafficTreatment tt) {
+        for (Instruction ins : tt.allInstructions()) {
+            if (ins.type() == Instruction.Type.L2MODIFICATION) {
+                L2ModificationInstruction insl2 = (L2ModificationInstruction) ins;
+                if (insl2.subtype() == L2SubType.MPLS_LABEL) {
+                    return ((L2ModificationInstruction.ModMplsLabelInstruction) insl2)
+                                .label().id();
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
      * Helper enum to handle the different MPLS group
      * types.
      */
@@ -163,8 +185,8 @@ public final class OfdpaGroupHandlerUtility {
     }
 
     /**
-     * Gets duplicated output ports between group key chains and existing groups
-     * in the device.
+     * Returns the set of existing output ports in the group represented by
+     * allActiveKeys.
      *
      * @param allActiveKeys list of group key chain
      * @param groupService the group service to get group information
@@ -189,6 +211,56 @@ public final class OfdpaGroupHandlerUtility {
             }
         });
         return existingPorts;
+    }
+
+    /**
+     * Returns a list of all indices in the allActiveKeys list (that represents
+     * a group) if the list element (a bucket or group-chain) has treatments
+     * that match the given outport and label.
+     *
+     * @param allActiveKeys the representation of the group
+     * @param groupService groups service for querying group information
+     * @param deviceId the device id for the device that contains the group
+     * @param portToMatch the port to match in the group buckets
+     * @param labelToMatch the MPLS label-id to match in the group buckets
+     * @return a list of indexes in the allActiveKeys list where the list element
+     *         has treatments that match the given portToMatch and labelToMatch.
+     *         Could be empty if no list elements were found to match the given
+     *         port and label.
+     */
+    public static List<Integer> existingPortAndLabel(
+                                               List<Deque<GroupKey>> allActiveKeys,
+                                               GroupService groupService,
+                                               DeviceId deviceId,
+                                               PortNumber portToMatch,
+                                               int labelToMatch) {
+        List<Integer> indices = new ArrayList<>();
+        int index = 0;
+        for (Deque<GroupKey> keyChain : allActiveKeys) {
+            GroupKey ifaceGroupKey = keyChain.peekLast();
+            Group ifaceGroup = groupService.getGroup(deviceId, ifaceGroupKey);
+            if (ifaceGroup != null && !ifaceGroup.buckets().buckets().isEmpty()) {
+                PortNumber portNumber = readOutPortFromTreatment(
+                   ifaceGroup.buckets().buckets().iterator().next().treatment());
+                if (portNumber != null && portNumber.equals(portToMatch)) {
+                    // check for label in the 2nd group of this chain
+                    GroupKey secondKey = (GroupKey) keyChain.toArray()[1];
+                    Group secondGroup = groupService.getGroup(deviceId, secondKey);
+                    if (secondGroup != null &&
+                            !secondGroup.buckets().buckets().isEmpty()) {
+                        int label = readLabelFromTreatment(
+                                        secondGroup.buckets().buckets()
+                                        .iterator().next().treatment());
+                        if (label == labelToMatch) {
+                            indices.add(index);
+                        }
+                    }
+                }
+            }
+            index++;
+        }
+
+        return indices;
     }
 
     /**
@@ -389,6 +461,10 @@ public final class OfdpaGroupHandlerUtility {
 
         public NextObjective nextObjective() {
             return nextObj;
+        }
+
+        public List<Deque<GroupKey>> allKeys() {
+            return gkeys;
         }
 
         @Override

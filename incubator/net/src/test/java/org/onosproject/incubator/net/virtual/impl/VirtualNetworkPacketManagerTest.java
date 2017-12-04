@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,13 +51,11 @@ import org.onosproject.net.NetTestTools;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.FlowRuleBatchOperation;
+import org.onosproject.net.flow.oldbatch.FlowRuleBatchOperation;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flowobjective.FlowObjectiveServiceAdapter;
 import org.onosproject.net.flowobjective.ForwardingObjective;
 import org.onosproject.net.flowobjective.Objective;
-import org.onosproject.net.intent.FakeIntentManager;
-import org.onosproject.net.intent.TestableIntentService;
 import org.onosproject.net.packet.DefaultOutboundPacket;
 import org.onosproject.net.packet.OutboundPacket;
 import org.onosproject.net.packet.PacketContext;
@@ -90,7 +88,6 @@ public class VirtualNetworkPacketManagerTest extends VirtualNetworkTestUtil {
     protected VirtualNetworkManager manager;
     protected DistributedVirtualNetworkStore virtualNetworkManagerStore;
     private CoreService coreService = new TestCoreService();
-    private TestableIntentService intentService = new FakeIntentManager();
     protected TestServiceDirectory testDirectory;
     private EventDeliveryService eventDeliveryService;
     private VirtualProviderManager providerRegistryService;
@@ -122,7 +119,6 @@ public class VirtualNetworkPacketManagerTest extends VirtualNetworkTestUtil {
         manager = new VirtualNetworkManager();
         manager.store = virtualNetworkManagerStore;
         manager.coreService = coreService;
-        manager.intentService = intentService;
         NetTestTools.injectEventDispatcher(manager, new TestEventDispatcher());
 
         flowObjectiveStore = new SimpleVirtualFlowObjectiveStore();
@@ -337,15 +333,6 @@ public class VirtualNetworkPacketManagerTest extends VirtualNetworkTestUtil {
             emittedPacket = packet;
         }
 
-        @Override
-        public void startPacketHandling(NetworkId networkId) {
-
-        }
-
-        @Override
-        public void stopPacketHandling(NetworkId networkId) {
-
-        }
     }
 
     private class TestProcessor implements PacketProcessor {

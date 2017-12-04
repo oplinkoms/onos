@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,6 +57,7 @@ import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.Topic;
 import org.onosproject.store.service.Versioned;
 import org.onosproject.store.service.DistributedPrimitive.Status;
+import org.onosproject.upgrade.UpgradeService;
 import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
@@ -67,7 +68,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -78,6 +78,7 @@ import java.util.stream.Collectors;
 import static com.google.common.collect.Multimaps.newSetMultimap;
 import static com.google.common.collect.Multimaps.synchronizedSetMultimap;
 import static com.google.common.io.ByteStreams.toByteArray;
+import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.onlab.util.Tools.groupedThreads;
@@ -94,9 +95,6 @@ import static org.slf4j.LoggerFactory.getLogger;
 @Service
 public class DistributedApplicationStore extends ApplicationArchive
         implements ApplicationStore {
-
-    // FIXME: eliminate the need for this
-    private static final int FIXME_ACTIVATION_DELAY = 500;
 
     private final Logger log = getLogger(getClass());
 
@@ -116,7 +114,7 @@ public class DistributedApplicationStore extends ApplicationArchive
     }
 
     private ScheduledExecutorService executor;
-    private ExecutorService messageHandlingExecutor;
+    private ExecutorService messageHandlingExecutor, activationExecutor;
 
     private ConsistentMap<ApplicationId, InternalApplicationHolder> apps;
     private Topic<Application> appActivationTopic;
@@ -133,6 +131,9 @@ public class DistributedApplicationStore extends ApplicationArchive
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ApplicationIdStore idStore;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected UpgradeService upgradeService;
+
     private final InternalAppsListener appsListener = new InternalAppsListener();
     private final Consumer<Application> appActivator = new AppActivator();
 
@@ -148,12 +149,13 @@ public class DistributedApplicationStore extends ApplicationArchive
 
     @Activate
     public void activate() {
-        messageHandlingExecutor = Executors.newSingleThreadExecutor(
-                groupedThreads("onos/store/app", "message-handler", log));
+        messageHandlingExecutor = newSingleThreadExecutor(groupedThreads("onos/store/app",
+                                                                         "message-handler", log));
         clusterCommunicator.addSubscriber(APP_BITS_REQUEST,
                                           bytes -> new String(bytes, Charsets.UTF_8),
                                           name -> {
                                               try {
+                                                  log.info("Sending bits for application {}", name);
                                                   return toByteArray(getApplicationInputStream(name));
                                               } catch (IOException e) {
                                                   throw new StorageException(e);
@@ -173,7 +175,9 @@ public class DistributedApplicationStore extends ApplicationArchive
         appActivationTopic = storageService.getTopic("onos-apps-activation-topic",
                                                      Serializer.using(KryoNamespaces.API));
 
-        appActivationTopic.subscribe(appActivator, messageHandlingExecutor);
+        activationExecutor = newSingleThreadExecutor(groupedThreads("onos/store/app",
+                                                                    "app-activation", log));
+        appActivationTopic.subscribe(appActivator, activationExecutor);
 
         executor = newSingleThreadScheduledExecutor(groupedThreads("onos/app", "store", log));
         statusChangeListener = status -> {
@@ -181,10 +185,48 @@ public class DistributedApplicationStore extends ApplicationArchive
                 executor.execute(this::bootstrapExistingApplications);
             }
         };
-        apps.addListener(appsListener, messageHandlingExecutor);
+        apps.addListener(appsListener, activationExecutor);
         apps.addStatusChangeListener(statusChangeListener);
         coreAppId = getId(CoreService.CORE_APP_NAME);
+
+        upgradeExistingApplications();
         log.info("Started");
+    }
+
+    /**
+     * Upgrades application versions for existing applications that are stored on disk after an upgrade.
+     */
+    private void upgradeExistingApplications() {
+        if (upgradeService.isUpgrading() && upgradeService.isLocalUpgraded()) {
+            getApplicationNames().forEach(appName -> {
+                // Only update the application version if the application has already been installed.
+                ApplicationId appId = getId(appName);
+                if (appId != null) {
+                    Application application = getApplication(appId);
+                    if (application != null) {
+                        InternalApplicationHolder appHolder = Versioned.valueOrNull(apps.get(application.id()));
+
+                        // Load the application description from disk. If the version doesn't match the persisted
+                        // version, update the stored application with the new version.
+                        ApplicationDescription appDesc = getApplicationDescription(appName);
+                        if (!appDesc.version().equals(application.version())) {
+                            Application newApplication = DefaultApplication.builder(application)
+                                    .withVersion(appDesc.version())
+                                    .build();
+                            InternalApplicationHolder newHolder = new InternalApplicationHolder(
+                                    newApplication, appHolder.state, appHolder.permissions);
+                            apps.put(newApplication.id(), newHolder);
+                        }
+
+                        // If the application was activated in the previous version, set the local state to active.
+                        if (appHolder.state == ACTIVATED) {
+                            setActive(appName);
+                            updateTime(appName);
+                        }
+                    }
+                }
+            });
+        }
     }
 
     /**
@@ -193,7 +235,6 @@ public class DistributedApplicationStore extends ApplicationArchive
      */
     private void bootstrapExistingApplications() {
         apps.asJavaMap().forEach((appId, holder) -> setupApplicationAndNotify(appId, holder.app(), holder.state()));
-
     }
 
     /**
@@ -257,6 +298,7 @@ public class DistributedApplicationStore extends ApplicationArchive
         apps.removeListener(appsListener);
         appActivationTopic.unsubscribe(appActivator);
         messageHandlingExecutor.shutdown();
+        activationExecutor.shutdown();
         executor.shutdown();
         log.info("Stopped");
     }
@@ -351,7 +393,6 @@ public class DistributedApplicationStore extends ApplicationArchive
         activate(appId, true);
     }
 
-
     private void activate(ApplicationId appId, boolean updateTime) {
         Versioned<InternalApplicationHolder> vAppHolder = apps.get(appId);
         if (vAppHolder != null) {
@@ -364,6 +405,7 @@ public class DistributedApplicationStore extends ApplicationArchive
                     (k, v) -> new InternalApplicationHolder(
                             v.app(), ACTIVATED, v.permissions()));
             appActivationTopic.publish(vAppHolder.value().app());
+            appActivationTopic.publish(null); // FIXME: Once ONOS-6977 is fixed
         }
     }
 
@@ -436,13 +478,20 @@ public class DistributedApplicationStore extends ApplicationArchive
         }
     }
 
+    @Override
+    public InputStream getApplicationArchive(ApplicationId appId) {
+        return getApplicationInputStream(appId.name());
+    }
+
     private class AppActivator implements Consumer<Application> {
         @Override
         public void accept(Application app) {
-            String appName = app.id().name();
-            installAppIfNeeded(app);
-            setActive(appName);
-            notifyDelegate(new ApplicationEvent(APP_ACTIVATED, app));
+            if (app != null) { // FIXME: Once ONOS-6977 is fixed
+                String appName = app.id().name();
+                installAppIfNeeded(app);
+                setActive(appName);
+                notifyDelegate(new ApplicationEvent(APP_ACTIVATED, app));
+            }
         }
     }
 
@@ -500,7 +549,7 @@ public class DistributedApplicationStore extends ApplicationArchive
      */
     private void fetchBitsIfNeeded(Application app) {
         if (!appBitsAvailable(app)) {
-            fetchBits(app);
+            fetchBits(app, false);
         }
     }
 
@@ -509,15 +558,14 @@ public class DistributedApplicationStore extends ApplicationArchive
      */
     private void installAppIfNeeded(Application app) {
         if (!appBitsAvailable(app)) {
-            fetchBits(app);
-            notifyDelegate(new ApplicationEvent(APP_INSTALLED, app));
+            fetchBits(app, true);
         }
     }
 
     /**
      * Fetches the bits from the cluster peers.
      */
-    private void fetchBits(Application app) {
+    private void fetchBits(Application app, boolean delegateInstallation) {
         ControllerNode localNode = clusterService.getLocalNode();
         CountDownLatch latch = new CountDownLatch(1);
 
@@ -542,11 +590,14 @@ public class DistributedApplicationStore extends ApplicationArchive
                             log.info("Downloaded bits for application {} from node {}",
                                      app.id().name(), node.id());
                             latch.countDown();
+                            if (delegateInstallation) {
+                                notifyDelegate(new ApplicationEvent(APP_INSTALLED, app));
+                            }
                         } else if (error != null) {
                             log.warn("Unable to fetch bits for application {} from node {}",
                                      app.id().name(), node.id());
                         }
-                    }, executor);
+                    }, messageHandlingExecutor);
         }
 
         try {
@@ -563,20 +614,10 @@ public class DistributedApplicationStore extends ApplicationArchive
      */
     private Application registerApp(ApplicationDescription appDesc) {
         ApplicationId appId = idStore.registerApplication(appDesc.name());
-        return new DefaultApplication(appId,
-                                      appDesc.version(),
-                                      appDesc.title(),
-                                      appDesc.description(),
-                                      appDesc.origin(),
-                                      appDesc.category(),
-                                      appDesc.url(),
-                                      appDesc.readme(),
-                                      appDesc.icon(),
-                                      appDesc.role(),
-                                      appDesc.permissions(),
-                                      appDesc.featuresRepo(),
-                                      appDesc.features(),
-                                      appDesc.requiredApps());
+        return DefaultApplication
+                .builder(appDesc)
+                .withAppId(appId)
+                .build();
     }
 
     /**

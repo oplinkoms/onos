@@ -17,15 +17,21 @@ YANG_TOOLS = [
 def yang_model(
     name = None,
     app_name = None,
+    model_id = None,
     title = 'YANG Model',
     url = 'http://onosproject.org',
     description = None,
     deps = [],
+    required_apps = [],
+    custom_registrator = False,
     **kwargs
     ):
 
     if name is None:
         name = _get_name()
+
+    if model_id is None:
+        model_id = app_name
 
     yang = name + '-yang'
     yangSrcs = yang + '#srcs'
@@ -33,8 +39,10 @@ def yang_model(
     registrator = name + '-registrator'
 
     yang_library(
+      deps = deps,
       name = yang,
-      srcs = glob(['**/*.yang']),
+      srcs = glob(['src/main/yang/**/*.yang'], excludes=['**/target/**']),
+      model_id = model_id
     )
 
     genrule(
@@ -44,36 +52,46 @@ def yang_model(
       out = 'yang'
     )
 
-    genrule(
-      name = registrator,
-      srcs = [ ':' + yangSrcs ],
-      cmd = '$(location //buck-tools:yang-registrator) $OUT app_name $SRCS',
-      out = 'YangModelRegistrator.java'
-    )
-
-    osgi_jar(
-      name = name,
-      srcs = [ ':' + yangSrcs, ':' + registrator ],
-      deps = deps + YANG_TOOLS,
-      resources = [ ':' + schema ],
-      resources_root = ".",
-      do_checkstyle = False,
-      do_javadocs = False,
-    )
+    if custom_registrator:
+        osgi_jar(
+          name = name,
+          srcs = [ ':' + yangSrcs ] + glob(['src/main/java/**/*.java']),
+          deps = deps + YANG_TOOLS,
+          resources = [ ':' + schema ],
+          resources_root = ".",
+          do_checkstyle = False,
+          do_javadocs = False,
+        )
+    else:
+        genrule(
+          name = registrator,
+          srcs = [ ':' + yangSrcs ],
+          cmd = '$(location //buck-tools:yang-registrator) $OUT ' + app_name + ' $SRCS',
+          out = 'YangModelRegistrator.java'
+        )
+        osgi_jar(
+          name = name,
+          srcs = [ ':' + yangSrcs, ':' + registrator ],
+          deps = deps + YANG_TOOLS,
+          resources = [ ':' + schema ],
+          resources_root = ".",
+          do_checkstyle = False,
+          do_javadocs = False,
+        )
 
     onos_app (
       app_name = app_name,
       title = title,
-      category = 'Model',
+      category = 'Models',
       url = url,
       description = description,
-      required_apps = [ 'org.onosproject.yang' ],
+      required_apps = required_apps + [ 'org.onosproject.yang' ],
     )
-
 
 def yang_osgi_jar(
     name = None,
     srcs = None,
+    model_id = None,
     group_id = ONOS_GROUP_ID,
     version = ONOS_VERSION,
     deps = [],
@@ -85,6 +103,8 @@ def yang_osgi_jar(
     if name is None:
         name = _get_name()
 
+    if model_id is None:
+        model_id = name
     yang_jar = name + '-yang'
     bnd_jar = name + '-bnd'
 
@@ -94,6 +114,7 @@ def yang_osgi_jar(
       deps = deps,
       name = yang_jar,
       srcs = srcs,
+      model_id = model_id,
       visibility = [ ],
     )
 

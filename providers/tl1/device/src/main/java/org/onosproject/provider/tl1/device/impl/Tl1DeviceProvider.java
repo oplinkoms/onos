@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onlab.packet.ChassisId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.net.config.basics.ConfigException;
+import org.onosproject.net.config.ConfigException;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.Device;
@@ -47,10 +47,11 @@ import org.onosproject.net.device.DeviceProviderService;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
+import org.onosproject.tl1.DefaultTl1Device;
 import org.onosproject.tl1.Tl1Controller;
 import org.onosproject.tl1.Tl1Device;
 import org.onosproject.tl1.Tl1Listener;
-import org.onosproject.tl1.impl.DefaultTl1Device;
+import org.onosproject.tl1.device.Tl1DeviceConfig;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -74,7 +75,11 @@ import static org.slf4j.LoggerFactory.getLogger;
 @Component(immediate = true)
 public class Tl1DeviceProvider extends AbstractProvider implements DeviceProvider {
     private static final String APP_NAME = "org.onosproject.tl1";
-    protected static final String TL1 = "tl1";
+    /**
+     * @deprecated in 1.11.0. Use {@link Tl1DeviceConfig#TL1} instead
+     */
+    @Deprecated
+    protected static final String TL1 = Tl1DeviceConfig.TL1;
     private static final String PROVIDER = "org.onosproject.provider.tl1.device";
     private static final String UNKNOWN = "unknown";
     private static final int REACHABILITY_TIMEOUT = 2000;      // in milliseconds
@@ -116,7 +121,7 @@ public class Tl1DeviceProvider extends AbstractProvider implements DeviceProvide
             },
             new ConfigFactory<DeviceId, Tl1DeviceConfig>(SubjectFactories.DEVICE_SUBJECT_FACTORY,
                                                          Tl1DeviceConfig.class,
-                                                         TL1) {
+                                                         Tl1DeviceConfig.TL1) {
                 @Override
                 public Tl1DeviceConfig createConfig() {
                     return new Tl1DeviceConfig();
@@ -150,7 +155,7 @@ public class Tl1DeviceProvider extends AbstractProvider implements DeviceProvide
     }
 
     public Tl1DeviceProvider() {
-        super(new ProviderId(TL1, PROVIDER));
+        super(new ProviderId(Tl1DeviceConfig.TL1, PROVIDER));
     }
 
     @Override
@@ -237,11 +242,11 @@ public class Tl1DeviceProvider extends AbstractProvider implements DeviceProvide
         try {
             // Add device to TL1 controller
             DeviceId deviceId = DeviceId.deviceId(
-                    new URI(TL1, device.ip() + ":" + device.port(), null));
+                    new URI(Tl1DeviceConfig.TL1, device.ip() + ":" + device.port(), null));
 
             if (controller.addDevice(deviceId, device)) {
                 SparseAnnotations ann = DefaultAnnotations.builder()
-                        .set(AnnotationKeys.PROTOCOL, TL1.toUpperCase())
+                        .set(AnnotationKeys.PROTOCOL, Tl1DeviceConfig.TL1.toUpperCase())
                         .build();
                 // Register device in the core with default parameters and mark it as unavailable
                 DeviceDescription dd = new DefaultDeviceDescription(deviceId.uri(),

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,8 @@ import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Modified;
 import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.Service;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.ICMP;
 import org.onlab.packet.ICMP6;
@@ -73,20 +73,24 @@ import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.topology.TopologyEvent;
 import org.onosproject.net.topology.TopologyListener;
 import org.onosproject.net.topology.TopologyService;
-import org.onosproject.store.service.StorageService;
-import org.osgi.service.component.ComponentContext;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.EventuallyConsistentMap;
-import org.onosproject.store.service.WallClockTimestamp;
 import org.onosproject.store.service.MultiValuedTimestamp;
+import org.onosproject.store.service.StorageService;
+import org.onosproject.store.service.WallClockTimestamp;
+import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
+
 import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 
+import static java.util.concurrent.Executors.newSingleThreadExecutor;
+import static org.onlab.util.Tools.groupedThreads;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -198,6 +202,8 @@ public class ReactiveForwarding {
 
     private final TopologyListener topologyListener = new InternalTopologyListener();
 
+    private ExecutorService blackHoleExecutor;
+
 
     @Activate
     public void activate(ComponentContext context) {
@@ -211,6 +217,10 @@ public class ReactiveForwarding {
                 .withTimestampProvider((key, metricsData) -> new
                         MultiValuedTimestamp<>(new WallClockTimestamp(), System.nanoTime()))
                 .build();
+
+        blackHoleExecutor = newSingleThreadExecutor(groupedThreads("onos/app/fwd",
+                                                                   "black-hole-fixer",
+                                                                   log));
 
         cfgService.registerProperties(getClass());
         appId = coreService.registerApplication("org.onosproject.fwd");
@@ -230,6 +240,8 @@ public class ReactiveForwarding {
         flowRuleService.removeFlowRulesById(appId);
         packetService.removeProcessor(processor);
         topologyService.removeListener(topologyListener);
+        blackHoleExecutor.shutdown();
+        blackHoleExecutor = null;
         processor = null;
         log.info("Stopped");
     }
@@ -539,14 +551,12 @@ public class ReactiveForwarding {
     // Selects a path from the given set that does not lead back to the
     // specified port if possible.
     private Path pickForwardPathIfPossible(Set<Path> paths, PortNumber notToPort) {
-        Path lastPath = null;
         for (Path path : paths) {
-            lastPath = path;
             if (!path.src().port().equals(notToPort)) {
                 return path;
             }
         }
-        return lastPath;
+        return null;
     }
 
     // Floods the specified packet if permissible.
@@ -721,8 +731,8 @@ public class ReactiveForwarding {
                 reasons.forEach(re -> {
                     if (re instanceof LinkEvent) {
                         LinkEvent le = (LinkEvent) re;
-                        if (le.type() == LinkEvent.Type.LINK_REMOVED) {
-                            fixBlackhole(le.subject().src());
+                        if (le.type() == LinkEvent.Type.LINK_REMOVED && blackHoleExecutor != null) {
+                            blackHoleExecutor.submit(() -> fixBlackhole(le.subject().src()));
                         }
                     }
                 });

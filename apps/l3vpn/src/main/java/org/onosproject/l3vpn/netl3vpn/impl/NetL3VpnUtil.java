@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,33 +23,33 @@ import org.onosproject.l3vpn.netl3vpn.InterfaceInfo;
 import org.onosproject.l3vpn.netl3vpn.NetL3VpnException;
 import org.onosproject.l3vpn.netl3vpn.VpnType;
 import org.onosproject.net.DeviceId;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.interfaces.rev20140508.ietfinterfaces.devices.device.Interfaces;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.DefaultL3VpnSvc;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.SiteRole;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.l3vpnsvc.DefaultSites;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.network.instance.rev20160623.ietfnetworkinstance.DefaultDevices;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.network.instance.rev20160623.ietfnetworkinstance.Devices;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.network.instance.rev20160623.ietfnetworkinstance.devices.DefaultDevice;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.network.instance.rev20160623.ietfnetworkinstance.devices.Device;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.network.instance.rev20160623.ietfnetworkinstance.devices.DeviceKeys;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.network.instance.rev20160623.ietfnetworkinstance.devices.device.NetworkInstances;
+import org.onosproject.yang.gen.v1.ietfinterfaces.rev20140508.ietfinterfaces.devices.device.Interfaces;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.DefaultL3VpnSvc;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.SiteRole;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.l3vpnsvc.DefaultSites;
+import org.onosproject.yang.gen.v1.ietfnetworkinstance.rev20160623.ietfnetworkinstance.DefaultDevices;
+import org.onosproject.yang.gen.v1.ietfnetworkinstance.rev20160623.ietfnetworkinstance.Devices;
+import org.onosproject.yang.gen.v1.ietfnetworkinstance.rev20160623.ietfnetworkinstance.devices.DefaultDevice;
+import org.onosproject.yang.gen.v1.ietfnetworkinstance.rev20160623.ietfnetworkinstance.devices.Device;
+import org.onosproject.yang.gen.v1.ietfnetworkinstance.rev20160623.ietfnetworkinstance.devices.DeviceKeys;
+import org.onosproject.yang.gen.v1.ietfnetworkinstance.rev20160623.ietfnetworkinstance.devices.device.NetworkInstances;
 import org.onosproject.yang.model.DataNode;
 import org.onosproject.yang.model.DefaultModelObjectData;
+import org.onosproject.yang.model.DefaultResourceData;
 import org.onosproject.yang.model.InnerModelObject;
 import org.onosproject.yang.model.ModelObjectData;
 import org.onosproject.yang.model.ModelObjectId;
 import org.onosproject.yang.model.ResourceData;
 import org.onosproject.yang.model.ResourceId;
-import org.onosproject.yang.model.DefaultResourceData;
 
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import static org.onosproject.l3vpn.netl3vpn.BgpModelIdLevel.DEVICE;
-import static org.onosproject.l3vpn.netl3vpn.BgpModelIdLevel.DEVICES;
-import static org.onosproject.l3vpn.netl3vpn.BgpModelIdLevel.ROOT;
-import static org.onosproject.l3vpn.netl3vpn.BgpModelIdLevel.VPN;
+import static org.onosproject.l3vpn.netl3vpn.ModelIdLevel.DEVICE;
+import static org.onosproject.l3vpn.netl3vpn.ModelIdLevel.DEVICES;
+import static org.onosproject.l3vpn.netl3vpn.ModelIdLevel.ROOT;
+import static org.onosproject.l3vpn.netl3vpn.ModelIdLevel.VPN;
 import static org.onosproject.l3vpn.netl3vpn.VpnType.ANY_TO_ANY;
 import static org.onosproject.l3vpn.netl3vpn.VpnType.HUB;
 import static org.onosproject.l3vpn.netl3vpn.VpnType.SPOKE;
@@ -112,6 +112,11 @@ public final class NetL3VpnUtil {
     static final String IP = "ipaddress";
 
     /**
+     * Static constant value for lsr id.
+     */
+    static final String LSR_ID = "lsrId";
+
+    /**
      * Error message for VPN type being not supported.
      */
     static final String VPN_TYPE_UNSUPPORTED = "The VPN type is not supported";
@@ -169,11 +174,17 @@ public final class NetL3VpnUtil {
      */
     static final String EVENT_NULL = "Event cannot be null";
 
+    /**
+     * Unique tunnel name for net-l3VPN.
+     */
+    static final String NEW_NAME = "onos-netl3vpn";
+
     private static final String SITE_ROLE_INVALID = "The given site role is " +
             "invalid";
     private static final String ANY_TO_ANY_ROLE = "AnyToAnyRole";
     private static final String HUB_ROLE = "HubRole";
     private static final String SPOKE_ROLE = "SpokeRole";
+    private static final String COLON = ":";
 
     // No instantiation.
     private NetL3VpnUtil() {
@@ -331,18 +342,15 @@ public final class NetL3VpnUtil {
      */
     private static ModelObjectData buildIntModDataDevice(String id,
                                                          Interfaces ifs) {
-        org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.interfaces
-                .rev20140508.ietfinterfaces.devices.DeviceKeys keys =
-                new org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang
-                        .ietf.interfaces.rev20140508.ietfinterfaces.devices
-                        .DeviceKeys();
+        org.onosproject.yang.gen.v1.ietfinterfaces
+                .rev20140508.ietfinterfaces.devices.DeviceKeys keys = new org.
+                onosproject.yang.gen.v1.ietfinterfaces.rev20140508
+                .ietfinterfaces.devices.DeviceKeys();
         keys.deviceid(id);
         ModelObjectId modelId = ModelObjectId.builder()
-                .addChild(org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns
-                                  .yang.ietf.interfaces.rev20140508
+                .addChild(org.onosproject.yang.gen.v1.ietfinterfaces.rev20140508
                                   .ietfinterfaces.DefaultDevices.class)
-                .addChild(org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns
-                                  .yang.ietf.interfaces.rev20140508
+                .addChild(org.onosproject.yang.gen.v1.ietfinterfaces.rev20140508
                                   .ietfinterfaces.devices.DefaultDevice.class,
                           keys)
                 .build();
@@ -412,19 +420,15 @@ public final class NetL3VpnUtil {
      */
     private static ModelObjectData buildIntModDataRoot(String id,
                                                        Interfaces ifs) {
-        org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.interfaces
-                .rev20140508.ietfinterfaces.Devices devices =
-                new org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang
-                        .ietf.interfaces.rev20140508.ietfinterfaces
-                        .DefaultDevices();
-        org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.interfaces
-                .rev20140508.ietfinterfaces.devices.Device device =
-                new org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang
-                        .ietf.interfaces.rev20140508.ietfinterfaces.devices
-                        .DefaultDevice();
-        List<org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf
-                .interfaces.rev20140508.ietfinterfaces.devices
-                .Device> deviceList = new LinkedList<>();
+        org.onosproject.yang.gen.v1.ietfinterfaces
+                .rev20140508.ietfinterfaces.Devices devices = new org
+                .onosproject.yang.gen.v1.ietfinterfaces.rev20140508
+                .ietfinterfaces.DefaultDevices();
+        org.onosproject.yang.gen.v1.ietfinterfaces.rev20140508.ietfinterfaces.
+                devices.Device device = new org.onosproject.yang.gen.v1.
+                ietfinterfaces.rev20140508.ietfinterfaces.devices.DefaultDevice();
+        List<org.onosproject.yang.gen.v1.ietfinterfaces.rev20140508
+                .ietfinterfaces.devices.Device> deviceList = new LinkedList<>();
 
         device.deviceid(id);
         device.interfaces(ifs);
@@ -521,5 +525,43 @@ public final class NetL3VpnUtil {
             driInfo = new BgpDriverInfo(DEVICES, id);
         }
         return driInfo;
+    }
+
+    /**
+     * Returns the device id whose management ip address or lsr ID matches with
+     * the ip or lsr ID received respectively.
+     *
+     * @param ip      value of ip or lsr id
+     * @param isIp    if ip or lsr id
+     * @param devices available devices
+     * @return device id
+     */
+    static DeviceId getId(String ip, boolean isIp,
+                          Iterable<org.onosproject.net.Device> devices) {
+        for (org.onosproject.net.Device device : devices) {
+            String val;
+            if (isIp) {
+                val = device.annotations().value(IP);
+            } else {
+                val = device.annotations().value(LSR_ID);
+            }
+            if (ip.equals(val)) {
+                return device.id();
+            }
+        }
+        throw new NetL3VpnException(getMgmtIpUnAvailErr(ip));
+    }
+
+    /**
+     * Returns ip address from the device id by parsing.
+     *
+     * @param devId device id
+     * @return ip address
+     */
+    static String getIpFromDevId(DeviceId devId) {
+        String devKey = devId.toString();
+        int firstInd = devKey.indexOf(COLON);
+        int secInd = devKey.indexOf(COLON, firstInd + 1);
+        return devKey.substring(firstInd + 1, secInd);
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,6 +69,8 @@ public class OpenstackSecurityGroupManager
     private static final String ERR_NULL_SG_RULE_ID = "OpenStack security group rule ID cannot be null";
     private static final String ERR_NOT_FOUND = "not found";
     private static final String ERR_DUPLICATE = "already exist";
+
+    private boolean useSecurityGroup = false;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected CoreService coreService;
@@ -186,6 +188,16 @@ public class OpenstackSecurityGroupManager
     public SecurityGroup securityGroup(String sgId) {
         checkArgument(!Strings.isNullOrEmpty(sgId), ERR_NULL_SG_ID);
         return osSecurityGroupStore.securityGroup(sgId);
+    }
+
+    @Override
+    public boolean isSecurityGroupEnabled() {
+        return useSecurityGroup;
+    }
+
+    @Override
+    public void setSecurityGroupEnabled(boolean option) {
+        useSecurityGroup = option;
     }
 
     @Override

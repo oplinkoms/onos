@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -104,7 +104,6 @@ public class OpenstackNetworkManager
     public void createNetwork(Network osNet) {
         checkNotNull(osNet, ERR_NULL_NETWORK);
         checkArgument(!Strings.isNullOrEmpty(osNet.getId()), ERR_NULL_NETWORK_ID);
-        checkArgument(!Strings.isNullOrEmpty(osNet.getName()), ERR_NULL_NETWORK_NAME);
 
         osNetworkStore.createNetwork(osNet);
         log.info(String.format(MSG_NETWORK, osNet.getName(), MSG_CREATED));
@@ -114,7 +113,6 @@ public class OpenstackNetworkManager
     public void updateNetwork(Network osNet) {
         checkNotNull(osNet, ERR_NULL_NETWORK);
         checkArgument(!Strings.isNullOrEmpty(osNet.getId()), ERR_NULL_NETWORK_ID);
-        checkArgument(!Strings.isNullOrEmpty(osNet.getName()), ERR_NULL_NETWORK_NAME);
 
         osNetworkStore.updateNetwork(osNet);
         log.info(String.format(MSG_NETWORK, osNet.getId(), MSG_UPDATED));

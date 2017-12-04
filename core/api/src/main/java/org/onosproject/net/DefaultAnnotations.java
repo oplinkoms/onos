@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -139,6 +139,10 @@ public final class DefaultAnnotations implements SparseAnnotations {
 
         if (sparseAnnotations == null || sparseAnnotations.keys().isEmpty()) {
             return annotations;
+        }
+
+        if (annotations.keys().isEmpty()) {
+            return sparseAnnotations;
         }
 
         final HashMap<String, String> newMap;

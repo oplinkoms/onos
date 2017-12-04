@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,13 +27,13 @@ import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.neighbour.NeighbourHandlerRegistration;
-import org.onosproject.incubator.net.neighbour.NeighbourMessageContext;
-import org.onosproject.incubator.net.neighbour.NeighbourMessageHandler;
-import org.onosproject.incubator.net.neighbour.NeighbourMessageType;
-import org.onosproject.incubator.net.neighbour.NeighbourProtocol;
-import org.onosproject.incubator.net.neighbour.NeighbourResolutionService;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.neighbour.NeighbourHandlerRegistration;
+import org.onosproject.net.neighbour.NeighbourMessageContext;
+import org.onosproject.net.neighbour.NeighbourMessageHandler;
+import org.onosproject.net.neighbour.NeighbourMessageType;
+import org.onosproject.net.neighbour.NeighbourProtocol;
+import org.onosproject.net.neighbour.NeighbourResolutionService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Host;
 import org.onosproject.net.host.HostService;

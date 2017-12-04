@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,10 +33,10 @@
         className = 'topo2-p',
         panelOpts = {
             show: true,
-            width: 260 // summary and detail panel width
+            width: 260, // summary and detail panel width
         },
         handlerMap = {
-            showSummary: handleSummaryData
+            showSummary: handleSummaryData,
         };
 
     function init(_detailsPanel_) {
@@ -47,7 +47,7 @@
         wss.sendEvent('requestSummary');
 
         var options = angular.extend({}, panelOpts, {
-            class: className
+            class: className,
         });
 
         summaryPanel = new Panel(id, options);
@@ -55,6 +55,8 @@
     }
 
     function render() {
+        var endedWithSeparator;
+
         summaryPanel.emptyRegions();
 
         var svg = summaryPanel.appendToHeader('div')
@@ -66,7 +68,8 @@
 
         title.text(summaryData.title);
         gs.addGlyph(svg, 'bird', 24, 0, [1, 1]);
-        ls.listProps(tbody, summaryData);
+        endedWithSeparator = ls.listProps(tbody, summaryData);
+        // TODO : review whether we need to use/store end-with-sep state
     }
 
     function handleSummaryData(data) {
@@ -128,9 +131,9 @@
                 toggle: toggle,
                 destroy: destroy,
                 isVisible: function () { return summaryPanel.isVisible(); },
-                getInstance: function () { return summaryPanel; }
+                getInstance: function () { return summaryPanel; },
             };
-        }
+        },
     ]);
 
 })();

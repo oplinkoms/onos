@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,6 +46,10 @@ public class MacAddressTest {
 
     private static final String INVALID_STR = "invalid";
     private static final byte[] INVALID_BYTE = {(byte) 0xaa};
+    private static final String INVALID_MAC_ADDITIONAL_COLON = "00:00:00:00:00:00:";
+    private static final String INVALID_MAC_OCTET_TOO_LONG = "000:000:000:000:000:00";
+    private static final String INVALID_MAC_OCTET_TOO_SHORT = "00:0:00:00:00:00";
+
 
     @Test
     public void testValueOfString() throws Exception {
@@ -55,6 +59,21 @@ public class MacAddressTest {
     @Test(expected = IllegalArgumentException.class)
     public void testValueOfInvalidString() throws Exception {
         MacAddress.valueOf(INVALID_STR);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testValueOfInvalidStringWithAdditionalColon() throws Exception {
+        MacAddress.valueOf(INVALID_MAC_ADDITIONAL_COLON);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testValueOfInvalidStringWithTooLongOctet() throws Exception {
+        MacAddress.valueOf(INVALID_MAC_OCTET_TOO_LONG);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testValueOfInvalidStringWithTooShortOctet() throws Exception {
+        MacAddress.valueOf(INVALID_MAC_OCTET_TOO_SHORT);
     }
 
     @Test

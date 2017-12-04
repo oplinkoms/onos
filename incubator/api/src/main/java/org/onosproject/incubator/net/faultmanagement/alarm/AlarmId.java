@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ public final class AlarmId extends Identifier<String> {
     }
 
     /**
-     * Instantiates a new Alarm id, primarly meant for lookup.
+     * Instantiates a new Alarm id, primarily meant for lookup.
      *
      * @param globallyUniqueIdentifier the globally unique identifier of the Alarm,
      *                                 device Id + local unique identifier on the device

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import org.onosproject.cluster.LeadershipService;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.net.intf.Interface;
+import org.onosproject.net.intf.Interface;
 import org.onosproject.net.Host;
 import org.onosproject.net.host.HostService;
 import org.onosproject.net.intent.Intent;
@@ -304,13 +304,12 @@ public class VplsOperationManager implements VplsOperationService {
                             // Error consumer
                             VplsOperation vplsOperation =
                                     vplsOperationException.vplsOperation();
-                            log.debug("VPLS operation failed: {}", vplsOperation);
+                            log.warn(OP_EXEC_ERR,
+                                     vplsOperation.toString(),
+                                     vplsOperationException.getMessage());
                             VplsData vplsData = vplsOperation.vpls();
                             vplsData.state(VplsData.VplsState.FAILED);
                             vplsStore.updateVpls(vplsData);
-                            log.error(OP_EXEC_ERR,
-                                      vplsOperation.toString(),
-                                      vplsOperationException.getMessage());
                             runningOperations.remove(vplsName);
                         });
                 log.debug("Applying operation: {}", operation);
@@ -544,6 +543,7 @@ public class VplsOperationManager implements VplsOperationService {
         private void removeVplsIntents() {
             Set<Intent> intentsToWithdraw = getCurrentIntents();
             applyIntentsSync(intentsToWithdraw, Direction.REMOVE);
+            intentsToWithdraw.forEach(intentService::purge);
         }
 
         /**
@@ -570,7 +570,8 @@ public class VplsOperationManager implements VplsOperationService {
              * @param pendingIntentKeys the Intent keys to wait
              * @param expectedEventType expect Intent event type
              */
-            public IntentCompleter(Set<Key> pendingIntentKeys, IntentEvent.Type expectedEventType) {
+            public IntentCompleter(Set<Key> pendingIntentKeys,
+                                   IntentEvent.Type expectedEventType) {
                 this.completableFuture = new CompletableFuture<>();
                 this.pendingIntentKeys = Sets.newConcurrentHashSet(pendingIntentKeys);
                 this.expectedEventType = expectedEventType;
@@ -579,6 +580,11 @@ public class VplsOperationManager implements VplsOperationService {
             @Override
             public void event(IntentEvent event) {
                 Intent intent = event.subject();
+                Key key = intent.key();
+                if (!pendingIntentKeys.contains(key)) {
+                    // ignore Intent events from other VPLS
+                    return;
+                }
                 // Intent failed, throw an exception to completable future
                 if (event.type() == IntentEvent.Type.CORRUPT ||
                         event.type() == IntentEvent.Type.FAILED) {
@@ -587,7 +593,6 @@ public class VplsOperationManager implements VplsOperationService {
                 }
                 // If event type matched to expected type, remove from pending
                 if (event.type() == expectedEventType) {
-                    Key key = intent.key();
                     pendingIntentKeys.remove(key);
                 }
                 if (pendingIntentKeys.isEmpty()) {

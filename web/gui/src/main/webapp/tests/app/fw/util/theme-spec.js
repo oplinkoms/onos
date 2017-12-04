@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -142,6 +142,21 @@ describe('factory: fw/util/theme.js', function() {
 
         ts.toggleTheme();   // -> light (but we weren't registered to hear it)
         expect(cb.calls.count()).toEqual(2);
+    });
+
+    it('should return a color', function () {
+        ts.theme('light');
+        var color = ts.spriteColor('gray1', 'stroke');
+        expect(color).toEqual('#cccccc');
+
+        color = ts.spriteColor('gray1');
+        expect(color).toEqual('#cccccc');
+
+        color = ts.spriteColor('gray1', 'fill');
+        expect(color).toEqual('#eeeeee');
+
+        color = ts.spriteColor(null, 'stroke');
+        expect(color).toEqual('none');
     });
 
 });

@@ -10,6 +10,7 @@ COMPILE_DEPS = [
     '//lib:onos-yang-model',
     '//lib:onos-yang-runtime',
     '//apps/yang:onos-apps-yang',
+    '//models/common:onos-models-common',
 ]
 
 APPS = [
@@ -17,10 +18,10 @@ APPS = [
     'org.onosproject.yang-gui',
     'org.onosproject.config',
     'org.onosproject.restconf',
-    'org.onosproject.yms',
     'org.onosproject.protocols.restconfserver',
     'org.onosproject.netconf',
     'org.onosproject.netconfsb',
+    'org.onosproject.models.common',
     'org.onosproject.models.l3vpn',
     'org.onosproject.l3vpn',
     'org.onosproject.models.huawei',
@@ -40,9 +41,9 @@ osgi_jar_with_tests(
 
 onos_app(
     app_name = 'org.onosproject.drivers.huawei',
-    title = 'Huawei Device Drivers',
+    title = 'Huawei Drivers',
     category = 'Drivers',
     url = 'http://onosproject.org',
-    description = 'ONOS Huawei Device Drivers application.',
+    description = 'Adds support for Huawei devices.',
     required_apps = APPS
 )

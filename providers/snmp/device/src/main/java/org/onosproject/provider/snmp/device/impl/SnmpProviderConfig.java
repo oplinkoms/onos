@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import com.google.common.annotations.Beta;
 import com.google.common.collect.Sets;
 import org.onlab.packet.IpAddress;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.incubator.net.config.basics.ConfigException;
+import org.onosproject.net.config.ConfigException;
 import org.onosproject.net.config.Config;
 
 import java.util.Set;

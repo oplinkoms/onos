@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,18 @@
 
 package org.onosproject.ovsdb.controller.driver;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.util.concurrent.ListenableFuture;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-import org.onlab.packet.IpAddress;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.behaviour.ControllerInfo;
-import org.onosproject.net.behaviour.MirroringStatistics;
 import org.onosproject.net.behaviour.MirroringName;
+import org.onosproject.net.behaviour.MirroringStatistics;
 import org.onosproject.net.behaviour.QosId;
+import org.onosproject.net.behaviour.QueueDescription;
 import org.onosproject.net.behaviour.QueueId;
 import org.onosproject.ovsdb.controller.OvsdbBridge;
 import org.onosproject.ovsdb.controller.OvsdbClientService;
@@ -35,14 +37,14 @@ import org.onosproject.ovsdb.controller.OvsdbNodeId;
 import org.onosproject.ovsdb.controller.OvsdbPort;
 import org.onosproject.ovsdb.controller.OvsdbQos;
 import org.onosproject.ovsdb.controller.OvsdbQueue;
+import org.onosproject.ovsdb.controller.OvsdbPortName;
 import org.onosproject.ovsdb.rfc.message.TableUpdates;
 import org.onosproject.ovsdb.rfc.notation.Row;
 import org.onosproject.ovsdb.rfc.operations.Operation;
 import org.onosproject.ovsdb.rfc.schema.DatabaseSchema;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.util.concurrent.ListenableFuture;
 
 /**
  * Test Adapter for OvsdbClientService.
@@ -120,6 +122,16 @@ public class OvsdbClientServiceAdapter implements OvsdbClientService {
     }
 
     @Override
+    public void bindQueues(QosId qosId, Map<Long, QueueDescription> queues) {
+
+    }
+
+    @Override
+    public void unbindQueues(QosId qosId, List<Long> queueKeys) {
+
+    }
+
+    @Override
     public boolean createQueue(OvsdbQueue queue) {
         return false;
     }
@@ -148,30 +160,12 @@ public class OvsdbClientServiceAdapter implements OvsdbClientService {
     }
 
     @Override
-    public boolean createTunnel(String bridgeName, String portName, String tunnelType, Map<String, String> options) {
-        return true;
-    }
-
-    @Override
-    public void dropTunnel(IpAddress srcIp, IpAddress dstIp) {
-    }
-
-    @Override
     public boolean createInterface(String bridgeName, OvsdbInterface ovsdbIface) {
         return true;
     }
 
     @Override
     public boolean dropInterface(String name) {
-        return true;
-    }
-
-    @Override
-    public void createBridge(String bridgeName) {
-    }
-
-    @Override
-    public boolean createBridge(String bridgeName, String dpid, List<ControllerInfo> controllers) {
         return true;
     }
 
@@ -300,7 +294,12 @@ public class OvsdbClientServiceAdapter implements OvsdbClientService {
     }
 
     @Override
-    public void createBridge(String bridgeName, String dpid, String exPortName) {
+    public List<OvsdbPortName> getPorts(List<String> portNames, DeviceId bridgeId) {
+        return Collections.emptyList();
+    }
 
+    @Override
+    public boolean getPortError(List<OvsdbPortName> portNames, DeviceId bridgeId) {
+        return false;
     }
 }

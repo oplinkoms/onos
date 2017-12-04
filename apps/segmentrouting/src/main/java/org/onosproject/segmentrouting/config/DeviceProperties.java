@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,6 +64,14 @@ public interface DeviceProperties {
      * @return mac address of a device
      */
     MacAddress getDeviceMac(DeviceId deviceId) throws DeviceConfigNotFoundException;
+
+    /**
+     *
+     * @param deviceId device identifier
+     * @throws DeviceConfigNotFoundException if the device configuration is not found
+     * @return the pseudowire routing label for a leaf node
+     */
+    int getPWRoutingLabel(DeviceId deviceId) throws DeviceConfigNotFoundException;
 
     /**
      * Returns the router ipv4 address of a segment router.

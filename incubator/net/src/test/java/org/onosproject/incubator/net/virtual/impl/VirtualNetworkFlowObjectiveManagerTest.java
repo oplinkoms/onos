@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ import org.onosproject.net.NetTestTools;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.FlowRuleBatchOperation;
+import org.onosproject.net.flow.oldbatch.FlowRuleBatchOperation;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.criteria.Criteria;
@@ -56,8 +56,6 @@ import org.onosproject.net.flowobjective.ForwardingObjective;
 import org.onosproject.net.flowobjective.NextObjective;
 import org.onosproject.net.flowobjective.Objective;
 import org.onosproject.net.flowobjective.ObjectiveContext;
-import org.onosproject.net.intent.FakeIntentManager;
-import org.onosproject.net.intent.TestableIntentService;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.TestStorageService;
@@ -72,7 +70,6 @@ public class VirtualNetworkFlowObjectiveManagerTest
 
     private VirtualNetworkManager manager;
     private DistributedVirtualNetworkStore virtualNetworkManagerStore;
-    private TestableIntentService intentService = new FakeIntentManager();
     private ServiceDirectory testDirectory;
     protected SimpleVirtualFlowObjectiveStore flowObjectiveStore;
 
@@ -109,7 +106,6 @@ public class VirtualNetworkFlowObjectiveManagerTest
 
         manager = new VirtualNetworkManager();
         manager.store = virtualNetworkManagerStore;
-        manager.intentService = intentService;
         TestUtils.setField(manager, "coreService", coreService);
 
         providerRegistryService = new VirtualProviderManager();
@@ -225,7 +221,7 @@ public class VirtualNetworkFlowObjectiveManagerTest
         service1.filter(VDID1, filter);
     }
 
-    //TODO: More test cases for filter, foward, and next
+    //TODO: More test cases for filter, forward, and next
 
     private class TestProvider extends AbstractVirtualProvider
             implements VirtualFlowRuleProvider {

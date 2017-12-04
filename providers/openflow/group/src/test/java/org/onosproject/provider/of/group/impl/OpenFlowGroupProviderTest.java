@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.onosproject.cfg.ComponentConfigAdapter;
 import org.onosproject.core.GroupId;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
@@ -80,7 +81,8 @@ public class OpenFlowGroupProviderTest {
     public void setUp() {
         provider.controller = controller;
         provider.providerRegistry = providerRegistry;
-        provider.activate();
+        provider.cfgService = new ComponentConfigAdapter();
+        provider.activate(null);
     }
 
     @Test

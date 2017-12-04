@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,7 +92,7 @@ public class OplinkSwitchProtection extends AbstractHandlerBehaviour implements 
         //add flow from client port to virtual port. This set device in auto switch mode
         addFlow(PortNumber.portNumber(VIRTUAL_PORT));
 
-        //add a virtual link bewteen two virtual ports of this device and peer
+        //add a virtual link between two virtual ports of this device and peer
         addLinkToPeer(configuration.peer());
 
         result.complete(new ConnectPoint(data().deviceId(), PortNumber.portNumber(VIRTUAL_PORT)));
@@ -118,7 +118,7 @@ public class OplinkSwitchProtection extends AbstractHandlerBehaviour implements 
         CompletableFuture result = new CompletableFuture<Boolean>();
 
         if (identifier.port().toLong() == VIRTUAL_PORT) {
-            //add a link bewteen two virtual ports of this device and peer
+            //add a link between two virtual ports of this device and peer
             removeLinkToPeer(getPeerId());
             deleteFlow();
             result.complete(true);
@@ -366,7 +366,7 @@ public class OplinkSwitchProtection extends AbstractHandlerBehaviour implements 
 
         for (Link l : links) {
             if (l.type() == Link.Type.VIRTUAL) {
-                // this devide is the destination and peer is the source.
+                // this device is the destination and peer is the source.
                 return l.src().deviceId();
             }
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package org.onosproject.store.resource.impl;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import org.onlab.util.GuavaCollectors;
 import org.onosproject.net.resource.ContinuousResource;
 import org.onosproject.net.resource.ContinuousResourceId;
 import org.onosproject.net.resource.DiscreteResourceId;
@@ -56,7 +55,7 @@ class ConsistentContinuousResourceSubStore implements ConsistentResourceSubStore
                 .withSerializer(SERIALIZER)
                 .build();
 
-        childMap.put(Resource.ROOT.id(), new LinkedHashSet<>());
+        childMap.putIfAbsent(Resource.ROOT.id(), new LinkedHashSet<>());
     }
 
     @Override
@@ -74,7 +73,7 @@ class ConsistentContinuousResourceSubStore implements ConsistentResourceSubStore
 
         return allocations.value().allocations().stream()
                 .filter(x -> x.resource().id().equals(resource))
-                .collect(GuavaCollectors.toImmutableList());
+                .collect(ImmutableList.toImmutableList());
     }
 
     @Override

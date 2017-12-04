@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,6 +51,7 @@ describe('factory: view/topo/topoTraffic.js', function() {
             'removeIntent',
             'resubmitIntent',
             'removeIntents',
+            'setLionBundle',
         ])).toBeTruthy();
     });
 

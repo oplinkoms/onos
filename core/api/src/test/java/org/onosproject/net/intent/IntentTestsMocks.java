@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package org.onosproject.net.intent;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.Sets;
 import org.onlab.graph.Weight;
 import org.onosproject.core.GroupId;
 import org.onosproject.net.DefaultPath;
@@ -30,6 +31,8 @@ import org.onosproject.net.device.DeviceServiceAdapter;
 import org.onosproject.net.flow.FlowId;
 import org.onosproject.net.flow.FlowRule;
 import org.onosproject.net.flow.FlowRuleExtPayLoad;
+import org.onosproject.net.flow.IndexTableId;
+import org.onosproject.net.flow.TableId;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.criteria.Criterion;
@@ -111,8 +114,18 @@ public class IntentTestsMocks {
         }
 
         @Override
+        public Instructions.StatTriggerInstruction statTrigger() {
+            return null;
+        }
+
+        @Override
         public Instructions.MeterInstruction metered() {
             return null;
+        }
+
+        @Override
+        public Set<Instructions.MeterInstruction> meters() {
+            return Sets.newHashSet();
         }
     }
 
@@ -314,14 +327,14 @@ public class IntentTestsMocks {
         static int nextId = 0;
 
         int priority;
-        int tableId;
+        IndexTableId tableId;
         long timestamp;
         int id;
         FlowRuleExtPayLoad payLoad;
 
         public MockFlowRule(int priority) {
             this.priority = priority;
-            this.tableId = 0;
+            this.tableId = DEFAULT_TABLE;
             this.timestamp = System.currentTimeMillis();
             this.id = nextId++;
             this.payLoad = null;
@@ -414,6 +427,11 @@ public class IntentTestsMocks {
 
         @Override
         public int tableId() {
+            return tableId.id();
+        }
+
+        @Override
+        public TableId table() {
             return tableId;
         }
 

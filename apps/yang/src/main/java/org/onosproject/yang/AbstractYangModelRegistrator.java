@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,13 +41,18 @@ import static org.onosproject.yang.runtime.helperutils.YangApacheUtils.getYangMo
 @Component
 public abstract class AbstractYangModelRegistrator {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    protected final Logger log = LoggerFactory.getLogger(getClass());
     private final Class<?> loaderClass;
+
+    protected Map<YangModuleId, AppModuleInfo> appInfo;
+    protected YangModel model;
+    private ModelRegistrationParam registrationParam;
+
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected YangModelRegistry modelRegistry;
-    private Map<YangModuleId, AppModuleInfo> appInfo;
-    private YangModel model;
-    private ModelRegistrationParam registrationParam;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected YangClassLoaderRegistry sourceResolver;
 
     /**
      * Creates a model registrator primed with the class-loader of the specified
@@ -80,11 +85,12 @@ public abstract class AbstractYangModelRegistrator {
         ModelRegistrationParam.Builder b =
                 DefaultModelRegistrationParam.builder().setYangModel(model);
         registrationParam = getAppInfo(b).setYangModel(model).build();
+        sourceResolver.registerClassLoader(model.getYangModelId(), loaderClass.getClassLoader());
         modelRegistry.registerModel(registrationParam);
         log.info("Started");
     }
 
-    private ModelRegistrationParam.Builder getAppInfo(Builder b) {
+    protected ModelRegistrationParam.Builder getAppInfo(Builder b) {
         if (appInfo != null) {
             appInfo.entrySet().stream().filter(
                     entry -> model.getYangModule(entry.getKey()) != null).forEach(
@@ -96,6 +102,7 @@ public abstract class AbstractYangModelRegistrator {
     @Deactivate
     protected void deactivate() {
         modelRegistry.unregisterModel(registrationParam);
+        sourceResolver.unregisterClassLoader(model.getYangModelId());
         log.info("Stopped");
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,13 +36,13 @@
                         if (this._byId[label.id]) {
                             this.get(label.id).set(label);
                         } else {
-                            var lab = new Model(label, targetNode, options)
+                            var lab = new Model(label, targetNode, options);
                             this.add(lab);
                         }
-                    }
+                    },
                 });
 
                 return instance || new LabelCollection();
-            }
+            },
         ]);
 })();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,9 +51,10 @@ public final class DefaultQueueDescription extends AbstractDescription
                                     Optional<Long> burst, Optional<Long> priority,
                                     SparseAnnotations... annotations) {
         super(annotations);
-        if (dscp.isPresent()) {
-            checkArgument(dscp.get() < MIN_DSCP || dscp.get() > MAX_DSCP, "dscp should be in range 0 to 63.");
-        }
+        dscp.ifPresent(dscpValue ->
+                               checkArgument(dscpValue >= MIN_DSCP &&
+                                             dscpValue <= MAX_DSCP,
+                                             "dscp should be in range 0 to 63."));
         this.queueId = checkNotNull(queueId);
         this.dscp = dscp;
         this.type = type;

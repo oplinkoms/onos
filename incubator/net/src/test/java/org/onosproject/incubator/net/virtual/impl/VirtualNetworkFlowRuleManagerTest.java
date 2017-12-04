@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ import org.onosproject.net.flow.DefaultFlowEntry;
 import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.FlowRuleBatchOperation;
+import org.onosproject.net.flow.oldbatch.FlowRuleBatchOperation;
 import org.onosproject.net.flow.FlowRuleEvent;
 import org.onosproject.net.flow.FlowRuleListener;
 import org.onosproject.net.flow.FlowRuleService;
@@ -59,8 +59,6 @@ import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.instructions.Instruction;
 import org.onosproject.net.flow.instructions.Instructions;
-import org.onosproject.net.intent.FakeIntentManager;
-import org.onosproject.net.intent.TestableIntentService;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.store.service.TestStorageService;
 
@@ -79,7 +77,6 @@ public class VirtualNetworkFlowRuleManagerTest extends VirtualNetworkTestUtil {
 
     private VirtualNetworkManager manager;
     private DistributedVirtualNetworkStore virtualNetworkManagerStore;
-    private TestableIntentService intentService = new FakeIntentManager();
     private ServiceDirectory testDirectory;
     private VirtualNetworkFlowRuleStore flowRuleStore;
     private VirtualProviderManager providerRegistryService;
@@ -117,7 +114,6 @@ public class VirtualNetworkFlowRuleManagerTest extends VirtualNetworkTestUtil {
 
         manager = new VirtualNetworkManager();
         manager.store = virtualNetworkManagerStore;
-        manager.intentService = intentService;
         TestUtils.setField(manager, "coreService", coreService);
 
         eventDeliveryService = new TestEventDispatcher();
@@ -469,8 +465,18 @@ public class VirtualNetworkFlowRuleManagerTest extends VirtualNetworkTestUtil {
         }
 
         @Override
+        public Instructions.StatTriggerInstruction statTrigger() {
+            return null;
+        }
+
+        @Override
         public Instructions.MeterInstruction metered() {
             return null;
+        }
+
+        @Override
+        public Set<Instructions.MeterInstruction> meters() {
+            return Sets.newHashSet();
         }
     }
 

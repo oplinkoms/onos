@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -136,7 +136,7 @@ public class MQServiceImpl implements MQService {
     /**
      * Publishes packet message to MQ server.
      *
-     * @param context Context of the packet recieved including details like mac, length etc
+     * @param context Context of the packet received including details like mac, length etc
      */
     @Override
     public void publish(PacketContext context) {

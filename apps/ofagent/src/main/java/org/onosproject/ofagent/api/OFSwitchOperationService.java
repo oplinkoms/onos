@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,11 @@ package org.onosproject.ofagent.api;
 
 import io.netty.channel.Channel;
 import org.onosproject.net.Port;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.FlowRule;
 import org.onosproject.net.packet.InboundPacket;
 import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFPacketOut;
 
 /**
  * Service for providing OpenFlow operations.
@@ -28,11 +30,19 @@ public interface OFSwitchOperationService {
 
     /**
      * Processes a new port of the switch.
-     * It sends out FEATURE_REPLY message to the controllers.
+     * It sends out PORT_STATUS asynchronous message to the controllers.
      *
      * @param port virtual port
      */
     void processPortAdded(Port port);
+
+    /**
+     * Processes the removal of a port from the switch.
+     * It sends out PORT_STATUS asynchronous message to the controllers.
+     *
+     * @param port virtual port
+     */
+    void processPortRemoved(Port port);
 
     /**
      * Processes port link down.
@@ -113,6 +123,14 @@ public interface OFSwitchOperationService {
     void processLldp(Channel channel, OFMessage msg);
 
     /**
+     * Sends lldp response to the controller.
+     *
+     * @param ofPacketOut packet out message with lldp
+     * @param inPort      in port to be used for packet in message
+     */
+    void sendLldpResponse(OFPacketOut ofPacketOut, PortNumber inPort);
+
+    /**
      * Sends hello to the controller.
      *
      * @param channel received channel
@@ -126,4 +144,28 @@ public interface OFSwitchOperationService {
      * @param msg     echo request message
      */
     void processEchoRequest(Channel channel, OFMessage msg);
+
+    /**
+     * Processes GetConfig request from the controllers.
+     *
+     * @param channel received channel
+     * @param msg     GetConfig request message
+     */
+    void processGetConfigRequest(Channel channel, OFMessage msg);
+
+    /**
+     * Processes SetConfig message from the controllers.
+     *
+     * @param channel received channel
+     * @param msg     SetConfig message
+     */
+    void processSetConfigMessage(Channel channel, OFMessage msg);
+
+    /**
+     * Processes barrier request from the controllers.
+     *
+     * @param channel received channel
+     * @param msg     barrier request message
+     */
+    void processBarrierRequest(Channel channel, OFMessage msg);
 }

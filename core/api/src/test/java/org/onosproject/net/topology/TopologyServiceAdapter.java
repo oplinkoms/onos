@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-present Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ import org.onosproject.net.Path;
 
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * Test adapter for topology service.
@@ -80,17 +79,6 @@ public class TopologyServiceAdapter implements TopologyService {
     @Override
     public Set<Path> getPaths(Topology topology, DeviceId src, DeviceId dst,
                               LinkWeigher weigher) {
-        return null;
-    }
-
-    @Override
-    public Set<Path> getKShortestPaths(Topology topology, DeviceId src, DeviceId dst,
-                                       LinkWeigher weigher, int maxPaths) {
-        return null;
-    }
-
-    @Override
-    public Stream<Path> getKShortestPaths(Topology topology, DeviceId src, DeviceId dst, LinkWeigher weigher) {
         return null;
     }
 

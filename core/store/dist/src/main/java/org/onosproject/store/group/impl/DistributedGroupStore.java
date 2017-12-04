@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -167,8 +167,9 @@ public class DistributedGroupStore
     private boolean allowExtraneousGroups = ALLOW_EXTRANEOUS_GROUPS;
 
     @Activate
-    public void activate() {
+    public void activate(ComponentContext context) {
         cfgService.registerProperties(getClass());
+        modified(context);
         KryoNamespace.Builder kryoBuilder = new KryoNamespace.Builder()
                 .register(KryoNamespaces.API)
                 .nextId(KryoNamespaces.BEGIN_USER_CUSTOM_ID)
@@ -289,9 +290,7 @@ public class DistributedGroupStore
     private void synchronizeGroupStoreEntries() {
         Map<GroupStoreKeyMapKey, StoredGroupEntry> groupEntryMap = groupStoreEntriesByKey.asJavaMap();
         for (Entry<GroupStoreKeyMapKey, StoredGroupEntry> entry : groupEntryMap.entrySet()) {
-            GroupStoreKeyMapKey key = entry.getKey();
             StoredGroupEntry value = entry.getValue();
-
             ConcurrentMap<GroupId, StoredGroupEntry> groupIdTable = getGroupIdTable(value.deviceId());
             groupIdTable.put(value.id(), value);
         }
@@ -447,10 +446,10 @@ public class DistributedGroupStore
             log.debug("storeGroupDescription: Device {} local role is not MASTER",
                       groupDesc.deviceId());
             if (mastershipService.getMasterFor(groupDesc.deviceId()) == null) {
-                log.error("No Master for device {}..."
-                                  + "Can not perform add group operation",
+                log.debug("No Master for device {}..."
+                                  + "Queuing Group ADD request",
                           groupDesc.deviceId());
-                //TODO: Send Group operation failure event
+                addToPendingAudit(groupDesc);
                 return;
             }
             GroupStoreMessage groupOp = GroupStoreMessage.
@@ -480,6 +479,21 @@ public class DistributedGroupStore
         log.debug("Store group for device {} is getting handled locally",
                   groupDesc.deviceId());
         storeGroupDescriptionInternal(groupDesc);
+    }
+
+    private void addToPendingAudit(GroupDescription groupDesc) {
+        Integer groupIdVal = groupDesc.givenGroupId();
+        GroupId groupId = (groupIdVal != null) ? new GroupId(groupIdVal) : dummyGroupId;
+        addToPendingKeyTable(new DefaultGroup(groupId, groupDesc));
+    }
+
+    private void addToPendingKeyTable(StoredGroupEntry group) {
+        group.setState(GroupState.WAITING_AUDIT_COMPLETE);
+        Map<GroupStoreKeyMapKey, StoredGroupEntry> pendingKeyTable =
+                getPendingGroupKeyTable();
+        pendingKeyTable.put(new GroupStoreKeyMapKey(group.deviceId(),
+                        group.appCookie()),
+                group);
     }
 
     private Group getMatchingExtraneousGroupbyId(DeviceId deviceId, Integer groupId) {
@@ -1069,21 +1083,22 @@ public class DistributedGroupStore
                  existing.deviceId(),
                  operation.failureCode());
         if (operation.failureCode() == GroupOperation.GroupMsgErrorCode.GROUP_EXISTS) {
-            log.warn("Current extraneous groups in device:{} are: {}",
-                     deviceId,
-                     getExtraneousGroups(deviceId));
             if (operation.buckets().equals(existing.buckets())) {
-                if (existing.state() == GroupState.PENDING_ADD) {
+                if (existing.state() == GroupState.PENDING_ADD ||
+                        existing.state() == GroupState.PENDING_ADD_RETRY) {
                     log.info("GROUP_EXISTS: GroupID and Buckets match for group in pending "
                                      + "add state - moving to ADDED for group {} in device {}",
                              existing.id(), deviceId);
                     addOrUpdateGroupEntry(existing);
                     return;
                 } else {
-                    log.warn("GROUP EXISTS: Group ID matched but buckets did not. "
-                                     + "Operation: {} Existing: {}", operation.buckets(),
-                             existing.buckets());
+                    log.warn("GROUP_EXISTS: GroupId and Buckets match but existing"
+                            + "group in state: {}", existing.state());
                 }
+            } else {
+                log.warn("GROUP EXISTS: Group ID matched but buckets did not. "
+                        + "Operation: {} Existing: {}", operation.buckets(),
+                        existing.buckets());
             }
         }
         switch (operation.opType()) {

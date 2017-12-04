@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,7 +72,6 @@ public final class ExtensionTreatmentType {
         NICIRA_ENCAP_ETH_SRC(121),
         NICIRA_ENCAP_ETH_DST(122),
         NICIRA_ENCAP_ETH_TYPE(123),
-        BMV2_ACTION(128),
         OPLINK_ATTENUATION(130),
 
         UNRESOLVED_TYPE(200);

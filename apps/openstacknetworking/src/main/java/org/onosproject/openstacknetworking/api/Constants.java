@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,11 +34,24 @@ public final class Constants {
     public static final int PRIORITY_TUNNEL_TAG_RULE = 30000;
     public static final int PRIORITY_FLOATING_INTERNAL = 42000;
     public static final int PRIORITY_FLOATING_EXTERNAL = 41000;
+    public static final int PRIORITY_STATEFUL_SNAT_RULE = 40500;
     public static final int PRIORITY_ICMP_RULE = 43000;
     public static final int PRIORITY_INTERNAL_ROUTING_RULE = 28000;
     public static final int PRIORITY_EXTERNAL_ROUTING_RULE = 25000;
     public static final int PRIORITY_SNAT_RULE = 26000;
     public static final int PRIORITY_SWITCHING_RULE = 30000;
-    public static final int PRIORITY_ACL_RULE = 30000;
+    public static final int PRIORITY_ADMIN_RULE = 32000;
+    public static final int PRIORITY_ACL_RULE = 31000;
+    public static final int PRIORITY_CT_HOOK_RULE = 30500;
+    public static final int PRIORITY_CT_RULE = 32000;
+    public static final int PRIORITY_CT_DROP_RULE = 32500;
 
+    public static final int SRC_VNI_TABLE = 0;
+    public static final int ACL_TABLE = 1;
+    public static final int CT_TABLE = 2;
+    public static final int JUMP_TABLE = 3;
+    public static final int ROUTING_TABLE = 4;
+    public static final int FORWARDING_TABLE = 5;
+    public static final int GW_COMMON_TABLE = 0;
+    public static final int ERROR_TABLE = 10;
 }

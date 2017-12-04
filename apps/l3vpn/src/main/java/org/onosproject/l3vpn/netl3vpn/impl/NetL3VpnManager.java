@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,37 +48,35 @@ import org.onosproject.l3vpn.netl3vpn.VpnConfig;
 import org.onosproject.l3vpn.netl3vpn.VpnInstance;
 import org.onosproject.l3vpn.netl3vpn.VpnSiteRole;
 import org.onosproject.l3vpn.netl3vpn.VpnType;
-import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Port;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.driver.DriverService;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.interfaces.rev20140508.ietfinterfaces.devices.device.Interfaces;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.DefaultL3VpnSvc;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.L3VpnSvc;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.accessvpnpolicy.VpnAttachment;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.accessvpnpolicy.vpnattachment.AttachmentFlavor;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.accessvpnpolicy.vpnattachment.attachmentflavor.DefaultVpnId;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.l3vpnsvc.DefaultSites;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.l3vpnsvc.Sites;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.l3vpnsvc.VpnServices;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.l3vpnsvc.sites.Site;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.l3vpnsvc.sites.site.SiteNetworkAccesses;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.l3vpnsvc.sites.site.sitenetworkaccesses.SiteNetworkAccess;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.l3vpnsvc.vpnservices.VpnSvc;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.siteattachmentbearer.Bearer;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.siteattachmentbearer.DefaultBearer;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.siteattachmentbearer.bearer.DefaultRequestedType;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.siteattachmentbearer.bearer.RequestedType;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.siteattachmentipconnection.IpConnection;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.siterouting.RoutingProtocols;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev20160730.ietfl3vpnsvc.siterouting.routingprotocols.RoutingProtocol;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.network.instance.rev20160623.ietfnetworkinstance.devices.device.NetworkInstances;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.ext.rev20160730.l3vpnsvcext.l3vpnsvc.sites.site.sitenetworkaccesses.sitenetworkaccess.bearer.DefaultAugmentedL3VpnBearer;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.ext.rev20160730.l3vpnsvcext.l3vpnsvc.sites.site.sitenetworkaccesses.sitenetworkaccess.bearer.requestedtype.DefaultAugmentedL3VpnRequestedType;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.ext.rev20160730.l3vpnsvcext.requestedtypegrouping.requestedtypeprofile.RequestedTypeChoice;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.ext.rev20160730.l3vpnsvcext.requestedtypegrouping.requestedtypeprofile.requestedtypechoice.DefaultDot1Qcase;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.ext.rev20160730.l3vpnsvcext.requestedtypegrouping.requestedtypeprofile.requestedtypechoice.DefaultPhysicalCase;
+import org.onosproject.pce.pceservice.api.PceService;
+import org.onosproject.yang.gen.v1.ietfinterfaces.rev20140508.ietfinterfaces.devices.device.Interfaces;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.DefaultL3VpnSvc;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.L3VpnSvc;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.accessvpnpolicy.VpnAttachment;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.accessvpnpolicy.vpnattachment.AttachmentFlavor;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.accessvpnpolicy.vpnattachment.attachmentflavor.DefaultVpnId;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.l3vpnsvc.DefaultSites;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.l3vpnsvc.Sites;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.l3vpnsvc.VpnServices;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.l3vpnsvc.sites.Site;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.l3vpnsvc.sites.site.SiteNetworkAccesses;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.l3vpnsvc.sites.site.sitenetworkaccesses.SiteNetworkAccess;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.l3vpnsvc.vpnservices.VpnSvc;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.siteattachmentbearer.Bearer;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.siteattachmentbearer.bearer.RequestedType;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.siteattachmentipconnection.IpConnection;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.siterouting.RoutingProtocols;
+import org.onosproject.yang.gen.v1.ietfl3vpnsvc.rev20160730.ietfl3vpnsvc.siterouting.routingprotocols.RoutingProtocol;
+import org.onosproject.yang.gen.v1.ietfnetworkinstance.rev20160623.ietfnetworkinstance.devices.device.NetworkInstances;
+import org.onosproject.yang.gen.v1.l3vpnsvcext.rev20160730.l3vpnsvcext.l3vpnsvc.sites.site.sitenetworkaccesses.sitenetworkaccess.bearer.DefaultAugmentedL3VpnBearer;
+import org.onosproject.yang.gen.v1.l3vpnsvcext.rev20160730.l3vpnsvcext.l3vpnsvc.sites.site.sitenetworkaccesses.sitenetworkaccess.bearer.requestedtype.DefaultAugmentedL3VpnRequestedType;
+import org.onosproject.yang.gen.v1.l3vpnsvcext.rev20160730.l3vpnsvcext.requestedtypegrouping.requestedtypeprofile.RequestedTypeChoice;
+import org.onosproject.yang.gen.v1.l3vpnsvcext.rev20160730.l3vpnsvcext.requestedtypegrouping.requestedtypeprofile.requestedtypechoice.DefaultDot1Qcase;
+import org.onosproject.yang.gen.v1.l3vpnsvcext.rev20160730.l3vpnsvcext.requestedtypegrouping.requestedtypeprofile.requestedtypechoice.DefaultPhysicalCase;
 import org.onosproject.yang.model.DataNode;
 import org.onosproject.yang.model.DefaultModelObjectData;
 import org.onosproject.yang.model.ModelConverter;
@@ -111,7 +109,6 @@ import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.EVENT_NULL;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.ID_LIMIT;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.ID_LIMIT_EXCEEDED;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.INT_INFO_NULL;
-import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.IP;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.IP_INT_INFO_NULL;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.MAX_BATCH_MS;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.MAX_EVENTS;
@@ -125,9 +122,9 @@ import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.VPN_ATTACHMENT_NU
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.VPN_POLICY_NOT_SUPPORTED;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.VPN_TYPE_UNSUPPORTED;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.getBgpCreateConfigObj;
+import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.getId;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.getIntCreateModObj;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.getIntNotAvailable;
-import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.getMgmtIpUnAvailErr;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.getModIdForL3VpnSvc;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.getModIdForSites;
 import static org.onosproject.l3vpn.netl3vpn.impl.NetL3VpnUtil.getResourceData;
@@ -144,6 +141,7 @@ public class NetL3VpnManager {
 
     private static final String APP_ID = "org.onosproject.app.l3vpn";
     private static final String L3_VPN_ID_TOPIC = "l3vpn-id";
+    private static final String TNL_ID_TOPIC = "l3vpn-tnl-id";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -180,7 +178,12 @@ public class NetL3VpnManager {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterService clusterService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected PceService pceService;
+
     protected IdGenerator l3VpnIdGen;
+
+    protected IdGenerator tnlIdGen;
 
     private NodeId localNodeId;
 
@@ -194,15 +197,21 @@ public class NetL3VpnManager {
 
     private boolean isElectedLeader;
 
+    private NetL3VpnTunnelHandler tnlHandler;
+
     @Activate
     protected void activate() {
         appId = coreService.registerApplication(APP_ID);
         l3VpnIdGen = coreService.getIdGenerator(L3_VPN_ID_TOPIC);
+        tnlIdGen = coreService.getIdGenerator(TNL_ID_TOPIC);
         localNodeId = clusterService.getLocalNode().id();
         leadershipService.addListener(leadershipEventListener);
         leadershipService.runForLeadership(appId.name());
         getResourceId();
         configService.addListener(configListener);
+        tnlHandler = new NetL3VpnTunnelHandler(
+                pceService, driverService, configService, l3VpnStore,
+                deviceService, tnlIdGen, modelConverter);
         log.info("Started");
     }
 
@@ -526,8 +535,8 @@ public class NetL3VpnManager {
      */
     private DeviceInfo buildDevVpnIns(Bearer bearer, VpnInstance ins,
                                       VpnSiteRole role, IpConnection connect) {
-        DefaultAugmentedL3VpnBearer augBearer = ((DefaultBearer) bearer)
-                .augmentation(DefaultAugmentedL3VpnBearer.class);
+        DefaultAugmentedL3VpnBearer augBearer = bearer.augmentation(
+                DefaultAugmentedL3VpnBearer.class);
         DeviceId id = getDeviceId(augBearer);
         Map<DeviceId, DeviceInfo> devices = ins.devInfo();
         DeviceInfo info = null;
@@ -554,24 +563,7 @@ public class NetL3VpnManager {
             throw new NetL3VpnException(DEVICE_INFO_NULL);
         }
         String ip = attach.bearerAttachment().peMgmtIp().string();
-        return getId(ip);
-    }
-
-    /**
-     * Returns the device id whose management ip address matches with the ip
-     * received.
-     *
-     * @param ip ip address
-     * @return device id
-     */
-    public DeviceId getId(String ip) {
-        for (Device device : deviceService.getAvailableDevices()) {
-            String val = device.annotations().value(IP);
-            if (ip.equals(val)) {
-                return device.id();
-            }
-        }
-        throw new NetL3VpnException(getMgmtIpUnAvailErr(ip));
+        return getId(ip, true, deviceService.getAvailableDevices());
     }
 
     /**
@@ -588,18 +580,45 @@ public class NetL3VpnManager {
                                          VpnInstance inst, IpConnection ip) {
         Map<AccessInfo, InterfaceInfo> intMap = l3VpnStore.getInterfaceInfo();
         generateRdRt(inst, role);
-        DeviceInfo info = new DeviceInfo(id);
+        DeviceInfo info = new DeviceInfo(id, role.role());
 
         NetworkInstances instances = createInstance(inst, role, ip);
         ModelObjectData devMod = getVpnCreateModObj(intMap, instances,
                                                     id.toString());
+        inst.addDevInfo(id, info);
+        l3VpnStore.addVpnIns(inst.vpnName(), inst);
+
         ModelObjectData driMod = info.processCreateInstance(driverService,
                                                             devMod);
         ResourceData resData = modelConverter.createDataNode(driMod);
         addToStore(resData);
-        l3VpnStore.addVpnIns(inst.vpnName(), inst);
-        inst.addDevInfo(id, info);
+        // TODO: Enable tunnel creation on-demand. Uncomment below after
+        // complete validation
+        //checkAndUpdateTunnel(inst, id);
         return info;
+    }
+
+    /**
+     * Checks if the tunnel can be established and creates the tunnel from
+     * source to destination.
+     *
+     * @param inst VPN instance
+     * @param id   device id
+     */
+    private void checkAndUpdateTunnel(VpnInstance inst, DeviceId id) {
+        Map<DeviceId, DeviceInfo> devInfo = inst.devInfo();
+        int devSize = devInfo.size();
+        String vpnName = inst.vpnName();
+        if (devSize != 1) {
+            DeviceInfo info = devInfo.get(id);
+            tnlHandler.createSrcInfo(vpnName, info);
+            for (Map.Entry<DeviceId, DeviceInfo> device : devInfo.entrySet()) {
+                DeviceInfo val = device.getValue();
+                if (val != info) {
+                    tnlHandler.createSrcDesTunnel(val);
+                }
+            }
+        }
     }
 
     /**
@@ -612,7 +631,7 @@ public class NetL3VpnManager {
         if (resData != null && resData.dataNodes() != null) {
             List<DataNode> dataNodes = resData.dataNodes();
             for (DataNode node : dataNodes) {
-                configService.createNodeRecursive(resData.resourceId(), node);
+                configService.createNode(resData.resourceId(), node);
             }
         }
     }
@@ -737,9 +756,8 @@ public class NetL3VpnManager {
      * @return interface name
      */
     private String getInterfaceName(DeviceInfo info, RequestedType reqType) {
-        DefaultAugmentedL3VpnRequestedType req =
-                ((DefaultRequestedType) reqType).augmentation(
-                        DefaultAugmentedL3VpnRequestedType.class);
+        DefaultAugmentedL3VpnRequestedType req = reqType.augmentation(
+                DefaultAugmentedL3VpnRequestedType.class);
         if (req == null || req.requestedTypeProfile() == null ||
                 req.requestedTypeProfile().requestedTypeChoice() == null) {
             throw new NetL3VpnException(INT_INFO_NULL);
@@ -925,6 +943,9 @@ public class NetL3VpnManager {
                         driverService, devMod);
                 ResourceData resData = modelConverter.createDataNode(driMod);
                 deleteFromStore(resData);
+                // TODO: Enable tunnel creation on-demand. Uncomment below after
+                // complete validation
+                // tnlHandler.deleteTunnel(dev, instance.vpnName());
             }
             l3VpnStore.removeVpnInstance(instance.vpnName());
         }
@@ -960,7 +981,7 @@ public class NetL3VpnManager {
      */
     private void deleteFromStore(ResourceData resData) {
         if (resData != null) {
-            configService.deleteNodeRecursive(resData.resourceId());
+            configService.deleteNode(resData.resourceId());
         }
     }
 
@@ -1025,7 +1046,7 @@ public class NetL3VpnManager {
         public void processItems(List<DynamicConfigEvent> events) {
             for (DynamicConfigEvent event : events) {
                 checkNotNull(event, EVENT_NULL);
-                Filter filter = new Filter();
+                Filter filter = Filter.builder().build();
                 DataNode node;
                 try {
                     node = configService.readNode(event.subject(), filter);

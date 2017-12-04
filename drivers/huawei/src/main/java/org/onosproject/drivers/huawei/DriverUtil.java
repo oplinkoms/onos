@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 
 package org.onosproject.drivers.huawei;
 
-import org.onosproject.yang.gen.v1.ne.l3vpn.api.rev20141225.nel3vpnapi.DefaultDevices;
-import org.onosproject.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.interfaces.rev20140508.ietfinterfaces.devices.DeviceKeys;
+import org.onosproject.yang.gen.v1.nel3vpnapi.rev20141225.nel3vpnapi.DefaultDevices;
+import org.onosproject.yang.gen.v1.ietfinterfaces.rev20140508.ietfinterfaces.devices.DeviceKeys;
 import org.onosproject.yang.model.AtomicPath;
 import org.onosproject.yang.model.DefaultModelObjectData;
 import org.onosproject.yang.model.InnerModelObject;

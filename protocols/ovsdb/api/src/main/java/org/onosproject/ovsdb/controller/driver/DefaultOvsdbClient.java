@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,22 +25,19 @@ import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-
 import io.netty.channel.Channel;
-
 import org.onlab.packet.IpAddress;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
-import org.onosproject.net.behaviour.BridgeDescription;
 import org.onosproject.net.behaviour.ControllerInfo;
-import org.onosproject.net.behaviour.MirroringStatistics;
 import org.onosproject.net.behaviour.MirroringName;
+import org.onosproject.net.behaviour.MirroringStatistics;
 import org.onosproject.net.behaviour.QosId;
+import org.onosproject.net.behaviour.QueueDescription;
 import org.onosproject.net.behaviour.QueueId;
 import org.onosproject.ovsdb.controller.OvsdbBridge;
 import org.onosproject.ovsdb.controller.OvsdbClientService;
 import org.onosproject.ovsdb.controller.OvsdbInterface;
-import org.onosproject.ovsdb.controller.OvsdbInterface.Type;
 import org.onosproject.ovsdb.controller.OvsdbMirror;
 import org.onosproject.ovsdb.controller.OvsdbNodeId;
 import org.onosproject.ovsdb.controller.OvsdbPort;
@@ -51,7 +48,8 @@ import org.onosproject.ovsdb.controller.OvsdbQueue;
 import org.onosproject.ovsdb.controller.OvsdbRowStore;
 import org.onosproject.ovsdb.controller.OvsdbStore;
 import org.onosproject.ovsdb.controller.OvsdbTableStore;
-
+import org.onosproject.ovsdb.rfc.exception.ColumnSchemaNotFoundException;
+import org.onosproject.ovsdb.rfc.exception.VersionMismatchException;
 import org.onosproject.ovsdb.rfc.jsonrpc.Callback;
 import org.onosproject.ovsdb.rfc.message.OperationResult;
 import org.onosproject.ovsdb.rfc.message.TableUpdates;
@@ -88,7 +86,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
-
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -102,6 +100,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static org.onosproject.ovsdb.controller.OvsdbConstant.*;
@@ -112,6 +111,7 @@ import static org.onosproject.ovsdb.controller.OvsdbConstant.*;
 public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientService {
 
     private static final int TRANSACTCONFIG_TIMEOUT = 3; //sec
+    private static final int OFPORT_ERROR_COMPARISON = 0;
 
     private final Logger log = LoggerFactory.getLogger(DefaultOvsdbClient.class);
 
@@ -462,48 +462,6 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         }
     }
 
-    @Deprecated
-    @Override
-    public void createBridge(String bridgeName) {
-        OvsdbBridge ovsdbBridge = OvsdbBridge.builder()
-                .name(bridgeName)
-                .build();
-
-        createBridge(ovsdbBridge);
-    }
-
-    @Deprecated
-    @Override
-    public void createBridge(String bridgeName, String dpid, String exPortName) {
-        OvsdbBridge ovsdbBridge = OvsdbBridge.builder()
-                .name(bridgeName)
-                .failMode(BridgeDescription.FailMode.SECURE)
-                .datapathId(dpid)
-                .disableInBand()
-                .controllers(Lists.newArrayList(localController()))
-                .build();
-
-        createBridge(ovsdbBridge);
-
-        if (exPortName != null) {
-            createPort(bridgeName, exPortName);
-        }
-    }
-
-    @Deprecated
-    @Override
-    public boolean createBridge(String bridgeName, String dpid, List<ControllerInfo> controllers) {
-        OvsdbBridge ovsdbBridge = OvsdbBridge.builder()
-                .name(bridgeName)
-                .failMode(BridgeDescription.FailMode.SECURE)
-                .datapathId(dpid)
-                .disableInBand()
-                .controllers(controllers)
-                .build();
-
-        return createBridge(ovsdbBridge);
-    }
-
     @Override
     public boolean createBridge(OvsdbBridge ovsdbBridge) {
         DatabaseSchema dbSchema = schema.get(DATABASENAME);
@@ -520,6 +478,11 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         if (ovsdbBridge.failMode().isPresent()) {
             String failMode = ovsdbBridge.failMode().get().name().toLowerCase();
             bridge.setFailMode(Sets.newHashSet(failMode));
+        }
+
+        if (ovsdbBridge.datapathType().isPresent()) {
+            String datapathType = ovsdbBridge.datapathType().get();
+            bridge.setDatapathType(datapathType);
         }
 
         String bridgeUuid = getBridgeUuid(ovsdbBridge.name());
@@ -584,14 +547,14 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         }
 
         removeControllers.forEach(c -> deleteConfig(CONTROLLER, UUID, c.getRow().uuid().value(),
-                                                    BRIDGE, "controller", c.getRow().uuid()));
+                                                    BRIDGE, BRIDGE_CONTROLLER, c.getRow().uuid()));
         newControllers.stream().map(c -> {
             Controller controller = (Controller) TableGenerator
                     .createTable(dbSchema, OvsdbTable.CONTROLLER);
             controller.setTarget(c.target());
             return controller;
         }).forEach(c -> {
-            String uuid = insertConfig(CONTROLLER, UUID, BRIDGE, "controller", bridgeUuid.value(),
+            String uuid = insertConfig(CONTROLLER, UUID, BRIDGE, BRIDGE_CONTROLLER, bridgeUuid.value(),
                                        c.getRow());
             newControllerUuids.add(Uuid.uuid(uuid));
 
@@ -785,6 +748,107 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         }
         return ovsdbQoses;
     }
+
+    @Override
+    public void bindQueues(QosId qosId, Map<Long, QueueDescription> queues) {
+        DatabaseSchema dbSchema = schema.get(DATABASENAME);
+        OvsdbRowStore qosRowStore = getRowStore(DATABASENAME, QOS);
+        if (qosRowStore == null) {
+            log.debug("The qos uuid is null");
+            return;
+        }
+        OvsdbRowStore queueRowStore = getRowStore(DATABASENAME, QUEUE);
+        if (queueRowStore == null) {
+            log.debug("The queue uuid is null");
+            return;
+        }
+
+        ConcurrentMap<String, Row> qosTableRows = qosRowStore.getRowStore();
+        ConcurrentMap<String, Row> queueTableRows = queueRowStore.getRowStore();
+
+        Row qosRow = qosTableRows.values().stream().filter(r -> {
+            OvsdbMap ovsdbMap = (OvsdbMap) (r.getColumn(EXTERNAL_ID).data());
+            return qosId.name().equals(ovsdbMap.map().get(QOS_EXTERNAL_ID_KEY));
+        }).findFirst().orElse(null);
+
+        if (qosRow == null) {
+            log.warn("Can't find QoS {}", qosId);
+            return;
+        }
+
+        Uuid qosUuid = qosRow.uuid();
+
+        Map<Long, Uuid> newQueues = new HashMap<Long, Uuid>();
+        for (Map.Entry<Long, QueueDescription> entry : queues.entrySet()) {
+            Row queueRow = queueTableRows.values().stream().filter(r -> {
+                OvsdbMap ovsdbMap = (OvsdbMap) (r.getColumn(EXTERNAL_ID).data());
+                return entry.getValue().queueId().name().equals(ovsdbMap.map().get(QUEUE_EXTERNAL_ID_KEY));
+            }).findFirst().orElse(null);
+            if (queueRow != null) {
+                newQueues.put(entry.getKey(), queueRow.uuid());
+            }
+        }
+
+        // update the qos table
+        ArrayList<Operation> operations = Lists.newArrayList();
+        Condition condition = ConditionUtil.isEqual(UUID, qosUuid);
+        Mutation mutation = MutationUtil.insert(QUEUES, newQueues);
+        List<Condition> conditions = Collections.singletonList(condition);
+        List<Mutation> mutations = Collections.singletonList(mutation);
+        operations.add(new Mutate(dbSchema.getTableSchema(QOS), conditions, mutations));
+
+        transactConfig(DATABASENAME, operations);
+    }
+
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public void unbindQueues(QosId qosId, List<Long> queueKeys) {
+        DatabaseSchema dbSchema = schema.get(DATABASENAME);
+        OvsdbRowStore qosRowStore = getRowStore(DATABASENAME, QOS);
+        if (qosRowStore == null) {
+            return;
+        }
+
+        ConcurrentMap<String, Row> qosTableRows = qosRowStore.getRowStore();
+
+        Row qosRow = qosTableRows.values().stream().filter(r -> {
+            OvsdbMap ovsdbMap = (OvsdbMap) (r.getColumn(EXTERNAL_ID).data());
+            return qosId.name().equals(ovsdbMap.map().get(QOS_EXTERNAL_ID_KEY));
+        }).findFirst().orElse(null);
+
+        if (qosRow == null) {
+            log.warn("Can't find QoS {}", qosId);
+            return;
+        }
+
+        Map<Long, Uuid> deleteQueuesMap = new HashMap<>();
+        Map<Integer, Uuid> queuesMap = ((OvsdbMap) qosRow.getColumn(QUEUES).data()).map();
+
+        queueKeys.forEach(key -> {
+            if (queuesMap.containsKey(key.intValue())) {
+                deleteQueuesMap.put(key, queuesMap.get(key.intValue()));
+            }
+        });
+
+        if (deleteQueuesMap.size() != 0) {
+            TableSchema parentTableSchema = dbSchema
+                    .getTableSchema(QOS);
+            ColumnSchema parentColumnSchema = parentTableSchema
+                    .getColumnSchema(QUEUES);
+
+            Mutation mutation = MutationUtil.delete(parentColumnSchema.name(), OvsdbMap.ovsdbMap(deleteQueuesMap));
+            List<Mutation> mutations = Collections.singletonList(mutation);
+
+            Condition condition = ConditionUtil.isEqual(UUID, qosRow.uuid());
+            List<Condition> conditionList = Collections.singletonList(condition);
+            List<Operation> operations = Collections.singletonList(
+                    new Mutate(parentTableSchema, conditionList, mutations));
+
+            transactConfig(DATABASENAME, operations);
+        }
+    }
+
 
     @Override
     public boolean createQueue(OvsdbQueue ovsdbQueue) {
@@ -1012,24 +1076,6 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         return;
     }
 
-    @Deprecated
-    @Override
-    public boolean createTunnel(String bridgeName, String ifaceName, String tunnelType,
-                                Map<String, String> options) {
-        OvsdbInterface ovsdbIface = OvsdbInterface.builder()
-                .name(ifaceName)
-                .type(Type.valueOf(tunnelType))
-                .options(options)
-                .build();
-
-        return createInterface(bridgeName, ovsdbIface);
-    }
-
-    @Deprecated
-    @Override
-    public void dropTunnel(IpAddress srcIp, IpAddress dstIp) {
-    }
-
     @Override
     public boolean createInterface(String bridgeName, OvsdbInterface ovsdbIface) {
         String bridgeUuid  = getBridgeUuid(bridgeName);
@@ -1064,7 +1110,16 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         // insert an interface
         Interface intf = (Interface) TableGenerator.createTable(dbSchema, OvsdbTable.INTERFACE);
         intf.setName(ovsdbIface.name());
+
         intf.setType(ovsdbIface.typeToString());
+
+        if (ovsdbIface.mtu().isPresent()) {
+            Set<Long> mtuSet = Sets.newConcurrentHashSet();
+            mtuSet.add(ovsdbIface.mtu().get());
+            intf.setMtu(mtuSet);
+            intf.setMtuRequest(mtuSet);
+        }
+
         intf.setOptions(ovsdbIface.options());
         Insert intfInsert = new Insert(dbSchema.getTableSchema(INTERFACE), INTERFACE, intf.getRow());
         operations.add(intfInsert);
@@ -1317,13 +1372,18 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         DatabaseSchema dbSchema = schema.get(dbName);
         if (dbSchema != null) {
             Function<List<JsonNode>, List<OperationResult>> rowFunction = (input -> {
-                log.debug("Get ovsdb operation result");
-                List<OperationResult> result = FromJsonUtil.jsonNodeToOperationResult(input, operations);
-                if (result == null) {
-                    log.debug("The operation result is null");
-                    return null;
+                try {
+                    log.debug("Get ovsdb operation result");
+                    List<OperationResult> result = FromJsonUtil.jsonNodeToOperationResult(input, operations);
+                    if (result == null) {
+                        log.debug("The operation result is null");
+                        return null;
+                    }
+                    return result;
+                } catch (Exception e) {
+                    log.error("Exception while parsing result", e);
                 }
-                return result;
+                return null;
             });
             return Futures.transform(transact(dbSchema, operations), rowFunction);
         }
@@ -1410,6 +1470,9 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
         }
         String methodName = requestMethod.get(requestId);
         sf.set(FromJsonUtil.jsonResultParser(response, methodName));
+
+        requestResult.remove(requestId);
+        requestMethod.remove(requestId);
     }
 
     @Override
@@ -1725,5 +1788,88 @@ public class DefaultOvsdbClient implements OvsdbProviderService, OvsdbClientServ
     public void disconnect() {
         channel.disconnect();
         this.agent.removeConnectedNode(nodeId);
+    }
+
+    @Override
+    public List<OvsdbPortName> getPorts(List<String> portNames, DeviceId deviceId) {
+        Uuid bridgeUuid = getBridgeUuid(deviceId);
+        if (bridgeUuid == null) {
+            log.error("Can't find the bridge for the deviceId {}", deviceId);
+            return Collections.emptyList();
+        }
+        DatabaseSchema dbSchema = schema.get(DATABASENAME);
+        Row bridgeRow = getRow(DATABASENAME, BRIDGE, bridgeUuid.value());
+        Bridge bridge = (Bridge) TableGenerator.getTable(dbSchema, bridgeRow, OvsdbTable.BRIDGE);
+        if (bridge == null) {
+            return Collections.emptyList();
+        }
+        OvsdbSet setPorts = (OvsdbSet) bridge.getPortsColumn().data();
+        Set<Uuid> portSet = setPorts.set();
+        if (portSet.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<Uuid, Port> portMap = portSet.stream().collect(Collectors.toMap(
+                java.util.function.Function.identity(), port -> (Port) TableGenerator
+                        .getTable(dbSchema, getRow(DATABASENAME,
+                                PORT, port.value()), OvsdbTable.PORT)));
+
+        List<OvsdbPortName> portList = portMap.entrySet().stream().filter(port -> Objects.nonNull(port.getValue())
+                && portNames.contains(port.getValue().getName())
+                && Objects.nonNull(getInterfacebyPort(port.getKey().value(), port.getValue().getName())))
+                .map(port -> new OvsdbPortName(port.getValue().getName())).collect(Collectors.toList());
+
+        return Collections.unmodifiableList(portList);
+    }
+
+    @Override
+    public boolean getPortError(List<OvsdbPortName> portNames, DeviceId bridgeId) {
+        Uuid bridgeUuid = getBridgeUuid(bridgeId);
+
+        List<Interface> interfaceList = portNames.stream().collect(Collectors
+                .toMap(java.util.function.Function.identity(),
+                        port -> (Interface) getInterfacebyPort(getPortUuid(port.value(),
+                                bridgeUuid.value()), port.value())))
+                .entrySet().stream().filter(intf -> Objects.nonNull(intf.getValue())
+                        && ((OvsdbSet) intf.getValue().getOpenFlowPortColumn().data()).set()
+                        .stream().findAny().orElse(OFPORT_ERROR_COMPARISON).equals(OFPORT_ERROR))
+                .map(intf -> intf.getValue()).collect(Collectors.toList());
+
+        interfaceList.forEach(intf -> new Consumer<Interface>() {
+            @Override
+            public void accept(Interface intf) {
+                try {
+                    Set<String> setErrors = ((OvsdbSet) intf.getErrorColumn().data()).set();
+                    log.info("Port has errors. ofport value - {}, Interface - {} has error - {} ",
+                            intf.getOpenFlowPortColumn().data(), intf.getName(), setErrors.stream()
+                                    .findFirst().get());
+                } catch (ColumnSchemaNotFoundException | VersionMismatchException  e) {
+                    log.debug("Port has errors. ofport value - {}, Interface - {} has error - {} ",
+                            intf.getOpenFlowPortColumn().data(), intf.getName(), e);
+                }
+            }
+        }.accept(intf));
+
+        return !interfaceList.isEmpty();
+    }
+
+    private Interface getInterfacebyPort(String portUuid, String portName) {
+        DatabaseSchema dbSchema = schema.get(DATABASENAME);
+
+        Row portRow = getRow(DATABASENAME, PORT, portUuid);
+        Port port = (Port) TableGenerator.getTable(dbSchema, portRow,
+                OvsdbTable.PORT);
+        if (port == null) {
+            return null;
+        }
+
+        OvsdbSet setInterfaces = (OvsdbSet) port.getInterfacesColumn().data();
+        Set<Uuid> interfaces = setInterfaces.set();
+
+        return interfaces.stream().map(intf -> (Interface) TableGenerator
+                .getTable(dbSchema, getRow(DATABASENAME,
+                        INTERFACE, intf.value()), OvsdbTable.INTERFACE))
+                .filter(intf -> Objects.nonNull(intf) && portName.equalsIgnoreCase(intf.getName()))
+                .findFirst().orElse(null);
     }
 }

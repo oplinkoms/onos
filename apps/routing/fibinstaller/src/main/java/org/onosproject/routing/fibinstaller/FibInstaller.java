@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,14 +36,14 @@ import org.onosproject.app.ApplicationService;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.net.config.basics.McastConfig;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceService;
-import org.onosproject.incubator.net.routing.ResolvedRoute;
-import org.onosproject.incubator.net.routing.Route;
-import org.onosproject.incubator.net.routing.RouteEvent;
-import org.onosproject.incubator.net.routing.RouteListener;
-import org.onosproject.incubator.net.routing.RouteService;
+import org.onosproject.net.config.basics.McastConfig;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceService;
+import org.onosproject.routeservice.ResolvedRoute;
+import org.onosproject.routeservice.Route;
+import org.onosproject.routeservice.RouteEvent;
+import org.onosproject.routeservice.RouteListener;
+import org.onosproject.routeservice.RouteService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.config.ConfigFactory;
 import org.onosproject.net.config.NetworkConfigEvent;
@@ -72,9 +72,8 @@ import org.onosproject.routing.NextHopGroupKey;
 import org.onosproject.routing.Router;
 import org.onosproject.routing.RouterInfo;
 import org.onosproject.routing.RoutingService;
-import org.onosproject.routing.config.RouterConfigHelper;
+import org.onosproject.routing.config.RoutingConfiguration;
 import org.onosproject.routing.config.RoutersConfig;
-import org.onosproject.routing.config.RoutingConfigurationService;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -126,9 +125,6 @@ public class FibInstaller {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ApplicationService applicationService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected RoutingConfigurationService rs;
-
     @Property(name = "routeToNextHop", boolValue = false,
             label = "Install a /32 or /128 route to each next hop")
     private boolean routeToNextHop = false;
@@ -168,6 +164,8 @@ public class FibInstaller {
         componentConfigService.registerProperties(getClass());
         modified(context);
 
+        RoutingConfiguration.register(networkConfigRegistry);
+
         coreAppId = coreService.registerApplication(CoreService.CORE_APP_NAME);
         routerAppId = coreService.registerApplication(RoutingService.ROUTER_APP_ID);
         fibAppId = coreService.registerApplication(APP_NAME);
@@ -186,6 +184,8 @@ public class FibInstaller {
     @Deactivate
     protected void deactivate() {
         networkConfigService.removeListener(configListener);
+
+        RoutingConfiguration.unregister(networkConfigRegistry);
 
         componentConfigService.unregisterProperties(getClass(), false);
 
@@ -207,7 +207,7 @@ public class FibInstaller {
 
     private void processRouterConfig() {
         Set<RoutersConfig.Router> routerConfigs =
-                RouterConfigHelper.getRouterConfigurations(networkConfigService, routerAppId);
+                RoutingConfiguration.getRouterConfigurations(networkConfigService, routerAppId);
         if (routerConfigs.isEmpty()) {
             log.info("Router config not available");
             return;
@@ -267,7 +267,7 @@ public class FibInstaller {
     }
 
     private synchronized void deleteRoute(ResolvedRoute route) {
-        deleteRoute(new Route(Route.Source.UNDEFINED, route.prefix(), route.nextHop()));
+        deleteRoute(route.route());
     }
 
     private void deleteRoute(Route route) {

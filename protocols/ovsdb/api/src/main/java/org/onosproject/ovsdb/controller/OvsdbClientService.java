@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-present Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,23 +15,24 @@
  */
 package org.onosproject.ovsdb.controller;
 
-import com.google.common.util.concurrent.ListenableFuture;
-import org.onlab.packet.IpAddress;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.behaviour.ControllerInfo;
-import org.onosproject.net.behaviour.MirroringStatistics;
 import org.onosproject.net.behaviour.MirroringName;
+import org.onosproject.net.behaviour.MirroringStatistics;
 import org.onosproject.net.behaviour.QosId;
+import org.onosproject.net.behaviour.QueueDescription;
 import org.onosproject.net.behaviour.QueueId;
 import org.onosproject.ovsdb.rfc.jsonrpc.OvsdbRpc;
 import org.onosproject.ovsdb.rfc.message.TableUpdates;
 import org.onosproject.ovsdb.rfc.notation.Row;
 import org.onosproject.ovsdb.rfc.schema.DatabaseSchema;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import com.google.common.util.concurrent.ListenableFuture;
 
 /**
  * Represents to provider facing side of a node.
@@ -126,6 +127,22 @@ public interface OvsdbClientService extends OvsdbRpc {
     Set<OvsdbQos> getQoses();
 
     /**
+     * Bind Queue to QoS.
+     *
+     * @param qosId qos identifier
+     * @param queues the Queue key and Queue description
+     */
+    void bindQueues(QosId qosId, Map<Long, QueueDescription> queues);
+
+    /**
+     * Unbind Queue from QoS.
+     *
+     * @param qosId qos identifier
+     * @param queueKeys queue key
+     */
+    void unbindQueues(QosId qosId, List<Long> queueKeys);
+
+    /**
      * Creates queues. limits the rate of each flow
      * depend on itself priority.
      *
@@ -156,30 +173,6 @@ public interface OvsdbClientService extends OvsdbRpc {
     Set<OvsdbQueue> getQueues();
 
     /**
-     * Creates a tunnel port with given options.
-     *
-     * @deprecated version 1.7.0 - Hummingbird
-     * @param bridgeName bridge name
-     * @param portName port name
-     * @param tunnelType tunnel type
-     * @param options tunnel options
-     * @return true if tunnel creation is successful, false otherwise
-     */
-    @Deprecated
-    boolean createTunnel(String bridgeName, String portName, String tunnelType,
-                         Map<String, String> options);
-
-    /**
-     * Drops the configuration for tunnel.
-     *
-     * @deprecated version 1.7.0 - Hummingbird
-     * @param srcIp source IP address
-     * @param dstIp destination IP address
-     */
-    @Deprecated
-    void dropTunnel(IpAddress srcIp, IpAddress dstIp);
-
-    /**
      * Creates an interface with a given OVSDB interface description.
      *
      * @param bridgeName bridge name
@@ -195,39 +188,6 @@ public interface OvsdbClientService extends OvsdbRpc {
      * @return true if interface creation is successful, false otherwise
      */
     boolean dropInterface(String ifaceName);
-
-    /**
-     * Creates a bridge.
-     *
-     * @deprecated version 1.7.0 - Hummingbird
-     * @param bridgeName bridge name
-     */
-    @Deprecated
-    void createBridge(String bridgeName);
-
-    /**
-     * Creates a bridge.
-     *
-     * @deprecated version 1.7.0 - Hummingbird
-     * @param bridgeName bridge name
-     * @param dpid data path id
-     * @param exPortName external port name
-     */
-    @Deprecated
-    void createBridge(String bridgeName, String dpid, String exPortName);
-
-    /**
-     * Creates a bridge with given name and dpid.
-     * Sets the bridge's controller with given controllers.
-     *
-     * @deprecated version 1.7.0 - Hummingbird
-     * @param bridgeName bridge name
-     * @param dpid data path id
-     * @param controllers controllers
-     * @return true if bridge creation is successful, false otherwise
-     */
-    @Deprecated
-    boolean createBridge(String bridgeName, String dpid, List<ControllerInfo> controllers);
 
     /**
      * Creates a bridge with a given bridge description.
@@ -392,4 +352,24 @@ public interface OvsdbClientService extends OvsdbRpc {
      * Disconnects the OVSDB server.
      */
     void disconnect();
+
+    /**
+     * Gets created  ports for the particular bridgeId.
+     *
+     * @param portNames  the portNames which needs to checked for create
+     * @param bridgeId   bridgeIdentifier
+     * @return OvsdbPortNames  the created ports from port table for the bridgeId by considering input port list.
+     * Considered port as created if port's interface table also gets created,irrespective
+     * of ofport value(has errors or not)
+     */
+    public List<OvsdbPortName> getPorts(List<String> portNames, DeviceId bridgeId);
+
+    /**
+     * Gets error status for the given portNames.
+     *
+     * @param portNames  the portNames which need to be checked for errors
+     * @param bridgeId   bridgeIdentifier
+     * @return errorstatus true if input port list contains error, false otherwise
+     */
+    boolean getPortError(List<OvsdbPortName>  portNames, DeviceId bridgeId);
 }

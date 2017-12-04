@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,15 +36,15 @@ import org.onosproject.app.ApplicationService;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Host;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.config.NetworkConfigEvent;
 import org.onosproject.net.config.NetworkConfigListener;
-import org.onosproject.net.config.NetworkConfigService;
+import org.onosproject.net.config.NetworkConfigRegistry;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
@@ -57,13 +57,12 @@ import org.onosproject.net.flowobjective.ForwardingObjective;
 import org.onosproject.net.flowobjective.NextObjective;
 import org.onosproject.net.host.HostService;
 import org.onosproject.net.host.InterfaceIpAddress;
-import org.onosproject.routing.RouterInfo;
 import org.onosproject.routing.InterfaceProvisionRequest;
 import org.onosproject.routing.Router;
+import org.onosproject.routing.RouterInfo;
 import org.onosproject.routing.RoutingService;
-import org.onosproject.routing.config.RouterConfigHelper;
+import org.onosproject.routing.config.RoutingConfiguration;
 import org.onosproject.routing.config.RoutersConfig;
-import org.onosproject.routing.config.RoutingConfigurationService;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 
@@ -113,7 +112,7 @@ public class ControlPlaneRedirectManager {
     protected FlowObjectiveService flowObjectiveService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected NetworkConfigService networkConfigService;
+    protected NetworkConfigRegistry networkConfigService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected MastershipService mastershipService;
@@ -123,9 +122,6 @@ public class ControlPlaneRedirectManager {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ApplicationService applicationService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected RoutingConfigurationService rs;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigService cfgService;
@@ -151,6 +147,8 @@ public class ControlPlaneRedirectManager {
         cfgService.registerProperties(getClass());
         modified(context);
 
+        RoutingConfiguration.register(networkConfigService);
+
         networkConfigService.addListener(networkConfigListener);
 
         processRouterConfig();
@@ -163,6 +161,7 @@ public class ControlPlaneRedirectManager {
     protected void deactivate() {
         cfgService.unregisterProperties(getClass(), false);
         networkConfigService.removeListener(networkConfigListener);
+        RoutingConfiguration.unregister(networkConfigService);
     }
 
     @Modified
@@ -196,7 +195,7 @@ public class ControlPlaneRedirectManager {
                 coreService.registerApplication(RoutingService.ROUTER_APP_ID);
 
         Set<RoutersConfig.Router> routerConfigs =
-                RouterConfigHelper.getRouterConfigurations(networkConfigService, routingAppId);
+                RoutingConfiguration.getRouterConfigurations(networkConfigService, routingAppId);
 
         for (RoutersConfig.Router router : routerConfigs) {
             DeviceId deviceId = router.controlPlaneConnectPoint().deviceId();

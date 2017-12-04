@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@
         navigateToRegion: function (id) {
             $loc.search('regionId', id);
             wss.sendEvent('topo2navRegion', {
-                rid: id
+                rid: id,
             });
             this.notifyListeners('region:navigation-start', id);
         },
@@ -60,7 +60,7 @@
 
         destory: function () {
             this.listeners = {};
-        }
+        },
     };
 
     angular.module('ovTopo2')
@@ -72,6 +72,6 @@
                 wss = _wss_;
 
                 return instance || new RegionNavigationService();
-            }
+            },
         ]);
 })();

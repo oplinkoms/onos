@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-present Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package org.onosproject.vpls.api;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
-import org.onosproject.incubator.net.intf.Interface;
+import org.onosproject.net.intf.Interface;
 import org.onosproject.net.EncapsulationType;
 
 import java.util.Collection;
@@ -99,6 +99,7 @@ public final class VplsData {
     public static VplsData of(VplsData vplsData) {
         requireNonNull(vplsData);
         VplsData vplsDataCopy = new VplsData(vplsData.name(), vplsData.encapsulationType());
+        vplsDataCopy.state(vplsData.state());
         vplsDataCopy.addInterfaces(vplsData.interfaces());
         return vplsData;
     }

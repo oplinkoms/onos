@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright 2016-present Open Networking Laboratory
+  ~ Copyright 2016-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@
         <behaviour api="org.onosproject.openflow.controller.driver.OpenFlowSwitchDriver"
                    impl="org.onosproject.driver.optical.handshaker.OfOpticalSwitchImplLinc13"/>
         <behaviour api="org.onosproject.net.behaviour.LambdaQuery"
-                   impl="org.onosproject.driver.optical.query.LincOELambdaQuery"/>
+                   impl="org.onosproject.driver.optical.query.CBand50LambdaQuery"/>
         <behaviour api="org.onosproject.net.optical.OpticalDevice"
                    impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
     </driver>
@@ -60,7 +60,7 @@
                    impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
         <behaviour api="org.onosproject.net.behaviour.PowerConfig"
                    impl="org.onosproject.driver.optical.power.OplinkRoadmPowerConfig"/>
-        <behaviour api="org.onosproject.codec.ExtensionTreatmentCodec"
+        <behaviour api="org.onosproject.net.flow.ExtensionTreatmentCodec"
                    impl="org.onosproject.driver.optical.extensions.OplinkExtensionTreatmentCodec"/>
         <behaviour api="org.onosproject.openflow.controller.ExtensionTreatmentInterpreter"
                    impl="org.onosproject.driver.extensions.OplinkExtensionTreatmentInterpreter"/>
@@ -93,13 +93,13 @@
 
     </driver>
 
-    <driver name="polatis-config" manufacturer="Polatis" hwVersion="N-VST-48x48-HU1-DMHNV-805" swVersion="6.6.1.7">
+    <driver name="polatis" extends="default"
+            manufacturer="Polatis" hwVersion=".*" swVersion=".*">
         <behaviour api="org.onosproject.net.optical.OpticalDevice"
                    impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
-        <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
-                   impl="org.onosproject.driver.optical.config.PolatisDeviceDiscovery"/>
-        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
-                   impl="org.onosproject.driver.optical.config.ConfigFlowRuleProgrammable"/>
+        <behaviour api="org.onosproject.openflow.controller.driver.OpenFlowSwitchDriver"
+                   impl="org.onosproject.driver.optical.handshaker.PolatisHandshaker"/>
+        <!-- TODO use OF1.4 reported information when ready -->
         <behaviour api="org.onosproject.net.behaviour.LambdaQuery"
                    impl="org.onosproject.driver.optical.query.ConfigLambdaQuery"/>
     </driver>

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-present Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,6 +44,7 @@ import org.onosproject.incubator.net.virtual.VirtualNetworkFlowObjectiveStore;
 import org.onosproject.incubator.net.virtual.VirtualNetworkFlowRuleStore;
 import org.onosproject.incubator.net.virtual.VirtualNetworkGroupStore;
 import org.onosproject.incubator.net.virtual.VirtualNetworkIntent;
+import org.onosproject.incubator.net.virtual.VirtualNetworkIntentStore;
 import org.onosproject.incubator.net.virtual.VirtualNetworkListener;
 import org.onosproject.incubator.net.virtual.VirtualNetworkPacketStore;
 import org.onosproject.incubator.net.virtual.VirtualPort;
@@ -58,6 +59,7 @@ import org.onosproject.incubator.store.virtual.impl.DistributedVirtualNetworkSto
 import org.onosproject.incubator.store.virtual.impl.SimpleVirtualFlowObjectiveStore;
 import org.onosproject.incubator.store.virtual.impl.SimpleVirtualFlowRuleStore;
 import org.onosproject.incubator.store.virtual.impl.SimpleVirtualGroupStore;
+import org.onosproject.incubator.store.virtual.impl.SimpleVirtualIntentStore;
 import org.onosproject.incubator.store.virtual.impl.SimpleVirtualPacketStore;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
@@ -69,11 +71,9 @@ import org.onosproject.net.flow.FlowRuleService;
 import org.onosproject.net.flowobjective.FlowObjectiveService;
 import org.onosproject.net.group.GroupService;
 import org.onosproject.net.host.HostService;
-import org.onosproject.net.intent.FakeIntentManager;
 import org.onosproject.net.intent.IntentService;
 import org.onosproject.net.intent.Key;
 import org.onosproject.net.intent.MockIdGenerator;
-import org.onosproject.net.intent.TestableIntentService;
 import org.onosproject.net.link.LinkService;
 import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.topology.PathService;
@@ -88,6 +88,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.*;
 import static org.onosproject.net.NetTestTools.APP_ID;
 
@@ -103,7 +104,6 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
     private DistributedVirtualNetworkStore virtualNetworkManagerStore;
     private CoreService coreService;
     private TestListener listener = new TestListener();
-    private TestableIntentService intentService = new FakeIntentManager();
     private TopologyService topologyService;
 
     private ConnectPoint cp6;
@@ -125,7 +125,6 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
         manager = new VirtualNetworkManager();
         manager.store = virtualNetworkManagerStore;
         manager.addListener(listener);
-        manager.intentService = intentService;
         manager.coreService = coreService;
         NetTestTools.injectEventDispatcher(manager, new TestEventDispatcher());
 
@@ -169,11 +168,47 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
         assertTrue("The tenantId set should be empty.", tenantIdCollection.isEmpty());
 
         // Validate that the events were all received in the correct order.
-        validateEvents(VirtualNetworkEvent.Type.TENANT_UNREGISTERED,
-                       VirtualNetworkEvent.Type.TENANT_REGISTERED,
+        validateEvents(VirtualNetworkEvent.Type.TENANT_REGISTERED,
                        VirtualNetworkEvent.Type.TENANT_REGISTERED,
                        VirtualNetworkEvent.Type.TENANT_UNREGISTERED,
                        VirtualNetworkEvent.Type.TENANT_UNREGISTERED);
+    }
+
+    /**
+     * Test method {@code getTenantId()} for registered virtual network.
+     */
+    @Test
+    public void testGetTenantIdForRegisteredVirtualNetwork() {
+        VirtualNetwork virtualNetwork = setupVirtualNetworkTopology(tenantIdValue1);
+        TenantId tenantId = manager.getTenantId(virtualNetwork.id());
+
+        assertThat(tenantId.toString(), is(tenantIdValue1));
+    }
+
+    /**
+     * Test method {@code getTenantId()} for null virtual network id.
+     */
+    @Test(expected = NullPointerException.class)
+    public void testGetTenantIdForNullVirtualNetwork() {
+        manager.getTenantId(null);
+    }
+
+    /**
+     * Test method {@code getVirtualNetwork()} for registered virtual network.
+     */
+    @Test
+    public void testGetVirtualNetworkForRegisteredNetwork() {
+        VirtualNetwork virtualNetwork = setupVirtualNetworkTopology(tenantIdValue1);
+
+        assertNotNull("Registered virtual network is null", manager.getVirtualNetwork(virtualNetwork.id()));
+    }
+
+    /**
+     * Test method {@code getVirtualNetwork()} for null virtual network id.
+     */
+    @Test(expected = NullPointerException.class)
+    public void testGetVirtualForNullVirtualNetworkId() {
+        manager.getVirtualNetwork(null);
     }
 
     /**
@@ -304,7 +339,7 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
         assertTrue("The virtual device set should be empty.", virtualDevices1.isEmpty());
 
         // Validate that the events were all received in the correct order.
-        validateEvents((Enum[]) expectedEventTypes.toArray(
+        validateEvents(expectedEventTypes.toArray(
                 new VirtualNetworkEvent.Type[expectedEventTypes.size()]));
     }
 
@@ -555,6 +590,12 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
         manager.createVirtualLink(virtualNetwork1.id(), src, dst);
     }
 
+    private VirtualPort getPort(NetworkId networkId, DeviceId deviceId, PortNumber portNumber) {
+        Set<VirtualPort> virtualPorts = manager.getVirtualPorts(networkId, deviceId);
+        return  virtualPorts.stream().filter(virtualPort -> virtualPort.number().equals(portNumber))
+                .findFirst().orElse(null);
+    }
+
     /**
      * Tests add, bind and remove of virtual ports.
      */
@@ -582,6 +623,21 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
         Set<VirtualPort> virtualPorts = manager.getVirtualPorts(virtualNetwork1.id(), virtualDevice.id());
         assertNotNull("The virtual port set should not be null", virtualPorts);
         assertEquals("The virtual port set size did not match.", 2, virtualPorts.size());
+        virtualPorts.forEach(vp -> assertFalse("Initial virtual port state should be disabled", vp.isEnabled()));
+
+        // verify change state of virtual port (disabled -> enabled)
+        manager.updatePortState(virtualNetwork1.id(), virtualDevice.id(), PortNumber.portNumber(1), true);
+        VirtualPort changedPort = getPort(virtualNetwork1.id(), virtualDevice.id(), PortNumber.portNumber(1));
+        assertNotNull("The changed virtual port should not be null", changedPort);
+        assertEquals("Virtual port state should be enabled", true, changedPort.isEnabled());
+        expectedEventTypes.add(VirtualNetworkEvent.Type.VIRTUAL_PORT_UPDATED);
+
+        // verify change state of virtual port (disabled -> disabled)
+        manager.updatePortState(virtualNetwork1.id(), virtualDevice.id(), PortNumber.portNumber(2), false);
+        changedPort = getPort(virtualNetwork1.id(), virtualDevice.id(), PortNumber.portNumber(2));
+        assertNotNull("The changed virtual port should not be null", changedPort);
+        assertEquals("Virtual port state should be disabled", false, changedPort.isEnabled());
+        // no VIRTUAL_PORT_UPDATED event is expected - the requested state (disabled) is same as previous state.
 
         for (VirtualPort virtualPort : virtualPorts) {
             manager.removeVirtualPort(virtualNetwork1.id(),
@@ -612,7 +668,7 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
         assertTrue("The virtual port set should be empty.", virtualPorts.isEmpty());
 
         // Validate that the events were all received in the correct order.
-        validateEvents((Enum[]) expectedEventTypes.toArray(
+        validateEvents(expectedEventTypes.toArray(
                 new VirtualNetworkEvent.Type[expectedEventTypes.size()]));
     }
 
@@ -727,12 +783,12 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
 
 
     /**
-     * Method to create the virtual network for further testing.
+     * Method to create the virtual network for {@code tenantIdValue} for further testing.
      **/
-    private VirtualNetwork setupVirtualNetworkTopology() {
-        manager.registerTenantId(TenantId.tenantId(tenantIdValue1));
+    private VirtualNetwork setupVirtualNetworkTopology(String tenantIdValue) {
+        manager.registerTenantId(TenantId.tenantId(tenantIdValue));
         VirtualNetwork virtualNetwork =
-                manager.createVirtualNetwork(TenantId.tenantId(tenantIdValue1));
+                manager.createVirtualNetwork(TenantId.tenantId(tenantIdValue));
 
         VirtualDevice virtualDevice1 =
                 manager.createVirtualDevice(virtualNetwork.id(), DID1);
@@ -811,7 +867,7 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
      */
     @Test
     public void testTopologyChanged() {
-        VirtualNetwork virtualNetwork = setupVirtualNetworkTopology();
+        VirtualNetwork virtualNetwork = setupVirtualNetworkTopology(tenantIdValue1);
         VirtualNetworkProviderService providerService =
                 manager.createProviderService(topologyProvider);
 
@@ -858,11 +914,10 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
         validateServiceGetReturnsSavedInstance(virtualNetwork.id(), DeviceService.class);
         validateServiceGetReturnsSavedInstance(virtualNetwork.id(), LinkService.class);
         validateServiceGetReturnsSavedInstance(virtualNetwork.id(), TopologyService.class);
-        validateServiceGetReturnsSavedInstance(virtualNetwork.id(), IntentService.class);
         validateServiceGetReturnsSavedInstance(virtualNetwork.id(), HostService.class);
         validateServiceGetReturnsSavedInstance(virtualNetwork.id(), PathService.class);
 
-        // extra setup needed for FlowRuleService, PacketService, GroupService
+        // extra setup needed for FlowRuleService, PacketService, GroupService, and IntentService
         VirtualProviderManager virtualProviderManager = new VirtualProviderManager();
         virtualProviderManager.registerProvider(new DefaultVirtualFlowRuleProvider());
         virtualProviderManager.registerProvider(new DefaultVirtualPacketProvider());
@@ -874,12 +929,14 @@ public class VirtualNetworkManagerTest extends VirtualNetworkTestUtil {
                 .add(VirtualNetworkFlowRuleStore.class, new SimpleVirtualFlowRuleStore())
                 .add(VirtualNetworkPacketStore.class, new SimpleVirtualPacketStore())
                 .add(VirtualNetworkGroupStore.class, new SimpleVirtualGroupStore())
+                .add(VirtualNetworkIntentStore.class, new SimpleVirtualIntentStore())
                 .add(VirtualNetworkFlowObjectiveStore.class, new SimpleVirtualFlowObjectiveStore());
 
         validateServiceGetReturnsSavedInstance(virtualNetwork.id(), FlowRuleService.class);
         validateServiceGetReturnsSavedInstance(virtualNetwork.id(), FlowObjectiveService.class);
         validateServiceGetReturnsSavedInstance(virtualNetwork.id(), PacketService.class);
         validateServiceGetReturnsSavedInstance(virtualNetwork.id(), GroupService.class);
+        validateServiceGetReturnsSavedInstance(virtualNetwork.id(), IntentService.class);
     }
 
     /**
