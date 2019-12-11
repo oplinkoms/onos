@@ -38,4 +38,19 @@ public interface PiTranslationService {
      * @return group translator
      */
     PiGroupTranslator groupTranslator();
+
+    /**
+     * Returns a meter translator.
+     *
+     * @return meter translator
+     */
+    PiMeterTranslator meterTranslator();
+
+    /**
+     * Returns a group translator for packet replication engine (PRE)
+     * entries.
+     *
+     * @return replication group translator
+     */
+    PiReplicationGroupTranslator replicationGroupTranslator();
 }

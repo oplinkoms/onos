@@ -16,31 +16,14 @@
 
 package org.onosproject.provider.of.group.impl;
 
-import static org.onlab.util.Tools.getIntegerProperty;
-import static org.slf4j.LoggerFactory.getLogger;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Dictionary;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.concurrent.atomic.AtomicLong;
-
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Modified;
-import org.apache.felix.scr.annotations.Property;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
+import com.google.common.collect.Maps;
+import org.onlab.util.ItemNotFoundException;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.GroupId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.driver.Driver;
 import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.group.DefaultGroup;
 import org.onosproject.net.group.Group;
@@ -64,7 +47,14 @@ import org.onosproject.openflow.controller.OpenFlowSwitch;
 import org.onosproject.openflow.controller.OpenFlowSwitchListener;
 import org.onosproject.openflow.controller.RoleState;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Modified;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.projectfloodlight.openflow.protocol.OFBucketCounter;
+import org.projectfloodlight.openflow.protocol.OFCapabilities;
 import org.projectfloodlight.openflow.protocol.OFErrorMsg;
 import org.projectfloodlight.openflow.protocol.OFErrorType;
 import org.projectfloodlight.openflow.protocol.OFGroupDescStatsEntry;
@@ -83,43 +73,56 @@ import org.projectfloodlight.openflow.protocol.OFVersion;
 import org.projectfloodlight.openflow.protocol.errormsg.OFGroupModFailedErrorMsg;
 import org.slf4j.Logger;
 
-import com.google.common.collect.Maps;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Dictionary;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.onlab.util.Tools.getIntegerProperty;
+import static org.onosproject.provider.of.group.impl.OsgiPropertyConstants.POLL_FREQUENCY;
+import static org.onosproject.provider.of.group.impl.OsgiPropertyConstants.POLL_FREQUENCY_DEFAULT;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Provider which uses an OpenFlow controller to handle Group.
  */
-@Component(immediate = true)
+@Component(immediate = true,
+        property = {
+            POLL_FREQUENCY + ":Integer=" + POLL_FREQUENCY_DEFAULT,
+        })
 public class OpenFlowGroupProvider extends AbstractProvider implements GroupProvider {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected OpenFlowController controller;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected GroupProviderRegistry providerRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DriverService driverService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected GroupService groupService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ComponentConfigService cfgService;
 
     private GroupProviderService providerService;
 
-    private static final int DEFAULT_POLL_INTERVAL = 10;
     private static final String COMPONENT = "org.onosproject.provider.of.group.impl.OpenFlowGroupProvider";
-    private static final String GROUP_POLL_INTERVAL_CONST = "groupPollInterval";
 
-    @Property(name = "groupPollInterval", intValue = DEFAULT_POLL_INTERVAL,
-            label = "Frequency (in seconds) for polling group statistics")
-    private int groupPollInterval = DEFAULT_POLL_INTERVAL;
+    /** Frequency (in seconds) for polling group statistics. */
+    private int groupPollInterval = POLL_FREQUENCY_DEFAULT;
 
     private final InternalGroupProvider listener = new InternalGroupProvider();
 
@@ -172,7 +175,7 @@ public class OpenFlowGroupProvider extends AbstractProvider implements GroupProv
     @Modified
     public void modified(ComponentContext context) {
         Dictionary<?, ?> properties = context != null ? context.getProperties() : new Properties();
-        Integer newGroupPollInterval = getIntegerProperty(properties, GROUP_POLL_INTERVAL_CONST);
+        Integer newGroupPollInterval = getIntegerProperty(properties, POLL_FREQUENCY);
         if (newGroupPollInterval != null && newGroupPollInterval > 0
                 && newGroupPollInterval != groupPollInterval) {
             groupPollInterval = newGroupPollInterval;
@@ -180,7 +183,7 @@ public class OpenFlowGroupProvider extends AbstractProvider implements GroupProv
         } else if (newGroupPollInterval != null && newGroupPollInterval <= 0) {
             log.warn("groupPollInterval must be greater than 0");
             //If the new value <= 0 reset property with old value.
-            cfgService.setProperty(COMPONENT, GROUP_POLL_INTERVAL_CONST, Integer.toString(groupPollInterval));
+            cfgService.setProperty(COMPONENT, POLL_FREQUENCY, Integer.toString(groupPollInterval));
         }
     }
 
@@ -197,6 +200,21 @@ public class OpenFlowGroupProvider extends AbstractProvider implements GroupProv
                 log.error("SW {} is not found", dpid);
                 return;
             }
+
+            switch (groupOperation.groupType()) {
+                case SELECT:
+                case INDIRECT:
+                case ALL:
+                case FAILOVER:
+                    break;
+                case CLONE:
+                default:
+                    log.warn("Group type {} not supported, ignoring operation [{}]",
+                             groupOperation.groupType(), groupOperation);
+                    //  Next groupOperation.
+                    continue;
+            }
+
             final Long groupModXid = XID_COUNTER.getAndIncrement();
             GroupModBuilder builder = null;
             if (driverService == null) {
@@ -237,33 +255,45 @@ public class OpenFlowGroupProvider extends AbstractProvider implements GroupProv
 
     private void pushGroupMetrics(Dpid dpid, OFStatsReply statsReply) {
         DeviceId deviceId = DeviceId.deviceId(Dpid.uri(dpid));
+        OpenFlowSwitch sw = controller.getSwitch(dpid);
+        boolean containsGroupStats = false;
+        if (sw != null && sw.features() != null) {
+            containsGroupStats = sw.features()
+                                   .getCapabilities()
+                                   .contains(OFCapabilities.GROUP_STATS);
+        }
 
         OFGroupStatsReply groupStatsReply = null;
         OFGroupDescStatsReply groupDescStatsReply = null;
 
-        synchronized (groupStats) {
-            if (statsReply.getStatsType() == OFStatsType.GROUP) {
-                OFStatsReply reply = groupStats.get(statsReply.getXid() + 1);
-                if (reply != null) {
-                    groupStatsReply = (OFGroupStatsReply) statsReply;
-                    groupDescStatsReply = (OFGroupDescStatsReply) reply;
-                    groupStats.remove(statsReply.getXid() + 1);
-                } else {
-                    groupStats.put(statsReply.getXid(), statsReply);
-                }
-            } else if (statsReply.getStatsType() == OFStatsType.GROUP_DESC) {
-                OFStatsReply reply = groupStats.get(statsReply.getXid() - 1);
-                if (reply != null) {
-                    groupStatsReply = (OFGroupStatsReply) reply;
-                    groupDescStatsReply = (OFGroupDescStatsReply) statsReply;
-                    groupStats.remove(statsReply.getXid() - 1);
-                } else {
-                    groupStats.put(statsReply.getXid(), statsReply);
+        if (containsGroupStats) {
+            synchronized (groupStats) {
+                if (statsReply.getStatsType() == OFStatsType.GROUP) {
+                    OFStatsReply reply = groupStats.get(statsReply.getXid() + 1);
+                    if (reply != null) {
+                        groupStatsReply = (OFGroupStatsReply) statsReply;
+                        groupDescStatsReply = (OFGroupDescStatsReply) reply;
+                        groupStats.remove(statsReply.getXid() + 1);
+                    } else {
+                        groupStats.put(statsReply.getXid(), statsReply);
+                    }
+                } else if (statsReply.getStatsType() == OFStatsType.GROUP_DESC) {
+                    OFStatsReply reply = groupStats.get(statsReply.getXid() - 1);
+                    if (reply != null) {
+                        groupStatsReply = (OFGroupStatsReply) reply;
+                        groupDescStatsReply = (OFGroupDescStatsReply) statsReply;
+                        groupStats.remove(statsReply.getXid() - 1);
+                    } else {
+                        groupStats.put(statsReply.getXid(), statsReply);
+                    }
                 }
             }
+        } else if (statsReply.getStatsType() == OFStatsType.GROUP_DESC) {
+            // We are only requesting group desc stats; see GroupStatsCollector.java:sendGroupStatisticRequests()
+            groupDescStatsReply = (OFGroupDescStatsReply) statsReply;
         }
 
-        if (providerService != null && groupStatsReply != null) {
+        if (providerService != null && groupDescStatsReply != null) {
             Collection<Group> groups = buildGroupMetrics(deviceId,
                     groupStatsReply, groupDescStatsReply);
             providerService.pushGroupMetrics(deviceId, groups);
@@ -289,6 +319,10 @@ public class OpenFlowGroupProvider extends AbstractProvider implements GroupProv
                     entry.getGroupType(), driverService).build();
             DefaultGroup group = new DefaultGroup(groupId, deviceId, type, buckets);
             groups.put(id, group);
+        }
+
+        if (groupStatsReply == null) {
+            return groups.values();
         }
 
         for (OFGroupStatsEntry entry: groupStatsReply.getEntries()) {
@@ -349,11 +383,34 @@ public class OpenFlowGroupProvider extends AbstractProvider implements GroupProv
     private boolean isGroupSupported(OpenFlowSwitch sw) {
         if (sw.factory().getVersion() == OFVersion.OF_10 ||
                 sw.factory().getVersion() == OFVersion.OF_11 ||
-                sw.factory().getVersion() == OFVersion.OF_12) {
+                sw.factory().getVersion() == OFVersion.OF_12 ||
+                !isGroupCapable(sw)) {
             return false;
         }
 
         return true;
+    }
+
+    /**
+     * Determine whether the given switch is group-capable.
+     *
+     * @param sw switch
+     * @return the boolean value of groupCapable property, or true if it is not configured.
+     */
+    private boolean isGroupCapable(OpenFlowSwitch sw) {
+        Driver driver;
+        try {
+            driver = driverService.getDriver(DeviceId.deviceId(Dpid.uri(sw.getDpid())));
+        } catch (ItemNotFoundException e) {
+            driver = driverService.getDriver(sw.manufacturerDescription(),
+                                             sw.hardwareDescription(),
+                                             sw.softwareDescription());
+        }
+        if (driver == null) {
+            return true;
+        }
+        String isGroupCapable = driver.getProperty(GROUP_CAPABLE);
+        return isGroupCapable == null || Boolean.parseBoolean(isGroupCapable);
     }
 
     private class InternalGroupProvider

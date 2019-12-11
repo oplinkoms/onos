@@ -21,6 +21,8 @@ import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.config.ConfigOperator;
 import org.onosproject.net.config.basics.BasicElementConfig;
 
+import java.util.Objects;
+
 /**
  * Abstract base implementation for element operators.
  */
@@ -46,12 +48,24 @@ public abstract class BasicElementOperator implements ConfigOperator {
         if (cfg.locType() != null) {
             builder.set(AnnotationKeys.LOC_TYPE, cfg.locType());
         }
-        if (cfg.geoCoordsSet()) {
-            builder.set(AnnotationKeys.LATITUDE, Double.toString(cfg.latitude()));
-            builder.set(AnnotationKeys.LONGITUDE, Double.toString(cfg.longitude()));
+
+        if (Objects.equals(cfg.locType(), BasicElementConfig.LOC_TYPE_NONE)) {
+            // Wipe-out both grid and geo coordinates.
+            builder.remove(AnnotationKeys.GRID_X).remove(AnnotationKeys.GRID_Y);
+            builder.remove(AnnotationKeys.LATITUDE).remove(AnnotationKeys.LONGITUDE);
+
         } else if (cfg.gridCoordsSet()) {
+            // Give priority to coordinate-based scheme as it requires explicit
+            // location type. Set grid coordinates and wipe-out geo coordinates.
             builder.set(AnnotationKeys.GRID_Y, Double.toString(cfg.gridY()));
             builder.set(AnnotationKeys.GRID_X, Double.toString(cfg.gridX()));
+            builder.remove(AnnotationKeys.LATITUDE).remove(AnnotationKeys.LONGITUDE);
+
+        } else if (cfg.geoCoordsSet()) {
+            // Set geo coordinates and wipe-out grid coordinates.
+            builder.set(AnnotationKeys.LATITUDE, Double.toString(cfg.latitude()));
+            builder.set(AnnotationKeys.LONGITUDE, Double.toString(cfg.longitude()));
+            builder.remove(AnnotationKeys.GRID_X).remove(AnnotationKeys.GRID_Y);
         }
 
         if (cfg.rackAddress() != null) {

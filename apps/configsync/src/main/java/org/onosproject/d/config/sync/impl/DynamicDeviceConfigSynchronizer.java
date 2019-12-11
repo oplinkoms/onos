@@ -15,26 +15,9 @@
  */
 package org.onosproject.d.config.sync.impl;
 
-import static java.util.concurrent.CompletableFuture.completedFuture;
-import static org.onosproject.d.config.DeviceResourceIds.isUnderDeviceRootNode;
-import static org.onosproject.d.config.DeviceResourceIds.toDeviceId;
-import static org.onosproject.d.config.DeviceResourceIds.toResourceId;
-import static org.onosproject.d.config.sync.operation.SetResponse.response;
-import static org.slf4j.LoggerFactory.getLogger;
-
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
+import com.google.common.annotations.Beta;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import org.onlab.util.Tools;
 import org.onosproject.config.DynamicConfigEvent;
 import org.onosproject.config.DynamicConfigEvent.Type;
@@ -57,23 +40,38 @@ import org.onosproject.net.provider.AbstractProviderService;
 import org.onosproject.store.primitives.TransactionId;
 import org.onosproject.yang.model.DataNode;
 import org.onosproject.yang.model.ResourceId;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
-import com.google.common.annotations.Beta;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
+import java.time.Duration;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
+import static java.util.concurrent.CompletableFuture.completedFuture;
+import static org.onosproject.d.config.DeviceResourceIds.isUnderDeviceRootNode;
+import static org.onosproject.d.config.DeviceResourceIds.toDeviceId;
+import static org.onosproject.d.config.DeviceResourceIds.toResourceId;
+import static org.onosproject.d.config.sync.operation.SetResponse.response;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Component to bridge Dynamic Config store and the Device configuration state.
- * <p>
+ *
  * <ul>
  * <li> Propagate DynamicConfig service change downward to Device side via provider.
  * <li> Propagate Device triggered change event upward to DyamicConfig service.
  * </ul>
  */
 @Beta
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = DeviceConfigSynchronizationProviderRegistry.class)
 public class DynamicDeviceConfigSynchronizer
     extends AbstractProviderRegistry<DeviceConfigSynchronizationProvider,
                                      DeviceConfigSynchronizationProviderService>
@@ -81,13 +79,17 @@ public class DynamicDeviceConfigSynchronizer
 
     private static final Logger log = getLogger(DynamicDeviceConfigSynchronizer.class);
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DynamicConfigService dynConfigService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected NetworkConfigService netcfgService;
 
     private DynamicConfigListener listener = new InnerDyConListener();
+
+    // FIXME hack for unconsolidated event bug
+    private Duration quietPeriod = Duration.ofSeconds(2);
+    private long quietUntil = 0;
 
     @Activate
     public void activate() {
@@ -163,6 +165,12 @@ public class DynamicDeviceConfigSynchronizer
     }
 
     void processEventNonBatch(DynamicConfigEvent event) {
+        if (System.currentTimeMillis() < quietUntil) {
+            log.trace("Ignoring {}. Quiet period until {}",
+                      event, Tools.defaultOffsetDataTime(quietUntil));
+            return;
+        }
+
         ResourceId path = event.subject();
         if (isUnderDeviceRootNode(path)) {
             log.trace("processing event:{}", event);
@@ -209,8 +217,11 @@ public class DynamicDeviceConfigSynchronizer
                     log.error("Request to {} failed {}", deviceId, response, e);
                 }
             });
+
+            // FIXME hack for unconsolidated event bug
+            quietUntil = System.currentTimeMillis() + quietPeriod.toMillis();
         } else {
-            log.warn("Ignored event's ResourceId: {}", event.subject());
+            log.debug("Ignored event's ResourceId: {}", event.subject());
         }
     }
 

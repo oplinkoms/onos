@@ -16,52 +16,289 @@
 
 package org.onosproject.drivers.hp;
 
+import org.onlab.packet.Ethernet;
+import org.onosproject.core.GroupId;
 import org.onosproject.net.PortNumber;
-import org.onosproject.net.flow.DefaultFlowRule;
-import org.onosproject.net.flow.DefaultTrafficSelector;
-import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.FlowRuleOperations;
-import org.onosproject.net.flow.FlowRuleOperationsContext;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
+import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.EthCriterion;
+import org.onosproject.net.flow.criteria.EthTypeCriterion;
 import org.onosproject.net.flow.criteria.IPCriterion;
 import org.onosproject.net.flow.criteria.PortCriterion;
 import org.onosproject.net.flow.criteria.VlanIdCriterion;
+import org.onosproject.net.flow.instructions.Instruction;
+import org.onosproject.net.flow.instructions.Instructions;
+import org.onosproject.net.flow.instructions.L2ModificationInstruction;
+import org.onosproject.net.flow.instructions.L3ModificationInstruction;
 import org.onosproject.net.flowobjective.FilteringObjective;
+import org.onosproject.net.group.Group;
+
 import org.slf4j.Logger;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Driver for HP3800 hybrid switches.
+ *
+ * Refer to the device manual to check unsupported features and features supported in hardware
+ *
  */
-public class HPPipelineV3800 extends AbstractHPPipeline {
-    // FIXME: This class should probably be renamed not to imply it applies for the 3800 series solely.
 
-    private static final int HP_TABLE_ZERO = 0;
-    private static final int HP_HARDWARE_TABLE = 100;
-    private static final int HP_SOFTWARE_TABLE = 200;
+public class HPPipelineV3800 extends AbstractHPPipeline {
 
     private final Logger log = getLogger(getClass());
 
-
     @Override
     protected FlowRule.Builder setDefaultTableIdForFlowObjective(FlowRule.Builder ruleBuilder) {
-        log.debug("Setting default table id to hardware table {}", HP_HARDWARE_TABLE);
+        log.debug("HP V3800 Driver - Setting default table id to hardware table {}", HP_HARDWARE_TABLE);
         return ruleBuilder.forTable(HP_HARDWARE_TABLE);
     }
 
     @Override
-    protected void initializePipeline() {
-        log.debug("Installing table zero {}", HP_TABLE_ZERO);
-        installHPTableZero();
-        log.debug("Installing scavenger rule to hardware table {} because it is default objective table",
-                 HP_HARDWARE_TABLE);
-        installHPHardwareTable();
-        log.debug("Installing software table {}", HP_SOFTWARE_TABLE);
-        installHPSoftwareTable();
+    protected void initUnSupportedFeatures() {
+        //Initialize unsupported criteria
+        unsupportedCriteria.add(Criterion.Type.METADATA);
+        unsupportedCriteria.add(Criterion.Type.IP_ECN);
+        unsupportedCriteria.add(Criterion.Type.SCTP_SRC);
+        unsupportedCriteria.add(Criterion.Type.SCTP_SRC_MASKED);
+        unsupportedCriteria.add(Criterion.Type.SCTP_DST);
+        unsupportedCriteria.add(Criterion.Type.SCTP_DST_MASKED);
+        unsupportedCriteria.add(Criterion.Type.IPV6_ND_SLL);
+        unsupportedCriteria.add(Criterion.Type.IPV6_ND_TLL);
+        unsupportedCriteria.add(Criterion.Type.MPLS_LABEL);
+        unsupportedCriteria.add(Criterion.Type.MPLS_TC);
+        unsupportedCriteria.add(Criterion.Type.MPLS_BOS);
+        unsupportedCriteria.add(Criterion.Type.PBB_ISID);
+        unsupportedCriteria.add(Criterion.Type.TUNNEL_ID);
+        unsupportedCriteria.add(Criterion.Type.IPV6_EXTHDR);
+
+        //Initialize unsupported instructions
+        unsupportedInstructions.add(Instruction.Type.QUEUE);
+        unsupportedInstructions.add(Instruction.Type.METADATA);
+        unsupportedInstructions.add(Instruction.Type.L0MODIFICATION);
+        unsupportedInstructions.add(Instruction.Type.L1MODIFICATION);
+        unsupportedInstructions.add(Instruction.Type.PROTOCOL_INDEPENDENT);
+        unsupportedInstructions.add(Instruction.Type.EXTENSION);
+        unsupportedInstructions.add(Instruction.Type.STAT_TRIGGER);
+
+        //Initialize unsupportet L2MODIFICATION actions
+        unsupportedL2mod.add(L2ModificationInstruction.L2SubType.MPLS_PUSH);
+        unsupportedL2mod.add(L2ModificationInstruction.L2SubType.MPLS_POP);
+        unsupportedL2mod.add(L2ModificationInstruction.L2SubType.MPLS_LABEL);
+        unsupportedL2mod.add(L2ModificationInstruction.L2SubType.MPLS_BOS);
+        unsupportedL2mod.add(L2ModificationInstruction.L2SubType.DEC_MPLS_TTL);
+
+        //Initialize unsupported L3MODIFICATION actions
+        unsupportedL3mod.add(L3ModificationInstruction.L3SubType.TTL_IN);
+        unsupportedL3mod.add(L3ModificationInstruction.L3SubType.TTL_OUT);
+        unsupportedL3mod.add(L3ModificationInstruction.L3SubType.DEC_TTL);
+
+        //All L4MODIFICATION actions are supported
+    }
+
+    @Override
+    protected void initHardwareCriteria() {
+        log.debug("HP V3800 Driver - Initializing hardware supported criteria");
+
+        hardwareCriteria.add(Criterion.Type.IN_PORT);
+        hardwareCriteria.add(Criterion.Type.VLAN_VID);
+        hardwareCriteria.add(Criterion.Type.VLAN_PCP);
+
+        //Match in hardware is not supported ETH_TYPE == VLAN (0x8100)
+        hardwareCriteria.add(Criterion.Type.ETH_TYPE);
+
+        hardwareCriteria.add(Criterion.Type.ETH_SRC);
+        hardwareCriteria.add(Criterion.Type.ETH_DST);
+        hardwareCriteria.add(Criterion.Type.IPV4_SRC);
+        hardwareCriteria.add(Criterion.Type.IPV4_DST);
+        hardwareCriteria.add(Criterion.Type.IP_PROTO);
+        hardwareCriteria.add(Criterion.Type.IP_DSCP);
+        hardwareCriteria.add(Criterion.Type.TCP_SRC);
+        hardwareCriteria.add(Criterion.Type.TCP_DST);
+    }
+
+    @Override
+    protected void initHardwareInstructions() {
+        log.debug("HP V3800 Driver - Initializing hardware supported instructions");
+
+        hardwareInstructions.add(Instruction.Type.OUTPUT);
+
+        //Only modification of VLAN priority (VLAN_PCP) is supported in hardware
+        hardwareInstructions.add(Instruction.Type.L2MODIFICATION);
+
+        hardwareInstructionsL2mod.add(L2ModificationInstruction.L2SubType.ETH_SRC);
+        hardwareInstructionsL2mod.add(L2ModificationInstruction.L2SubType.ETH_DST);
+        hardwareInstructionsL2mod.add(L2ModificationInstruction.L2SubType.VLAN_ID);
+        hardwareInstructionsL2mod.add(L2ModificationInstruction.L2SubType.VLAN_PCP);
+
+        //Only GROUP of type ALL is supported in hardware
+        //Moreover, for hardware support, each bucket must contain one and only one instruction of type OUTPUT
+        hardwareInstructions.add(Instruction.Type.GROUP);
+
+        hardwareGroups.add(Group.Type.ALL);
+
+        //TODO also L3MODIFICATION of IP_DSCP is supported in hardware
+    }
+
+    //Return TRUE if ForwardingObjective fwd includes UNSUPPORTED features
+    @Override
+    protected boolean checkUnSupportedFeatures(TrafficSelector selector, TrafficTreatment treatment) {
+        boolean unsupportedFeatures = false;
+
+        for (Criterion criterion : selector.criteria()) {
+            if (this.unsupportedCriteria.contains(criterion.type())) {
+                log.warn("HP V3800 Driver - unsupported criteria {}", criterion.type());
+
+                unsupportedFeatures = true;
+            }
+        }
+
+        for (Instruction instruction : treatment.allInstructions()) {
+            if (this.unsupportedInstructions.contains(instruction.type())) {
+                log.warn("HP V3800 Driver - unsupported instruction {}", instruction.type());
+
+                unsupportedFeatures = true;
+            }
+
+            if (instruction.type() == Instruction.Type.L2MODIFICATION) {
+                if (this.unsupportedL2mod.contains(((L2ModificationInstruction) instruction).subtype())) {
+                    log.warn("HP V3800 Driver - unsupported L2MODIFICATION instruction {}",
+                            ((L2ModificationInstruction) instruction).subtype());
+
+                    unsupportedFeatures = true;
+                }
+            }
+
+            if (instruction.type() == Instruction.Type.L3MODIFICATION) {
+                if (this.unsupportedL3mod.contains(((L3ModificationInstruction) instruction).subtype())) {
+                    log.warn("HP V3800 Driver - unsupported L3MODIFICATION instruction {}",
+                            ((L3ModificationInstruction) instruction).subtype());
+
+                    unsupportedFeatures = true;
+                }
+            }
+        }
+
+        return unsupportedFeatures;
+    }
+
+    @Override
+    protected int tableIdForForwardingObjective(TrafficSelector selector, TrafficTreatment treatment) {
+        boolean hardwareProcess = true;
+
+        log.debug("HP V3800 Driver - Evaluating the ForwardingObjective for proper TableID");
+
+        //Check criteria supported in hardware
+        for (Criterion criterion : selector.criteria()) {
+
+            if (!this.hardwareCriteria.contains(criterion.type())) {
+                log.warn("HP V3800 Driver - criterion {} only supported in SOFTWARE", criterion.type());
+
+                hardwareProcess = false;
+                break;
+            }
+
+            //HP3800 does not support hardware match on ETH_TYPE of value TYPE_VLAN
+            if (criterion.type() == Criterion.Type.ETH_TYPE) {
+
+                if (((EthTypeCriterion) criterion).ethType().toShort() == Ethernet.TYPE_VLAN) {
+                    log.warn("HP V3800 Driver -  ETH_TYPE == VLAN (0x8100) is only supported in software");
+
+                    hardwareProcess = false;
+                    break;
+                }
+            }
+
+        }
+
+        //Check if a CLEAR action is included
+        if (treatment.clearedDeferred()) {
+            log.warn("HP V3800 Driver - CLEAR action only supported in SOFTWARE");
+
+            hardwareProcess = false;
+        }
+
+        //If criteria can be processed in hardware, then check treatment
+        if (hardwareProcess) {
+            for (Instruction instruction : treatment.allInstructions()) {
+
+                //Check if the instruction type is contained in the hardware instruction
+                if (!this.hardwareInstructions.contains(instruction.type())) {
+                    log.warn("HP V3800 Driver - instruction {} only supported in SOFTWARE", instruction.type());
+
+                    hardwareProcess = false;
+                    break;
+                }
+
+                /** If output is CONTROLLER_PORT the flow entry could be installed in hardware
+                 * but is anyway processed in software because OPENFLOW header has to be added
+                 */
+                if (instruction.type() == Instruction.Type.OUTPUT) {
+                    if (((Instructions.OutputInstruction) instruction).port() == PortNumber.CONTROLLER) {
+                        log.warn("HP V3800 Driver - Forwarding to CONTROLLER only supported in software");
+
+                        hardwareProcess = false;
+                        break;
+                    }
+                }
+
+                //Check if the specific L2MODIFICATION.subtype is supported in hardware
+                if (instruction.type() == Instruction.Type.L2MODIFICATION) {
+
+                    if (!this.hardwareInstructionsL2mod.contains(((L2ModificationInstruction) instruction).subtype())) {
+                        log.warn("HP V3800 Driver - L2MODIFICATION.subtype {} only supported in SOFTWARE",
+                                ((L2ModificationInstruction) instruction).subtype());
+
+                        hardwareProcess = false;
+                        break;
+                    }
+                }
+
+                //Check if the specific GROUP addressed in the instruction is:
+                // --- installed in the device
+                // --- type ALL
+                // TODO --- check if all the buckets contains one and only one output action
+                if (instruction.type() == Instruction.Type.GROUP) {
+                    boolean groupInstalled = false;
+
+                    GroupId groupId = ((Instructions.GroupInstruction) instruction).groupId();
+
+                    Iterable<Group> groupsOnDevice = groupService.getGroups(deviceId);
+
+                    for (Group group : groupsOnDevice) {
+
+                        if ((group.state() == Group.GroupState.ADDED) && (group.id().equals(groupId))) {
+                            groupInstalled = true;
+
+                            if (group.type() != Group.Type.ALL) {
+                                log.warn("HP V3800 Driver - group type {} only supported in SOFTWARE",
+                                        group.type().toString());
+                                hardwareProcess = false;
+                            }
+
+                            break;
+                        }
+                    }
+
+                    if (!groupInstalled) {
+                        log.warn("HP V3800 Driver - referenced group is not installed on the device.");
+                        hardwareProcess = false;
+                    }
+                }
+            }
+        }
+
+        if (hardwareProcess) {
+            log.warn("HP V3800 Driver - This flow rule is supported in HARDWARE");
+            return HP_HARDWARE_TABLE;
+        } else {
+            //TODO: create a specific flow in table 100 to redirect selected traffic on table 200
+
+            log.warn("HP V3800 Driver - This flow rule is only supported in SOFTWARE");
+            return HP_SOFTWARE_TABLE;
+        }
     }
 
     @Override
@@ -70,13 +307,13 @@ public class HPPipelineV3800 extends AbstractHPPipeline {
     }
 
     @Override
-    protected FlowRule.Builder processEthFiler(FilteringObjective filt, EthCriterion eth, PortCriterion port) {
+    protected FlowRule.Builder processEthFilter(FilteringObjective filt, EthCriterion eth, PortCriterion port) {
         log.error("Unsupported FilteringObjective: processEthFilter invoked");
         return null;
     }
 
     @Override
-    protected FlowRule.Builder processVlanFiler(FilteringObjective filt, VlanIdCriterion vlan, PortCriterion port) {
+    protected FlowRule.Builder processVlanFilter(FilteringObjective filt, VlanIdCriterion vlan, PortCriterion port) {
         log.error("Unsupported FilteringObjective: processVlanFilter invoked");
         return null;
     }
@@ -85,86 +322,5 @@ public class HPPipelineV3800 extends AbstractHPPipeline {
     protected FlowRule.Builder processIpFilter(FilteringObjective filt, IPCriterion ip, PortCriterion port) {
         log.error("Unsupported FilteringObjective: processIpFilter invoked");
         return null;
-    }
-
-    /**
-     * HP Table 0 initialization.
-     * Installs rule goto HP hardware table in HP table zero
-     */
-    private void installHPTableZero() {
-        TrafficSelector.Builder selector = DefaultTrafficSelector.builder();
-        TrafficTreatment.Builder treatment = DefaultTrafficTreatment.builder();
-
-        treatment.transition(HP_HARDWARE_TABLE);
-
-        FlowRule rule = DefaultFlowRule.builder().forDevice(this.deviceId)
-                .withSelector(selector.build())
-                .withTreatment(treatment.build())
-                .withPriority(0)
-                .fromApp(appId)
-                .makePermanent()
-                .forTable(HP_TABLE_ZERO)
-                .build();
-
-        this.applyRules(true, rule);
-
-        log.info("Installed table {}", HP_TABLE_ZERO);
-    }
-
-    /**
-     * HP hardware table initialization.
-     * Installs scavenger rule in HP hardware table.
-     */
-    private void installHPHardwareTable() {
-        TrafficSelector.Builder selector = DefaultTrafficSelector.builder();
-
-        TrafficTreatment.Builder treatment = DefaultTrafficTreatment.builder();
-        treatment.setOutput(PortNumber.NORMAL);
-
-        FlowRule rule = DefaultFlowRule.builder().forDevice(this.deviceId)
-                .withSelector(selector.build())
-                .withTreatment(treatment.build())
-                .withPriority(0)
-                .fromApp(appId)
-                .makePermanent()
-                .forTable(HP_HARDWARE_TABLE)
-                .build();
-
-        this.applyRules(true, rule);
-
-        log.info("Installed table {}", HP_HARDWARE_TABLE);
-    }
-
-    /**
-     * HP software table initialization.
-     */
-    private void installHPSoftwareTable() {
-        log.info("No rules installed in table {}", HP_SOFTWARE_TABLE);
-    }
-
-
-    /**
-     * Applies FlowRule.
-     * Installs or removes FlowRule.
-     *
-     * @param install - whether to install or remove rule
-     * @param rule    - the rule to be installed or removed
-     */
-    private void applyRules(boolean install, FlowRule rule) {
-        FlowRuleOperations.Builder ops = FlowRuleOperations.builder();
-
-        ops = install ? ops.add(rule) : ops.remove(rule);
-        flowRuleService.apply(ops.build(new FlowRuleOperationsContext() {
-            @Override
-            public void onSuccess(FlowRuleOperations ops) {
-                log.trace("Provisioned rule: " + rule.toString());
-                log.trace("HP3800 driver: provisioned " + rule.tableId() + " table");
-            }
-
-            @Override
-            public void onError(FlowRuleOperations ops) {
-                log.info("HP3800 driver: failed to provision " + rule.tableId() + " table");
-            }
-        }));
     }
 }

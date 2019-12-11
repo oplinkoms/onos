@@ -21,7 +21,7 @@
 #include "include/defines.p4"
 #include "include/headers.p4"
 #include "include/actions.p4"
-#include "include/int_defines.p4"
+#include "include/int_definitions.p4"
 #include "include/int_headers.p4"
 #include "include/packet_io.p4"
 #include "include/port_counters.p4"
@@ -31,8 +31,10 @@
 #include "include/int_source.p4"
 #include "include/int_transit.p4"
 #include "include/int_sink.p4"
+#include "include/int_report.p4"
 
-control int_ingress (
+
+control ingress (
     inout headers_t hdr,
     inout local_metadata_t local_metadata,
     inout standard_metadata_t standard_metadata) {
@@ -41,27 +43,43 @@ control int_ingress (
         port_counters_ingress.apply(hdr, standard_metadata);
         packetio_ingress.apply(hdr, standard_metadata);
         table0_control.apply(hdr, local_metadata, standard_metadata);
-        process_set_source_sink.apply(hdr, local_metadata, standard_metadata);
+        process_int_source_sink.apply(hdr, local_metadata, standard_metadata);
+
+        if (local_metadata.int_meta.source == _TRUE) {
+            process_int_source.apply(hdr, local_metadata, standard_metadata);
+        }
+
+        if (local_metadata.int_meta.sink == _TRUE && hdr.int_header.isValid()) {
+            // clone packet for Telemetry Report
+            // FIXME: this works only on BMv2
+            #ifdef TARGET_BMV2
+            clone3(CloneType.I2E, REPORT_MIRROR_SESSION_ID, standard_metadata);
+            #endif // TARGET_BMV2
+        }
     }
 }
 
-control int_egress (
+control egress (
     inout headers_t hdr,
     inout local_metadata_t local_metadata,
     inout standard_metadata_t standard_metadata) {
 
     apply {
-        if (standard_metadata.ingress_port != CPU_PORT &&
-            standard_metadata.egress_port != CPU_PORT &&
-            hdr.udp.isValid()) {
-            process_int_source.apply(hdr, local_metadata, standard_metadata);
-            if(hdr.udp.dst_port == INT_PORT) {
-                process_int_transit.apply(hdr, local_metadata, standard_metadata);
-                // update underlay header based on INT information inserted
-                process_int_outer_encap.apply(hdr, local_metadata, standard_metadata);
-                // int sink
-                process_int_sink.apply(hdr, local_metadata, standard_metadata);
+        if(hdr.int_header.isValid()) {
+            process_int_transit.apply(hdr, local_metadata, standard_metadata);
+
+            #ifdef TARGET_BMV2
+            if (IS_I2E_CLONE(standard_metadata)) {
+                /* send int report */
+                process_int_report.apply(hdr, local_metadata, standard_metadata);
             }
+
+            if (local_metadata.int_meta.sink == _TRUE && !IS_I2E_CLONE(standard_metadata)) {
+            #else
+            if (local_metadata.int_meta.sink == _TRUE) {
+            #endif // TARGET_BMV2
+                process_int_sink.apply(hdr, local_metadata, standard_metadata);
+             }
         }
         port_counters_egress.apply(hdr, standard_metadata);
         packetio_egress.apply(hdr, standard_metadata);
@@ -71,8 +89,8 @@ control int_egress (
 V1Switch(
     int_parser(),
     verify_checksum_control(),
-    int_ingress(),
-    int_egress(),
+    ingress(),
+    egress(),
     compute_checksum_control(),
     int_deparser()
 ) main;

@@ -16,7 +16,6 @@
 package org.onosproject.codec.impl;
 
 import org.onosproject.codec.CodecContext;
-import org.onosproject.codec.JsonCodec;
 import org.onosproject.net.device.PortStatistics;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -26,14 +25,14 @@ import static com.google.common.base.Preconditions.checkNotNull;
 /**
  * Port statistics entry JSON codec.
  */
-public final class PortStatisticsCodec extends JsonCodec<PortStatistics> {
+public final class PortStatisticsCodec extends AnnotatedCodec<PortStatistics> {
 
     @Override
     public ObjectNode encode(PortStatistics entry, CodecContext context) {
         checkNotNull(entry, "Port Statistics cannot be null");
 
         final ObjectNode result = context.mapper().createObjectNode()
-                .put("port", entry.port())
+                .put("port", entry.portNumber().toLong())
                 .put("packetsReceived", entry.packetsReceived())
                 .put("packetsSent", entry.packetsSent())
                 .put("bytesReceived", entry.bytesReceived())
@@ -44,7 +43,7 @@ public final class PortStatisticsCodec extends JsonCodec<PortStatistics> {
                 .put("packetsTxErrors", entry.packetsTxErrors())
                 .put("durationSec", entry.durationSec());
 
-        return result;
+        return annotate(result, entry, context);
     }
 
 }

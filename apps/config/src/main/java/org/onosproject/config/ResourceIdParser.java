@@ -80,12 +80,7 @@ public final class ResourceIdParser {
 
     public static NodeKey getInstanceKey(ResourceId path) {
         int last = path.nodeKeys().size();
-        NodeKey ret = path.nodeKeys().get(last - 1);
-        if (ret instanceof NodeKey) {
-            return ret;
-        } else {
-            return null;
-        }
+        return path.nodeKeys().get(last - 1);
     }
 
     public static NodeKey getMultiInstanceKey(ResourceId path) {
@@ -122,24 +117,6 @@ public final class ResourceIdParser {
         return (path + leaf.substring(leaf.indexOf(KEY_SEP)));
     }
 
-    // 1.12.0 - not used by anyone
-    @Deprecated
-    public static String appendKeyLeaf(String path, String key) {
-        return (path + EL_SEP + key);
-    }
-
-    // 1.12.0 - not used by anyone
-    @Deprecated
-    public static String appendKeyLeaf(String path, KeyLeaf key) {
-        StringBuilder bldr = new StringBuilder();
-        bldr.append(key.leafSchema().name());
-        bldr.append(NM_SEP);
-        bldr.append(key.leafSchema().namespace());
-        bldr.append(NM_SEP);
-        bldr.append(key.leafValue().toString());
-        return (path + EL_SEP + bldr.toString());
-    }
-
     public static String appendNodeKey(String path, NodeKey key) {
         // FIXME this is not handling root path exception
         return (path + EL_SEP + key.schemaId().name() + NM_SEP + key.schemaId().namespace());
@@ -170,26 +147,9 @@ public final class ResourceIdParser {
         return (path + bldr.toString());
     }
 
-    // 1.12.0 - not used by anyone
-    @Deprecated
-    public static String parseNodeKey(NodeKey key) {
-        if (key == null) {
-            return null;
-        }
-        StringBuilder bldr = new StringBuilder();
-        if (key instanceof LeafListKey) {
-            parseLeafList((LeafListKey) key, bldr);
-        } else if (key instanceof ListKey) {
-            parseKeyList((ListKey) key, bldr);
-        } else {
-            parseNodeKey(key, bldr);
-        }
-        return bldr.toString();
-    }
-
     /**
      * Gets String representation of ResourceId.
-     * <p>
+     *
      * <pre>
      *   ResourceId := 'root' ('|' element)*
      *   element := LeafListKey | ListKey | NodeKey
@@ -229,17 +189,6 @@ public final class ResourceIdParser {
             }
         }
         return bldr.toString();
-    }
-
-    public static String[] getService(ResourceId path) {
-        String[] res = new String[2];
-        if (path == null) {
-            return res;
-        }
-        int last = path.nodeKeys().size() - 1;
-        res[0] = path.nodeKeys().get(last - 1).schemaId().name();
-        res[1] = path.nodeKeys().get(last).schemaId().name();
-        return res;
     }
 
     private static void parseLeafList(LeafListKey key, StringBuilder bldr) {
@@ -292,7 +241,8 @@ public final class ResourceIdParser {
                     String key = keys[i];
                     String[] el = keys[i].split(NM_CHK);
                     if (el.length != 3) {
-                        throw new FailedException("Malformed event subject, cannot parse");
+                        throw new FailedException("Malformed event subject, cannot parse " +
+                                                  key + " in " + dpath);
                     }
                     try {
                     resBldr.addKeyLeaf(el[0], el[1], el[2]);

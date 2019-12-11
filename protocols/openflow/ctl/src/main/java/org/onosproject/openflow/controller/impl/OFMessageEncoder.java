@@ -47,7 +47,7 @@ public final class OFMessageEncoder extends ChannelOutboundHandlerAdapter {
 
     protected final void encode(ChannelHandlerContext ctx,
                           Iterable<OFMessage> msgs,
-                          ByteBuf out) throws Exception {
+                          ByteBuf out) {
 
         msgs.forEach(msg -> msg.writeTo(out));
     }
@@ -56,7 +56,7 @@ public final class OFMessageEncoder extends ChannelOutboundHandlerAdapter {
     @Override
     public void write(ChannelHandlerContext ctx,
                       Object msg,
-                      ChannelPromise promise) throws Exception {
+                      ChannelPromise promise) {
 
         ByteBuf buf = null;
         try {

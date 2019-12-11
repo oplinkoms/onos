@@ -18,13 +18,6 @@ package org.onosproject.net.intent.impl;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.SetMultimap;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.ReferencePolicy;
-import org.apache.felix.scr.annotations.Service;
 import org.onosproject.event.Event;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.ElementId;
@@ -55,6 +48,12 @@ import org.onosproject.net.resource.ResourceService;
 import org.onosproject.net.topology.TopologyEvent;
 import org.onosproject.net.topology.TopologyListener;
 import org.onosproject.net.topology.TopologyService;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.osgi.service.component.annotations.ReferencePolicy;
 import org.slf4j.Logger;
 
 import java.util.Collection;
@@ -85,8 +84,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * Entity responsible for tracking installed flows and for monitoring topology
  * events to determine what flows are affected by topology changes.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = ObjectiveTrackerService.class)
 public class ObjectiveTracker implements ObjectiveTrackerService {
 
     private final Logger log = getLogger(getClass());
@@ -98,23 +96,25 @@ public class ObjectiveTracker implements ObjectiveTrackerService {
     private final SetMultimap<ElementId, Key> intentsByDevice =
             synchronizedSetMultimap(HashMultimap.<ElementId, Key>create());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TopologyService topologyService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ResourceService resourceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected HostService hostService;
 
-    @Reference(cardinality = ReferenceCardinality.OPTIONAL_UNARY,
-               policy = ReferencePolicy.DYNAMIC)
-    protected IntentService intentService;
+    @Reference(cardinality = ReferenceCardinality.OPTIONAL,
+                bind = "bindComponentConfigService",
+                unbind = "unbindComponentConfigService",
+                policy = ReferencePolicy.DYNAMIC)
+    protected volatile IntentService intentService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected WorkPartitionService partitionService;
 
     private ExecutorService executorService =
@@ -131,6 +131,29 @@ public class ObjectiveTracker implements ObjectiveTrackerService {
 
     protected final AtomicBoolean updateScheduled = new AtomicBoolean(false);
 
+    /**
+     * Hook for wiring up optional reference to a service.
+     *
+     * @param service service being announced
+     */
+    protected void bindComponentConfigService(IntentService service) {
+        if (intentService == null) {
+            intentService = service;
+            scheduleIntentUpdate(1);
+        }
+    }
+
+    /**
+     * Hook for unwiring optional reference to a service.
+     *
+     * @param service service being withdrawn
+     */
+    protected void unbindComponentConfigService(IntentService service) {
+        if (intentService == service) {
+            intentService = null;
+        }
+    }
+
     @Activate
     public void activate() {
         topologyService.addListener(listener);
@@ -138,6 +161,7 @@ public class ObjectiveTracker implements ObjectiveTrackerService {
         deviceService.addListener(deviceListener);
         hostService.addListener(hostListener);
         partitionService.addListener(partitionListener);
+        scheduleIntentUpdate(1);
         log.info("Started");
     }
 
@@ -394,22 +418,24 @@ public class ObjectiveTracker implements ObjectiveTrackerService {
     }
 
     private void doIntentUpdate() {
-        updateScheduled.set(false);
-        if (intentService == null) {
-            log.warn("Intent service is not bound yet");
-            return;
-        }
-        try {
-            //FIXME very inefficient
-            for (IntentData intentData : intentService.getIntentData()) {
-                try {
-                    trackIntent(intentData);
-                } catch (NullPointerException npe) {
-                    log.warn("intent error {}", intentData.key(), npe);
-                }
+        synchronized (this) {
+            updateScheduled.set(false);
+            if (intentService == null) {
+                log.warn("Intent service is not bound yet");
+                return;
             }
-        } catch (Exception e) {
-            log.warn("Exception caught during update task", e);
+            try {
+                //FIXME very inefficient
+                for (IntentData intentData : intentService.getIntentData()) {
+                    try {
+                        trackIntent(intentData);
+                    } catch (NullPointerException npe) {
+                        log.warn("intent error {}", intentData.key(), npe);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Exception caught during update task", e);
+            }
         }
     }
 

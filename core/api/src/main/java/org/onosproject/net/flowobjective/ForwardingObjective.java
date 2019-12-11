@@ -16,6 +16,7 @@
 package org.onosproject.net.flowobjective;
 
 import com.google.common.annotations.Beta;
+import org.onosproject.core.ApplicationId;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 
@@ -36,6 +37,14 @@ import org.onosproject.net.flow.TrafficTreatment;
  * A specific forwarding objective represents a specific rule matching one or
  * more header fields. The installation of this rule may result in several rules
  * at the device. For example, one per table type.
+ *
+ * There is one additional type of forwarding objective:
+ *
+ *   - Egress
+ *
+ * An egress forwarding objecrive represents a flow rule that is inserted into
+ * egress tables, only if they exist in the device.
+ *
  */
 @Beta
 public interface ForwardingObjective extends Objective {
@@ -53,7 +62,12 @@ public interface ForwardingObjective extends Objective {
         /**
          * A monolithic objective.
          */
-        VERSATILE
+        VERSATILE,
+
+        /**
+         * An objective to program egress pipeline.
+         */
+        EGRESS
     }
 
     /**
@@ -95,6 +109,14 @@ public interface ForwardingObjective extends Objective {
      *         Value may be null if no meta information is provided.
      */
     TrafficSelector meta();
+
+    /**
+     * Returns a new builder set to create a copy of this objective.
+     *
+     * @return new builder
+     */
+    @Override
+    Builder copy();
 
     /**
      * A forwarding objective builder.
@@ -140,6 +162,32 @@ public interface ForwardingObjective extends Objective {
          * @return an objective builder
          */
         Builder withMeta(TrafficSelector selector);
+
+        /**
+         * Assigns an application id.
+         *
+         * @param appId an application id
+         * @return a filtering builder
+         */
+        @Override
+        Builder fromApp(ApplicationId appId);
+
+        /**
+         * Sets the priority for this objective.
+         *
+         * @param priority an integer
+         * @return an objective builder
+         */
+        @Override
+        Builder withPriority(int priority);
+
+        /**
+         * Makes the filtering objective permanent.
+         *
+         * @return an objective builder
+         */
+        @Override
+        Builder makePermanent();
 
         /**
          * Builds the forwarding objective that will be added.

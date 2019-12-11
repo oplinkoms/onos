@@ -28,7 +28,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.onlab.osgi.ServiceDirectory;
 import org.onlab.osgi.TestServiceDirectory;
-import org.onlab.rest.BaseResource;
 import org.onosproject.codec.CodecService;
 import org.onosproject.codec.impl.CodecManager;
 import org.onosproject.codec.impl.MeterCodec;
@@ -43,6 +42,7 @@ import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.meter.Band;
 import org.onosproject.net.meter.DefaultBand;
 import org.onosproject.net.meter.Meter;
+import org.onosproject.net.meter.MeterCellId;
 import org.onosproject.net.meter.MeterId;
 import org.onosproject.net.meter.MeterService;
 import org.onosproject.net.meter.MeterState;
@@ -136,6 +136,11 @@ public class MetersResourceTest extends ResourceTest {
         @Override
         public MeterId id() {
             return this.meterId;
+        }
+
+        @Override
+        public MeterCellId meterCellId() {
+            return this.id();
         }
 
         @Override
@@ -239,7 +244,7 @@ public class MetersResourceTest extends ResourceTest {
                         .add(CodecService.class, codecService)
                         .add(CoreService.class, mockCoreService);
 
-        BaseResource.setServiceDirectory(testDirectory);
+        setServiceDirectory(testDirectory);
     }
 
     /**

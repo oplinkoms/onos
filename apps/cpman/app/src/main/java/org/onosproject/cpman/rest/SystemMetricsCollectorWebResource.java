@@ -46,6 +46,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.onlab.util.Tools.nullIsIllegal;
+import static org.onlab.util.Tools.readTreeFromStream;
 
 /**
  * Collect system metrics.
@@ -54,9 +55,6 @@ import static org.onlab.util.Tools.nullIsIllegal;
 public class SystemMetricsCollectorWebResource extends AbstractWebResource {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private final ControlPlaneMonitorService monitorService = get(ControlPlaneMonitorService.class);
-    private final MetricsService metricsService = get(MetricsService.class);
-
     private static final int UPDATE_INTERVAL_IN_MINUTE = 1;
     private static final String INVALID_SYSTEM_SPECS = "Invalid system specifications";
     private static final String INVALID_RESOURCE_NAME = "Invalid resource name";
@@ -88,12 +86,14 @@ public class SystemMetricsCollectorWebResource extends AbstractWebResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response cpuMetrics(InputStream stream) {
         ObjectNode root = mapper().createObjectNode();
+        ControlPlaneMonitorService monitorService = get(ControlPlaneMonitorService.class);
+        MetricsService metricsService = get(MetricsService.class);
         ControlMetric cm;
         try {
-            ObjectNode jsonTree = (ObjectNode) mapper().readTree(stream);
+            ObjectNode jsonTree = readTreeFromStream(mapper(), stream);
 
             if (jsonTree == null || !checkFields(jsonTree, CPU_FIELD_SET)) {
-                ok(root).build();
+                return ok(root).build();
             }
 
             long cpuLoad = nullIsIllegal((long) (jsonTree.get("cpuLoad").asDouble()
@@ -149,12 +149,14 @@ public class SystemMetricsCollectorWebResource extends AbstractWebResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response memoryMetrics(InputStream stream) {
         ObjectNode root = mapper().createObjectNode();
+        ControlPlaneMonitorService monitorService = get(ControlPlaneMonitorService.class);
+        MetricsService metricsService = get(MetricsService.class);
         ControlMetric cm;
         try {
-            ObjectNode jsonTree = (ObjectNode) mapper().readTree(stream);
+            ObjectNode jsonTree = readTreeFromStream(mapper(), stream);
 
             if (jsonTree == null || !checkFields(jsonTree, MEMORY_FIELD_SET)) {
-                ok(root).build();
+                return ok(root).build();
             }
 
             long memUsed = nullIsIllegal(jsonTree.get("memoryUsed").asLong(), INVALID_REQUEST);
@@ -204,9 +206,11 @@ public class SystemMetricsCollectorWebResource extends AbstractWebResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response diskMetrics(InputStream stream) {
         ObjectNode root = mapper().createObjectNode();
+        ControlPlaneMonitorService monitorService = get(ControlPlaneMonitorService.class);
+        MetricsService metricsService = get(MetricsService.class);
         ControlMetric cm;
         try {
-            ObjectNode jsonTree = (ObjectNode) mapper().readTree(stream);
+            ObjectNode jsonTree = readTreeFromStream(mapper(), stream);
             ArrayNode diskRes =
                     jsonTree.get("disks") == null ?
                             mapper().createArrayNode() : (ArrayNode) jsonTree.get("disks");
@@ -250,9 +254,11 @@ public class SystemMetricsCollectorWebResource extends AbstractWebResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response networkMetrics(InputStream stream) {
         ObjectNode root = mapper().createObjectNode();
+        ControlPlaneMonitorService monitorService = get(ControlPlaneMonitorService.class);
+        MetricsService metricsService = get(MetricsService.class);
         ControlMetric cm;
         try {
-            ObjectNode jsonTree = (ObjectNode) mapper().readTree(stream);
+            ObjectNode jsonTree = readTreeFromStream(mapper(), stream);
 
             ArrayNode networkRes = jsonTree.get("networks") == null
                     ? mapper().createArrayNode() : (ArrayNode) jsonTree.get("networks");
@@ -315,7 +321,7 @@ public class SystemMetricsCollectorWebResource extends AbstractWebResource {
         ObjectNode root = mapper().createObjectNode();
 
         try {
-            ObjectNode jsonTree = (ObjectNode) mapper().readTree(stream);
+            ObjectNode jsonTree = readTreeFromStream(mapper(), stream);
             JsonNode numOfCores = jsonTree.get("numOfCores");
             JsonNode numOfCpus = jsonTree.get("numOfCpus");
             JsonNode cpuSpeed = jsonTree.get("cpuSpeed");

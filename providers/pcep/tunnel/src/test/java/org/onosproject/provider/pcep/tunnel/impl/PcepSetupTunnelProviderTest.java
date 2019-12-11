@@ -15,23 +15,11 @@
  */
 package org.onosproject.provider.pcep.tunnel.impl;
 
-import static org.onosproject.net.DefaultAnnotations.EMPTY;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.core.Is.is;
-import static org.hamcrest.core.IsNot.not;
-import static org.hamcrest.Matchers.nullValue;
-import static org.onosproject.pcep.server.LspType.WITH_SIGNALLING;
-import static org.onosproject.pcep.server.LspType.SR_WITHOUT_SIGNALLING;
-import static org.onosproject.pcep.server.LspType.WITHOUT_SIGNALLING_AND_WITHOUT_SR;
-import static org.onosproject.pcep.server.PcepAnnotationKeys.LSP_SIG_TYPE;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.onlab.graph.ScalarWeight;
+import org.onlab.graph.Weight;
 import org.onlab.packet.IpAddress;
 import org.onosproject.cfg.ComponentConfigAdapter;
 import org.onosproject.core.GroupId;
@@ -40,6 +28,7 @@ import org.onosproject.incubator.net.tunnel.IpTunnelEndPoint;
 import org.onosproject.incubator.net.tunnel.Tunnel;
 import org.onosproject.incubator.net.tunnel.TunnelId;
 import org.onosproject.incubator.net.tunnel.TunnelName;
+import org.onosproject.incubator.net.tunnel.TunnelServiceAdapter;
 import org.onosproject.mastership.MastershipServiceAdapter;
 import org.onosproject.net.Annotations;
 import org.onosproject.net.ConnectPoint;
@@ -52,8 +41,24 @@ import org.onosproject.net.Path;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceServiceAdapter;
 import org.onosproject.net.provider.ProviderId;
+import org.onosproject.pcep.api.PcepControllerAdapter;
 import org.onosproject.pcep.server.ClientCapability;
 import org.onosproject.pcep.server.PccId;
+import org.onosproject.pcep.server.PcepClientControllerAdapter;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.core.Is.is;
+import static org.hamcrest.core.IsNot.not;
+import static org.onosproject.net.DefaultAnnotations.EMPTY;
+import static org.onosproject.pcep.server.LspType.SR_WITHOUT_SIGNALLING;
+import static org.onosproject.pcep.server.LspType.WITHOUT_SIGNALLING_AND_WITHOUT_SR;
+import static org.onosproject.pcep.server.LspType.WITH_SIGNALLING;
+import static org.onosproject.pcep.server.PcepAnnotationKeys.LSP_SIG_TYPE;
 
 /**
  * Test for PCEP setup tunnel.
@@ -65,9 +70,11 @@ public class PcepSetupTunnelProviderTest {
     private final TunnelProviderRegistryAdapter registry = new TunnelProviderRegistryAdapter();
     private final PcepClientControllerAdapter controller = new PcepClientControllerAdapter();
     private final PcepControllerAdapter ctl = new PcepControllerAdapter();
-    private final TunnelServiceAdapter  tunnelService = new TunnelServiceAdapter();
+    private final TunnelServiceAdapter tunnelService = new TunnelServiceAdapter();
     private final DeviceServiceAdapter  deviceService = new DeviceServiceAdapter();
     private final MastershipServiceAdapter  mastershipService = new MastershipServiceAdapter();
+    private static final Weight TEN_WEIGHT = ScalarWeight.toWeight(10);
+
 
     @Before
     public void setUp() throws IOException {
@@ -110,7 +117,7 @@ public class PcepSetupTunnelProviderTest {
                 .type(Link.Type.DIRECT).build();
         links.add(link);
 
-        path = new DefaultPath(pid, links, 10, EMPTY);
+        path = new DefaultPath(pid, links, TEN_WEIGHT, EMPTY);
 
         Annotations annotations = DefaultAnnotations.builder()
                 .set(LSP_SIG_TYPE, WITH_SIGNALLING.name())
@@ -155,7 +162,7 @@ public class PcepSetupTunnelProviderTest {
                 .type(Link.Type.DIRECT).build();
         links.add(link);
 
-        path = new DefaultPath(pid, links, 10, EMPTY);
+        path = new DefaultPath(pid, links, TEN_WEIGHT, EMPTY);
 
         Annotations annotations = DefaultAnnotations.builder()
                 .set(LSP_SIG_TYPE, WITH_SIGNALLING.name())
@@ -200,7 +207,7 @@ public class PcepSetupTunnelProviderTest {
                 .type(Link.Type.DIRECT).build();
         links.add(link);
 
-        path = new DefaultPath(pid, links, 10, EMPTY);
+        path = new DefaultPath(pid, links, TEN_WEIGHT, EMPTY);
 
         Annotations annotations = DefaultAnnotations.builder()
                 .set(LSP_SIG_TYPE, SR_WITHOUT_SIGNALLING.name())
@@ -245,7 +252,7 @@ public class PcepSetupTunnelProviderTest {
                 .type(Link.Type.DIRECT).build();
         links.add(link);
 
-        path = new DefaultPath(pid, links, 10, EMPTY);
+        path = new DefaultPath(pid, links, TEN_WEIGHT, EMPTY);
 
         Annotations annotations = DefaultAnnotations.builder()
                 .set(LSP_SIG_TYPE, WITHOUT_SIGNALLING_AND_WITHOUT_SR.name())

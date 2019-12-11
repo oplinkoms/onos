@@ -28,6 +28,12 @@
     // injected refs
     var $log, fs, flash, wss, ds;
 
+    var traceSrc = null;
+    var traceDst = null;
+    var srcDeviceId = null;
+    var dstDeviceId = null;
+    var uplink = null;
+
     // constants
     var displayStart = 'openstackNetworkingUiStart',
         displayUpdate = 'openstackNetworkingUiUpdate',
@@ -56,10 +62,13 @@
         wss.sendEvent(displayStop);
     }
 
-    function sendFlowTraceRequest(src, dst) {
+    function sendFlowTraceRequest(src, dst, srcDeviceId, dstDeviceId, uplink) {
         wss.sendEvent(flowTraceRequest, {
             srcIp: src,
-            dstIp: dst
+            dstIp: dst,
+            srcDeviceId: srcDeviceId,
+            dstDeviceId: dstDeviceId,
+            uplink: uplink,
         });
         flash.flash('sendFlowTraceRequest called');
     }
@@ -94,10 +103,10 @@
         return false;
     }
 
-
     function dOk() {
         ds.closeDialog();
     }
+
     function openFlowTraceResultDialog(data) {
         var flowTraceResultDialogId = 'flowTraceResultDialogId',
             flowTraceResultDialogOpt = {
@@ -106,12 +115,33 @@
                 margin: 20,
                 hideMargin: -20
             }
-        var traceSuccess = data.trace_success == true ? "SUCCESS" : "FALSE";
-        ds.openDialog(flowTraceResultDialogId, flowTraceResultDialogOpt)
-                    .setTitle('Flow Trace Result: ' + traceSuccess)
-                    .addContent(createTraceResultInfoDiv(data))
-                    .addOk(dOk, 'Close')
-                    .bindKeys();
+        var traceSuccess = data.traceSuccess == true ? "SUCCESS" : "FALSE";
+        traceSrc = data.srcIp;
+        traceDst = data.dstIp;
+        srcDeviceId = data.srcDeviceId;
+        dstDeviceId = data.dstDeviceId;
+        uplink = data.uplink;
+
+        if (data.uplink == true) {
+            ds.openDialog(flowTraceResultDialogId, flowTraceResultDialogOpt)
+                .setTitle('Flow Trace Result: ' + traceSuccess)
+                .addContent(createTraceResultInfoDiv(data))
+                .addOk(downlinkTraceRequestBtn, 'Downlink Trace')
+                .bindKeys();
+        } else {
+            ds.openDialog(flowTraceResultDialogId, flowTraceResultDialogOpt)
+                .setTitle('Flow Trace Result: ' + traceSuccess)
+                .addContent(createTraceResultInfoDiv(data))
+                .addOk(dOk, 'Close')
+                .bindKeys();
+        }
+
+    }
+
+    function downlinkTraceRequestBtn() {
+        sendFlowTraceRequest(traceSrc, traceDst, srcDeviceId, dstDeviceId, false);
+        ds.closeDialog();
+        flash.flash('Send Downlink Flow Trace Request')
     }
 
     function createTraceResultInfoDiv(data) {
@@ -136,15 +166,15 @@
         var tbodySelection = texts.select('.table-body').select('table').select('tbody');
         var rowNum = 1;
 
-        data.trace_result.forEach(function(result) {
-            result.flow_rules.forEach(function(flowRule) {
+        data.traceResult.forEach(function(result) {
+            result.flowRules.forEach(function(flowRule) {
                 tbodySelection.append('tr');
                 var tbodyTrSelection = tbodySelection.select('tr:nth-child(' + rowNum + ')');
-                tbodyTrSelection.append('td').text(result.trace_node_name);
+                tbodyTrSelection.append('td').text(result.traceNodeName);
                 tbodyTrSelection.append('td').text(flowRule.table);
                 tbodyTrSelection.append('td').text(flowRule.priority);
-                tbodyTrSelection.append('td').text(jsonToSring(flowRule.selector));
-                tbodyTrSelection.append('td').text(jsonToSring(flowRule.actions));
+                tbodyTrSelection.append('td').text(flowRule.selector);
+                tbodyTrSelection.append('td').text(flowRule.actions);
                 if (jsonToSring(flowRule.actions).includes("drop")) {
                     tbodyTrSelection.attr("class", "drop");
                 }

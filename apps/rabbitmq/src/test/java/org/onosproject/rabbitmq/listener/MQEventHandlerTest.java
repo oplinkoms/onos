@@ -45,6 +45,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.onlab.packet.ChassisId;
 import org.onlab.packet.Ethernet;
+import org.onlab.packet.MacAddress;
 import org.onlab.packet.ONOSLLDP;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
@@ -326,14 +327,14 @@ public class MQEventHandlerTest extends AbstractEventTest {
 
         @Override
         public InboundPacket inPacket() {
-            ONOSLLDP lldp = ONOSLLDP.onosLLDP(deviceService.getDevice(DID1)
+            ONOSLLDP lldp = ONOSLLDP.onosSecureLLDP(deviceService.getDevice(DID1)
                                               .id().toString(),
-                                              device.chassisId(),
-                                              (int) pd1.number().toLong());
+                                                    device.chassisId(),
+                                                    (int) pd1.number().toLong(), "", "test");
 
             Ethernet ethPacket = new Ethernet();
             ethPacket.setEtherType(Ethernet.TYPE_LLDP);
-            ethPacket.setDestinationMACAddress(ONOSLLDP.LLDP_ONLAB);
+            ethPacket.setDestinationMACAddress(MacAddress.ONOS_LLDP);
             ethPacket.setPayload(lldp);
             ethPacket.setPad(true);
 

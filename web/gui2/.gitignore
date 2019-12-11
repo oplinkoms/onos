@@ -1,0 +1,9 @@
+node_modules/
+documentation/
+dist/
+coverage/
+src/main/webapp/app/fw/
+
+.pki/
+.cache/
+.npm/

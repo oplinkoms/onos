@@ -26,6 +26,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.onlab.packet.IPv4;
 import org.onlab.packet.Ip4Prefix;
+import org.onlab.packet.MacAddress;
 import org.onosproject.rest.AbstractWebResource;
 
 import javax.ws.rs.Consumes;
@@ -41,6 +42,8 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
+
+import static org.onlab.util.Tools.readTreeFromStream;
 
 /**
  * Manage ACL rules.
@@ -63,11 +66,20 @@ public class AclWebResource extends AbstractWebResource {
         for (AclRule rule : rules) {
             ObjectNode node = mapper.createObjectNode();
             node.put("id", rule.id().toString());
+            if (rule.srcMac() != null) {
+                node.put("srcMac", rule.srcMac().toString());
+            }
+            if (rule.dstMac() != null) {
+                node.put("dstMac", rule.dstMac().toString());
+            }
             if (rule.srcIp() != null) {
                 node.put("srcIp", rule.srcIp().toString());
             }
             if (rule.dstIp() != null) {
                 node.put("dstIp", rule.dstIp().toString());
+            }
+            if (rule.dscp() != 0) {
+                node.put("dscp", rule.dscp());
             }
             if (rule.ipProto() != 0) {
                 switch (rule.ipProto()) {
@@ -86,6 +98,9 @@ public class AclWebResource extends AbstractWebResource {
             }
             if (rule.dstTpPort() != 0) {
                 node.put("dstTpPort", rule.dstTpPort());
+            }
+            if (rule.srcTpPort() != 0) {
+                node.put("srcTpPort", rule.srcTpPort());
             }
             node.put("action", rule.action().toString());
             arrayNode.add(node);
@@ -141,7 +156,7 @@ public class AclWebResource extends AbstractWebResource {
     private AclRule jsonToRule(InputStream stream) {
         JsonNode node;
         try {
-            node = mapper().readTree(stream);
+            node = readTreeFromStream(mapper(), stream);
         } catch (IOException e) {
             throw new IllegalArgumentException("Unable to parse ACL request", e);
         }
@@ -156,6 +171,21 @@ public class AclWebResource extends AbstractWebResource {
         s = node.path("dstIp").asText(null);
         if (s != null) {
             rule.dstIp(Ip4Prefix.valueOf(s));
+        }
+
+        s = node.path("srcMac").asText(null);
+        if (s != null) {
+            rule.srcMac(MacAddress.valueOf(s));
+        }
+
+        s = node.path("dstMac").asText(null);
+        if (s != null) {
+            rule.dstMac(MacAddress.valueOf(s));
+        }
+
+        s = node.path("dscp").asText(null);
+        if (s != null) {
+            rule.dscp(Byte.valueOf(s));
         }
 
         s = node.path("ipProto").asText(null);
@@ -173,7 +203,20 @@ public class AclWebResource extends AbstractWebResource {
 
         int port = node.path("dstTpPort").asInt(0);
         if (port > 0) {
-            rule.dstTpPort((short) port);
+            if ("TCP".equalsIgnoreCase(s) || "UDP".equalsIgnoreCase(s)) {
+                rule.dstTpPort((short) port);
+            } else {
+                throw new IllegalArgumentException("dstTpPort can be set only when ipProto is TCP or UDP");
+            }
+        }
+
+        port = node.path("srcTpPort").asInt(0);
+        if (port > 0) {
+            if ("TCP".equalsIgnoreCase(s) || "UDP".equalsIgnoreCase(s)) {
+                rule.srcTpPort((short) port);
+            } else {
+                throw new IllegalArgumentException("srcTpPort can be set only when ipProto is TCP or UDP");
+            }
         }
 
         s = node.path("action").asText(null);

@@ -27,6 +27,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.onlab.junit.TestUtils;
 import org.onlab.osgi.ServiceDirectory;
 import org.onlab.osgi.TestServiceDirectory;
 import org.onlab.rest.BaseResource;
@@ -65,10 +66,9 @@ public class AclWebResourceTest extends JerseyTest {
         ServiceDirectory testDirectory = new TestServiceDirectory()
                 .add(AclService.class, mockAclService)
                 .add(AclStore.class, mockAclStore);
-        BaseResource.setServiceDirectory(testDirectory);
+        TestUtils.setField(BaseResource.class, "services", testDirectory);
 
-        IdGenerator idGenerator = new MockIdGenerator();
-        AclRule.bindIdGenerator(idGenerator);
+        AclRule.idGenerator = new MockIdGenerator();
     }
 
     @After

@@ -44,6 +44,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import static org.onlab.util.Tools.nullIsNotFound;
+import static org.onlab.util.Tools.readTreeFromStream;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -138,7 +139,7 @@ public class MetersWebResource extends AbstractWebResource {
     public Response createMeter(@PathParam("deviceId") String deviceId,
                                 InputStream stream) {
         try {
-            ObjectNode jsonTree = (ObjectNode) mapper().readTree(stream);
+            ObjectNode jsonTree = readTreeFromStream(mapper(), stream);
             JsonNode specifiedDeviceId = jsonTree.get("deviceId");
 
             if ((specifiedDeviceId != null &&
@@ -182,7 +183,11 @@ public class MetersWebResource extends AbstractWebResource {
         final Meter tmpMeter = meterService.getMeter(did, mid);
         if (tmpMeter != null) {
             final MeterRequest meterRequest = meterToMeterRequest(tmpMeter, "REMOVE");
-            meterService.withdraw(meterRequest, tmpMeter.id());
+            if (meterRequest != null) {
+                meterService.withdraw(meterRequest, tmpMeter.id());
+            }
+        } else {
+            log.warn("Meter {}, is not present", tmpMeter);
         }
         return Response.noContent().build();
     }

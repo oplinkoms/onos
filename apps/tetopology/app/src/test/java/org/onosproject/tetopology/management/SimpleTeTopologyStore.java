@@ -15,24 +15,10 @@
  */
 package org.onosproject.tetopology.management;
 
-import static org.onosproject.tetopology.management.api.OptimizationType.NOT_OPTIMIZED;
-import static org.onosproject.tetopology.management.api.TeTopologyEvent.Type.NETWORK_ADDED;
-import static org.onosproject.tetopology.management.api.TeTopologyEvent.Type.NETWORK_REMOVED;
-import static org.onosproject.tetopology.management.api.TeTopologyEvent.Type.TE_TOPOLOGY_ADDED;
-import static org.onosproject.tetopology.management.api.TeTopologyEvent.Type.TE_TOPOLOGY_REMOVED;
-import static org.slf4j.LoggerFactory.getLogger;
-
-import java.util.BitSet;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.BlockingQueue;
-
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.DeviceId;
 import org.onosproject.store.AbstractStore;
 import org.onosproject.tetopology.management.api.CommonTopologyData;
@@ -81,16 +67,27 @@ import org.onosproject.tetopology.management.impl.TeMgrUtil;
 import org.onosproject.tetopology.management.impl.TeTopologyMapEvent;
 import org.onosproject.tetopology.management.impl.TeTopologyStore;
 import org.onosproject.tetopology.management.impl.TeTopologyStoreDelegate;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
 import org.slf4j.Logger;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import java.util.BitSet;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+
+import static org.onosproject.tetopology.management.api.OptimizationType.NOT_OPTIMIZED;
+import static org.onosproject.tetopology.management.api.TeTopologyEvent.Type.NETWORK_ADDED;
+import static org.onosproject.tetopology.management.api.TeTopologyEvent.Type.NETWORK_REMOVED;
+import static org.onosproject.tetopology.management.api.TeTopologyEvent.Type.TE_TOPOLOGY_ADDED;
+import static org.onosproject.tetopology.management.api.TeTopologyEvent.Type.TE_TOPOLOGY_REMOVED;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Implementation of the TE network store.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = TeTopologyStore.class)
 public class SimpleTeTopologyStore
         extends AbstractStore<TeTopologyEvent, TeTopologyStoreDelegate>
         implements TeTopologyStore {
@@ -697,7 +694,7 @@ public class SimpleTeTopologyStore
         if (intNework != null
                 && CollectionUtils.isNotEmpty(intNework.nodeIds())) {
             intNework.setChildUpdate(true);
-            intNework.nodeIds().remove(nodeKey.nodeId());
+            intNework.nodeIds().remove(nodeKey);
         }
         InternalNetworkNode intNode = networkNodeMap.remove(nodeKey);
         if (intNode != null && CollectionUtils.isNotEmpty(intNode.tpIds())) {
@@ -905,7 +902,7 @@ public class SimpleTeTopologyStore
         if (intNework != null
                 && CollectionUtils.isNotEmpty(intNework.linkIds())) {
             intNework.setChildUpdate(true);
-            intNework.linkIds().remove(linkKey.linkId());
+            intNework.linkIds().remove(linkKey);
         }
         // Remove it from networkLinkMap
         InternalNetworkLink intLink = networkLinkMap.remove(linkKey);
@@ -937,7 +934,7 @@ public class SimpleTeTopologyStore
         TeNodeKey myTeNodeKey;
         InternalNetworkNode intNode = null;
         if (!parentUpdate) {
-            intNode = networkNodeMap.get(tpKey.nodeId());
+            intNode = networkNodeMap.get(tpKey);
             if (intNode == null) {
                 log.error(" node is not in dataStore for tp update {}", tpKey);
                 return;
@@ -974,7 +971,7 @@ public class SimpleTeTopologyStore
     @Override
     public void removeTerminationPoint(TerminationPointKey tpKey) {
         // Update InternalNetworkNode
-        InternalNetworkNode intNode = networkNodeMap.get(tpKey.nodeId());
+        InternalNetworkNode intNode = networkNodeMap.get(tpKey);
         if (intNode != null && CollectionUtils.isNotEmpty(intNode.tpIds())) {
             intNode.setChildUpdate(true);
             intNode.tpIds().remove(tpKey.tpId());

@@ -31,11 +31,13 @@ import org.onosproject.net.pi.model.PiActionModel;
 import org.onosproject.net.pi.model.PiActionParamModel;
 import org.onosproject.net.pi.model.PiMatchFieldId;
 import org.onosproject.net.pi.model.PiMatchFieldModel;
+import org.onosproject.net.pi.model.PiMatchType;
 import org.onosproject.net.pi.model.PiPipeconf;
 import org.onosproject.net.pi.model.PiPipelineInterpreter;
 import org.onosproject.net.pi.model.PiPipelineModel;
 import org.onosproject.net.pi.model.PiTableId;
 import org.onosproject.net.pi.model.PiTableModel;
+import org.onosproject.net.pi.model.PiTableType;
 import org.onosproject.net.pi.runtime.PiAction;
 import org.onosproject.net.pi.runtime.PiActionParam;
 import org.onosproject.net.pi.runtime.PiExactFieldMatch;
@@ -52,13 +54,12 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 
 import static java.lang.String.format;
 import static org.onlab.util.ImmutableByteSequence.ByteSequenceTrimException;
-import static org.onlab.util.ImmutableByteSequence.fit;
+import static org.onlab.util.ImmutableByteSequence.prefixOnes;
 import static org.onosproject.net.flow.criteria.Criterion.Type.PROTOCOL_INDEPENDENT;
 import static org.onosproject.net.pi.impl.CriterionTranslatorHelper.translateCriterion;
 import static org.onosproject.net.pi.impl.PiUtils.getInterpreterOrNull;
@@ -70,6 +71,7 @@ import static org.onosproject.net.pi.impl.PiUtils.translateTableId;
 final class PiFlowRuleTranslatorImpl {
 
     public static final int MAX_PI_PRIORITY = (int) Math.pow(2, 24);
+    public static final int MIN_PI_PRIORITY = 1;
     private static final Logger log = LoggerFactory.getLogger(PiFlowRuleTranslatorImpl.class);
 
     private PiFlowRuleTranslatorImpl() {
@@ -77,7 +79,8 @@ final class PiFlowRuleTranslatorImpl {
     }
 
     /**
-     * Returns a PI table entry equivalent to the given flow rule, for the given pipeconf and device.
+     * Returns a PI table entry equivalent to the given flow rule, for the given
+     * pipeconf and device.
      *
      * @param rule     flow rule
      * @param pipeconf pipeconf
@@ -96,39 +99,56 @@ final class PiFlowRuleTranslatorImpl {
         final PiTableId piTableId = translateTableId(rule.table(), interpreter);
         final PiTableModel tableModel = getTableModel(piTableId, pipelineModel);
         // Translate selector.
-        final Collection<PiFieldMatch> fieldMatches = translateFieldMatches(interpreter, rule.selector(), tableModel);
+        final PiMatchKey piMatchKey;
+        final boolean needPriority;
+        if (rule.selector().criteria().isEmpty()) {
+            piMatchKey = PiMatchKey.EMPTY;
+            needPriority = false;
+        } else {
+            final Collection<PiFieldMatch> fieldMatches = translateFieldMatches(
+                    interpreter, rule.selector(), tableModel);
+            piMatchKey = PiMatchKey.builder()
+                    .addFieldMatches(fieldMatches)
+                    .build();
+            // FIXME: P4Runtime limit
+            // Need to ignore priority if no TCAM lookup match field
+            needPriority = tableModel.matchFields().stream()
+                    .anyMatch(match -> match.matchType() == PiMatchType.TERNARY ||
+                            match.matchType() == PiMatchType.RANGE);
+        }
         // Translate treatment.
         final PiTableAction piTableAction = translateTreatment(rule.treatment(), interpreter, piTableId, pipelineModel);
 
         // Build PI entry.
         final PiTableEntry.Builder tableEntryBuilder = PiTableEntry.builder();
 
-        // In the P4 world 0 is the highest priority, in ONOS the lowest one.
-        // FIXME: move priority conversion to the driver, where different constraints might apply
-        // e.g. less bits for encoding priority in TCAM-based implementations.
-        final int newPriority;
-        if (rule.priority() > MAX_PI_PRIORITY) {
-            log.warn("Flow rule priority too big, setting translated priority to max value {}: {}",
-                     MAX_PI_PRIORITY, rule);
-            newPriority = 0;
-        } else {
-            newPriority = MAX_PI_PRIORITY - rule.priority();
-        }
-
         tableEntryBuilder
                 .forTable(piTableId)
-                .withPriority(newPriority)
-                .withMatchKey(PiMatchKey.builder()
-                                      .addFieldMatches(fieldMatches)
-                                      .build())
-                .withAction(piTableAction);
+                .withMatchKey(piMatchKey);
+
+        if (piTableAction != null) {
+            tableEntryBuilder.withAction(piTableAction);
+        }
+
+        if (needPriority) {
+            // FIXME: move priority check to P4Runtime driver.
+            final int newPriority;
+            if (rule.priority() > MAX_PI_PRIORITY) {
+                log.warn("Flow rule priority too big, setting translated priority to max value {}: {}",
+                         MAX_PI_PRIORITY, rule);
+                newPriority = MAX_PI_PRIORITY;
+            } else {
+                newPriority = MIN_PI_PRIORITY + rule.priority();
+            }
+            tableEntryBuilder.withPriority(newPriority);
+        }
 
         if (!rule.isPermanent()) {
             if (tableModel.supportsAging()) {
                 tableEntryBuilder.withTimeout((double) rule.timeout());
             } else {
-                log.warn("Flow rule is temporary, but table '{}' doesn't support " +
-                                 "aging, translating to permanent.", tableModel.id());
+                log.debug("Flow rule is temporary, but table '{}' doesn't support " +
+                                  "aging, translating to permanent.", tableModel.id());
             }
 
         }
@@ -138,16 +158,19 @@ final class PiFlowRuleTranslatorImpl {
 
 
     /**
-     * Returns a PI action equivalent to the given treatment, optionally using the given interpreter. This method also
-     * checks that the produced PI table action is suitable for the given table ID and pipeline model. If suitable, the
-     * returned action instance will have parameters well-sized, according to the table model.
+     * Returns a PI action equivalent to the given treatment, optionally using
+     * the given interpreter. This method also checks that the produced PI table
+     * action is suitable for the given table ID and pipeline model. If
+     * suitable, the returned action instance will have parameters well-sized,
+     * according to the table model.
      *
      * @param treatment     traffic treatment
      * @param interpreter   interpreter
      * @param tableId       PI table ID
      * @param pipelineModel pipeline model
      * @return PI table action
-     * @throws PiTranslationException if the treatment cannot be translated or if the PI action is not suitable for the
+     * @throws PiTranslationException if the treatment cannot be translated or
+     *                                if the PI action is not suitable for the
      *                                given pipeline model
      */
     static PiTableAction translateTreatment(TrafficTreatment treatment, PiPipelineInterpreter interpreter,
@@ -165,7 +188,8 @@ final class PiFlowRuleTranslatorImpl {
     }
 
     /**
-     * Builds a PI action out of the given treatment, optionally using the given interpreter.
+     * Builds a PI action out of the given treatment, optionally using the given
+     * interpreter.
      */
     private static PiTableAction buildAction(TrafficTreatment treatment, PiPipelineInterpreter interpreter,
                                              PiTableId tableId)
@@ -196,24 +220,36 @@ final class PiFlowRuleTranslatorImpl {
             }
         }
 
-        if (piTableAction == null) {
-            // No PiInstruction, no interpreter. It's time to give up.
-            throw new PiTranslationException(
-                    "Unable to translate treatment, neither an interpreter or a "
-                            + "protocol-independent instruction were provided.");
-        }
-
         return piTableAction;
     }
 
     private static PiTableAction typeCheckAction(PiTableAction piTableAction, PiTableModel table)
             throws PiTranslationException {
+        if (piTableAction == null) {
+            // skip check if null
+            return null;
+        }
         switch (piTableAction.type()) {
             case ACTION:
                 return checkPiAction((PiAction) piTableAction, table);
-            default:
-                // FIXME: should we check? how?
+            case ACTION_PROFILE_GROUP_ID:
+            case ACTION_PROFILE_MEMBER_ID:
+                if (!table.tableType().equals(PiTableType.INDIRECT)) {
+                    throw new PiTranslationException(format(
+                            "action is indirect of type '%s', but table '%s' is of type '%s'",
+                            piTableAction.type(), table.id(), table.tableType()));
+                }
+                if (piTableAction.type().equals(PiTableAction.Type.ACTION_PROFILE_GROUP_ID)
+                        && (table.actionProfile() == null || !table.actionProfile().hasSelector())) {
+                    throw new PiTranslationException(format(
+                            "action is of type '%s', but table '%s' does not" +
+                                    "implement an action profile with dynamic selection",
+                            piTableAction.type(), table.id()));
+                }
                 return piTableAction;
+            default:
+                throw new PiTranslationException(format(
+                        "Unknown table action type %s", piTableAction.type()));
 
         }
     }
@@ -241,7 +277,7 @@ final class PiFlowRuleTranslatorImpl {
                             "Not such parameter '%s' for action '%s'", param.id(), actionModel)));
             try {
                 newActionBuilder.withParameter(new PiActionParam(param.id(),
-                                                                 fit(param.value(), paramModel.bitWidth())));
+                                                                 param.value().fit(paramModel.bitWidth())));
             } catch (ByteSequenceTrimException e) {
                 throw new PiTranslationException(format(
                         "Size mismatch for parameter '%s' of action '%s': %s",
@@ -253,8 +289,9 @@ final class PiFlowRuleTranslatorImpl {
     }
 
     /**
-     * Builds a collection of PI field matches out of the given selector, optionally using the given interpreter. The
-     * field matches returned are guaranteed to be compatible for the given table model.
+     * Builds a collection of PI field matches out of the given selector,
+     * optionally using the given interpreter. The field matches returned are
+     * guaranteed to be compatible for the given table model.
      */
     private static Collection<PiFieldMatch> translateFieldMatches(PiPipelineInterpreter interpreter,
                                                                   TrafficSelector selector, PiTableModel tableModel)
@@ -280,36 +317,49 @@ final class PiFlowRuleTranslatorImpl {
         Set<PiMatchFieldId> usedPiCriterionFields = Sets.newHashSet();
         Set<PiMatchFieldId> ignoredPiCriterionFields = Sets.newHashSet();
 
+
+        Map<PiMatchFieldId, Criterion> criterionMap = Maps.newHashMap();
+        if (interpreter != null) {
+            // NOTE: if two criterion types map to the same match field ID, and
+            //  those two criterion types are present in the selector, this won't
+            //  work. This is unlikely to happen since those cases should be
+            //  mutually exclusive:
+            //  e.g. ICMPV6_TYPE ->  metadata.my_normalized_icmp_type
+            //       ICMPV4_TYPE ->  metadata.my_normalized_icmp_type
+            //  A packet can be either ICMPv6 or ICMPv4 but not both.
+            selector.criteria()
+                    .stream()
+                    .map(Criterion::type)
+                    .filter(t -> t != PROTOCOL_INDEPENDENT)
+                    .forEach(t -> {
+                        PiMatchFieldId mfid = interpreter.mapCriterionType(t)
+                                .orElse(null);
+                        if (mfid != null) {
+                            if (criterionMap.containsKey(mfid)) {
+                                log.warn("Detected criterion mapping " +
+                                                 "conflict for PiMatchFieldId {}",
+                                         mfid);
+                            }
+                            criterionMap.put(mfid, selector.getCriterion(t));
+                        }
+                    });
+        }
+
         for (PiMatchFieldModel fieldModel : tableModel.matchFields()) {
 
             PiMatchFieldId fieldId = fieldModel.id();
 
             int bitWidth = fieldModel.bitWidth();
-            int fieldByteWidth = (int) Math.ceil((double) bitWidth / 8);
 
-            Optional<Criterion.Type> criterionType =
-                    interpreter == null
-                            ? Optional.empty()
-                            : interpreter.mapPiMatchFieldId(fieldId);
-
-            Criterion criterion = criterionType.map(selector::getCriterion).orElse(null);
+            Criterion criterion = criterionMap.get(fieldId);
 
             if (!piCriterionFields.containsKey(fieldId) && criterion == null) {
                 // Neither a field in PiCriterion is available nor a Criterion mapping is possible.
                 // Can ignore if the match is ternary or LPM.
                 switch (fieldModel.matchType()) {
                     case TERNARY:
-                        // Wildcard the whole field.
-                        fieldMatches.put(fieldId, new PiTernaryFieldMatch(
-                                fieldId,
-                                ImmutableByteSequence.ofZeros(fieldByteWidth),
-                                ImmutableByteSequence.ofZeros(fieldByteWidth)));
-                        break;
                     case LPM:
-                        // LPM with prefix 0
-                        fieldMatches.put(fieldId, new PiLpmFieldMatch(fieldId,
-                                                                      ImmutableByteSequence.ofZeros(fieldByteWidth),
-                                                                      0));
+                        // Skip field.
                         break;
                     // FIXME: Can we handle the case of RANGE or VALID match?
                     default:
@@ -399,7 +449,9 @@ final class PiFlowRuleTranslatorImpl {
         /*
         Here we try to be robust against wrong size fields with the goal of having PiCriterion independent of the
         pipeline model. We duplicate the field match, fitting the byte sequences to the bit-width specified in the
-        model. This operation is expensive when performed for each field match of each flow rule, but should be
+        model. We also normalize ternary (and LPM) field matches by setting to 0 unused bits, as required by P4Runtime.
+
+        These operations are expensive when performed for each field match of each flow rule, but should be
         mitigated by the translation cache provided by PiFlowRuleTranslationServiceImpl.
         */
 
@@ -407,11 +459,14 @@ final class PiFlowRuleTranslatorImpl {
             switch (fieldModel.matchType()) {
                 case EXACT:
                     return new PiExactFieldMatch(fieldMatch.fieldId(),
-                                                 fit(((PiExactFieldMatch) fieldMatch).value(), modelBitWidth));
+                                                 ((PiExactFieldMatch) fieldMatch).value().fit(modelBitWidth));
                 case TERNARY:
-                    return new PiTernaryFieldMatch(fieldMatch.fieldId(),
-                                                   fit(((PiTernaryFieldMatch) fieldMatch).value(), modelBitWidth),
-                                                   fit(((PiTernaryFieldMatch) fieldMatch).mask(), modelBitWidth));
+                    PiTernaryFieldMatch ternField = (PiTernaryFieldMatch) fieldMatch;
+                    ImmutableByteSequence ternMask = ternField.mask().fit(modelBitWidth);
+                    ImmutableByteSequence ternValue = ternField.value()
+                            .fit(modelBitWidth)
+                            .bitwiseAnd(ternMask);
+                    return new PiTernaryFieldMatch(fieldMatch.fieldId(), ternValue, ternMask);
                 case LPM:
                     PiLpmFieldMatch lpmfield = (PiLpmFieldMatch) fieldMatch;
                     if (lpmfield.prefixLength() > modelBitWidth) {
@@ -419,18 +474,20 @@ final class PiFlowRuleTranslatorImpl {
                                 "Invalid prefix length for LPM field '%s', found %d but field has bit-width %d",
                                 fieldMatch.fieldId(), lpmfield.prefixLength(), modelBitWidth));
                     }
+                    ImmutableByteSequence lpmValue = lpmfield.value()
+                            .fit(modelBitWidth);
+                    ImmutableByteSequence lpmMask = prefixOnes(lpmValue.size(),
+                                                               lpmfield.prefixLength());
+                    lpmValue = lpmValue.bitwiseAnd(lpmMask);
                     return new PiLpmFieldMatch(fieldMatch.fieldId(),
-                                               fit(lpmfield.value(), modelBitWidth),
-                                               lpmfield.prefixLength());
+                                               lpmValue, lpmfield.prefixLength());
                 case RANGE:
                     return new PiRangeFieldMatch(fieldMatch.fieldId(),
-                                                 fit(((PiRangeFieldMatch) fieldMatch).lowValue(), modelBitWidth),
-                                                 fit(((PiRangeFieldMatch) fieldMatch).highValue(), modelBitWidth));
-                case VALID:
-                    return fieldMatch;
+                                                 ((PiRangeFieldMatch) fieldMatch).lowValue().fit(modelBitWidth),
+                                                 ((PiRangeFieldMatch) fieldMatch).highValue().fit(modelBitWidth));
                 default:
                     // Should never be here.
-                    throw new RuntimeException(
+                    throw new IllegalArgumentException(
                             "Unrecognized match type " + fieldModel.matchType().name());
             }
         } catch (ByteSequenceTrimException e) {

@@ -217,12 +217,9 @@ public class IsisChannelHandler extends IdleStateAwareChannelHandler {
         if (message instanceof List) {
             List<IsisMessage> isisMessageList = (List<IsisMessage>) message;
             log.debug("IsisChannelHandler::List of IsisMessages Size {}", isisMessageList.size());
-            if (isisMessageList != null) {
-                for (IsisMessage isisMessage : isisMessageList) {
-                    processIsisMessage(isisMessage, ctx);
-                }
-            } else {
-                log.debug("IsisChannelHandler::IsisMessages Null List...!!");
+
+            for (IsisMessage isisMessage : isisMessageList) {
+                processIsisMessage(isisMessage, ctx);
             }
         }
         if (message instanceof IsisMessage) {
@@ -239,9 +236,8 @@ public class IsisChannelHandler extends IdleStateAwareChannelHandler {
      *
      * @param isisMessage received ISIS message
      * @param ctx         channel handler context instance.
-     * @throws Exception might throws exception
      */
-    public void processIsisMessage(IsisMessage isisMessage, ChannelHandlerContext ctx) throws Exception {
+    public void processIsisMessage(IsisMessage isisMessage, ChannelHandlerContext ctx) {
         log.debug("IsisChannelHandler::processIsisMessage...!!!");
         int interfaceIndex = isisMessage.interfaceIndex();
         IsisInterface isisInterface = isisInterfaceMap.get(interfaceIndex);

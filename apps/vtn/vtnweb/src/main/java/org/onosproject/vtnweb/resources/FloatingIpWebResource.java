@@ -60,6 +60,7 @@ import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 import static javax.ws.rs.core.Response.Status.CONFLICT;
 import static javax.ws.rs.core.Response.Status.CREATED;
 import static javax.ws.rs.core.Response.Status.NOT_FOUND;
+import static org.onlab.util.Tools.readTreeFromStream;
 
 @Path("floatingips")
 public class FloatingIpWebResource extends AbstractWebResource {
@@ -114,7 +115,7 @@ public class FloatingIpWebResource extends AbstractWebResource {
     public Response createFloatingIp(final InputStream input) {
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode subnode = mapper.readTree(input);
+            JsonNode subnode = readTreeFromStream(mapper, input);
             Collection<FloatingIp> floatingIps = createOrUpdateByInputStream(subnode);
             Boolean result = nullIsNotFound((get(FloatingIpService.class)
                                                     .createFloatingIps(floatingIps)),
@@ -137,7 +138,7 @@ public class FloatingIpWebResource extends AbstractWebResource {
                                      final InputStream input) {
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode subnode = mapper.readTree(input);
+            JsonNode subnode = readTreeFromStream(mapper, input);
             Collection<FloatingIp> floatingIps = createOrUpdateByInputStream(subnode);
             Boolean result = nullIsNotFound(get(FloatingIpService.class)
                     .updateFloatingIps(floatingIps), UPDATE_FAIL);
@@ -170,8 +171,7 @@ public class FloatingIpWebResource extends AbstractWebResource {
         }
     }
 
-    private Collection<FloatingIp> createOrUpdateByInputStream(JsonNode subnode)
-            throws Exception {
+    private Collection<FloatingIp> createOrUpdateByInputStream(JsonNode subnode) {
         checkNotNull(subnode, JSON_NOT_NULL);
         Collection<FloatingIp> floatingIps = null;
         JsonNode floatingIpNodes = subnode.get("floatingips");
@@ -193,10 +193,8 @@ public class FloatingIpWebResource extends AbstractWebResource {
      *
      * @param floatingIpNodes the floatingIp json node
      * @return floatingIps a collection of floatingIp
-     * @throws Exception when any argument is illegal
      */
-    public Collection<FloatingIp> changeJsonToSub(JsonNode floatingIpNodes)
-            throws Exception {
+    public Collection<FloatingIp> changeJsonToSub(JsonNode floatingIpNodes) {
         checkNotNull(floatingIpNodes, JSON_NOT_NULL);
         Map<FloatingIpId, FloatingIp> subMap = new HashMap<FloatingIpId, FloatingIp>();
         if (!floatingIpNodes.hasNonNull("id")) {

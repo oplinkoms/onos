@@ -55,10 +55,11 @@ shift $OPC
 
 node=${1:-$OCI}
 remote=$ONOS_USER@$node
+remote_scp=$ONOS_USER@[$node]
 
 $(dirname $0)/onos-push-bits $node
 
-[ ! -z "$mvn_settings" ] && scp -q $mvn_settings $remote:/tmp/settings.xml
+[ ! -z "$mvn_settings" ] && scp -q $mvn_settings $remote_scp:/tmp/settings.xml
 
 ssh -tt $remote "
     [ -z "$upgrade" ] && [ -d $ONOS_INSTALL_DIR/bin ] && echo \"ONOS is already installed\" && exit 1
@@ -77,7 +78,18 @@ ssh -tt $remote "
     [ -n $noupstart ] && sudo cp $ONOS_INSTALL_DIR/init/onos.conf /etc/init/onos.conf
     [ -n $noinitd ] && sudo cp $ONOS_INSTALL_DIR/init/onos.initd /etc/init.d/onos
     [ -n $nosysd ] && sudo cp $ONOS_INSTALL_DIR/init/onos.service /etc/systemd/system/onos.service
+
     echo 'export ONOS_OPTS=debug' > $ONOS_INSTALL_DIR/options
+
+    if [ ! -z "$ONOS_YOURKIT" ]; then
+        sudo apt-get install unzip
+        cd /tmp
+        wget -N https://www.yourkit.com/download/YourKit-JavaProfiler-${ONOS_YOURKIT}.zip
+        unzip -o YourKit-JavaProfiler-${ONOS_YOURKIT}.zip
+        rm YourKit-JavaProfiler-${ONOS_YOURKIT}.zip
+        mv /tmp/YourKit-JavaProfiler-$(echo $ONOS_YOURKIT | sed 's/\(.*\)-.*/\1/')/bin/linux-x86-64/libyjpagent.so $ONOS_INSTALL_DIR/libyjpagent.so
+        echo -e 'export JAVA_OPTS="${JAVA_OPTS:--agentpath:$ONOS_INSTALL_DIR/libyjpagent.so}=listen=all"' >> $ONOS_INSTALL_DIR/options
+    fi
 
     # Set up correct user to run onos-service
     echo 'export ONOS_USER=$ONOS_USER' >> $ONOS_INSTALL_DIR/options
@@ -88,7 +100,7 @@ ssh -tt $remote "
         echo '.upgrade' >> $ONOS_INSTALL_DIR/VERSION
     fi
 
-    # Remove any previous ON.Lab bits from ~/.m2 repo.
+    # Remove any previous Open Networking Foundation bits from ~/.m2 repo.
     rm -fr ~/.m2/repository/org/onosproject
 
     [ ! -z $mvn_settings ] && cp /tmp/settings.xml ~/.m2/settings.xml

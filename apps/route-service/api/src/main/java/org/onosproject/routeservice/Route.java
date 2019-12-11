@@ -51,14 +51,29 @@ public class Route {
         FPM,
 
         /**
+         * Route came from the RIP route source.
+         */
+        RIP,
+
+        /**
          * Route can from the static route source.
          */
         STATIC,
 
         /**
+         * Route can from the DHCP route source.
+         */
+        DHCP,
+
+        /**
          * Route source was not defined.
          */
-        UNDEFINED
+        UNDEFINED,
+
+        /**
+         * Route can from the DHCP-LQ route source.
+         */
+        DHCPLQ
     }
 
     private final Source source;

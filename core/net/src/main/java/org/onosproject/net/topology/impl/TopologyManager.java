@@ -15,24 +15,17 @@
  */
 package org.onosproject.net.topology.impl;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
-import org.onosproject.net.DisjointPath;
-import org.onosproject.net.provider.AbstractListenerProviderRegistry;
 import org.onosproject.event.Event;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.DisjointPath;
 import org.onosproject.net.Link;
 import org.onosproject.net.Path;
+import org.onosproject.net.provider.AbstractListenerProviderRegistry;
 import org.onosproject.net.provider.AbstractProviderService;
 import org.onosproject.net.topology.ClusterId;
 import org.onosproject.net.topology.GraphDescription;
 import org.onosproject.net.topology.LinkWeigher;
-import org.onosproject.net.topology.LinkWeight;
 import org.onosproject.net.topology.Topology;
 import org.onosproject.net.topology.TopologyCluster;
 import org.onosproject.net.topology.TopologyEvent;
@@ -44,25 +37,28 @@ import org.onosproject.net.topology.TopologyProviderService;
 import org.onosproject.net.topology.TopologyService;
 import org.onosproject.net.topology.TopologyStore;
 import org.onosproject.net.topology.TopologyStoreDelegate;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
-import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static org.onosproject.net.topology.AdapterLinkWeigher.adapt;
 import static org.onosproject.security.AppGuard.checkPermission;
+import static org.onosproject.security.AppPermission.Type.TOPOLOGY_READ;
 import static org.slf4j.LoggerFactory.getLogger;
-import static org.onosproject.security.AppPermission.Type.*;
 
 
 /**
  * Provides basic implementation of the topology SB &amp; NB APIs.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = {TopologyService.class, TopologyProviderRegistry.class})
 public class TopologyManager
         extends AbstractListenerProviderRegistry<TopologyEvent, TopologyListener,
         TopologyProvider, TopologyProviderService>
@@ -79,7 +75,7 @@ public class TopologyManager
 
     private TopologyStoreDelegate delegate = new InternalStoreDelegate();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TopologyStore store;
 
     @Activate
@@ -158,12 +154,6 @@ public class TopologyManager
 
     @Override
     public Set<Path> getPaths(Topology topology, DeviceId src,
-                              DeviceId dst, LinkWeight weight) {
-        return getPaths(topology, src, dst, adapt(weight));
-    }
-
-    @Override
-    public Set<Path> getPaths(Topology topology, DeviceId src,
                               DeviceId dst, LinkWeigher weigher) {
         checkPermission(TOPOLOGY_READ);
 
@@ -214,13 +204,6 @@ public class TopologyManager
     @Override
     public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src,
                                               DeviceId dst,
-                                              LinkWeight weight) {
-        return getDisjointPaths(topology, src, dst, adapt(weight));
-    }
-
-    @Override
-    public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src,
-                                              DeviceId dst,
                                               LinkWeigher weigher) {
         checkPermission(TOPOLOGY_READ);
         checkNotNull(topology, TOPOLOGY_NULL);
@@ -239,13 +222,6 @@ public class TopologyManager
         checkNotNull(src, DEVICE_ID_NULL);
         checkNotNull(dst, DEVICE_ID_NULL);
         return store.getDisjointPaths(topology, src, dst, riskProfile);
-    }
-
-    @Override
-    public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src,
-                                              DeviceId dst, LinkWeight weight,
-                                              Map<Link, Object> riskProfile) {
-        return getDisjointPaths(topology, src, dst, adapt(weight), riskProfile);
     }
 
     @Override

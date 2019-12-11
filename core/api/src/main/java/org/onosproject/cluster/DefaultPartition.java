@@ -15,15 +15,14 @@
  */
 package org.onosproject.cluster;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 
 import java.util.Collection;
 import java.util.Objects;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
-import org.onosproject.core.Version;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Default {@link Partition} implementation.
@@ -31,7 +30,6 @@ import org.onosproject.core.Version;
 public class DefaultPartition implements Partition {
 
     private final PartitionId id;
-    private final Version version;
     private final Collection<NodeId> members;
 
     /**
@@ -39,7 +37,6 @@ public class DefaultPartition implements Partition {
      */
     protected DefaultPartition() {
         id = null;
-        version = null;
         members = null;
     }
 
@@ -47,12 +44,10 @@ public class DefaultPartition implements Partition {
      * Constructs a partition.
      *
      * @param id partition identifier
-     * @param version partition version
      * @param members partition member nodes
      */
-    public DefaultPartition(PartitionId id, Version version, Collection<NodeId> members) {
+    public DefaultPartition(PartitionId id, Collection<NodeId> members) {
         this.id = checkNotNull(id);
-        this.version = version;
         this.members = ImmutableSet.copyOf(members);
     }
 
@@ -63,18 +58,12 @@ public class DefaultPartition implements Partition {
      */
     public DefaultPartition(Partition other) {
         this.id = checkNotNull(other.getId());
-        this.version = checkNotNull(other.getVersion());
         this.members = ImmutableSet.copyOf(other.getMembers());
     }
 
     @Override
     public PartitionId getId() {
         return id;
-    }
-
-    @Override
-    public Version getVersion() {
-        return version;
     }
 
     @Override
@@ -86,7 +75,6 @@ public class DefaultPartition implements Partition {
     public String toString() {
         return MoreObjects.toStringHelper(getClass())
                 .add("id", id)
-                .add("version", version)
                 .add("members", members)
                 .toString();
     }

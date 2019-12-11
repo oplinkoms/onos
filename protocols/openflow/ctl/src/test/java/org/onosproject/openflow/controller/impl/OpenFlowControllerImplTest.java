@@ -32,12 +32,13 @@ import org.junit.Before;
 import org.junit.Test;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.CoreService;
-import org.onosproject.net.device.DeviceServiceAdapter;
+import org.onosproject.net.config.NetworkConfigRegistry;
 import org.onosproject.openflow.OpenflowSwitchDriverAdapter;
 import org.onosproject.openflow.controller.Dpid;
 import org.onosproject.openflow.controller.OpenFlowSwitch;
 import org.onosproject.openflow.controller.OpenFlowSwitchListener;
 import org.onosproject.openflow.controller.RoleState;
+import org.onosproject.openflow.controller.OpenFlowService;
 import org.osgi.service.component.ComponentContext;
 import org.projectfloodlight.openflow.protocol.OFPortStatus;
 
@@ -139,6 +140,10 @@ public class OpenFlowControllerImplTest {
                 EasyMock.createMock(CoreService.class);
         controller.coreService = mockCoreService;
 
+        OpenFlowService mockOpenFlowService =
+                EasyMock.createMock(OpenFlowService.class);
+        controller.openFlowManager = mockOpenFlowService;
+
         ComponentConfigService mockConfigService =
                 EasyMock.createMock(ComponentConfigService.class);
         expect(mockConfigService.getProperties(anyObject())).andReturn(ImmutableSet.of());
@@ -150,7 +155,8 @@ public class OpenFlowControllerImplTest {
         controller.cfgService = mockConfigService;
         replay(mockConfigService);
 
-        controller.deviceService = new DeviceServiceAdapter();
+        NetworkConfigRegistry netConfigService = EasyMock.createMock(NetworkConfigRegistry.class);
+        controller.netCfgService = netConfigService;
 
         ComponentContext mockContext = EasyMock.createMock(ComponentContext.class);
         Dictionary<String, Object> properties = new Hashtable<>();

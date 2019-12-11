@@ -16,21 +16,18 @@
 package org.onosproject.provider.nil;
 
 import com.google.common.collect.Sets;
-
 import io.netty.util.Timeout;
 import io.netty.util.TimerTask;
-
 import org.onlab.util.Timer;
-import org.onosproject.core.ApplicationId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.flow.CompletedBatchOperation;
 import org.onosproject.net.flow.DefaultFlowEntry;
 import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.oldbatch.FlowRuleBatchEntry;
-import org.onosproject.net.flow.oldbatch.FlowRuleBatchOperation;
 import org.onosproject.net.flow.FlowRuleProvider;
 import org.onosproject.net.flow.FlowRuleProviderService;
+import org.onosproject.net.flow.oldbatch.FlowRuleBatchEntry;
+import org.onosproject.net.flow.oldbatch.FlowRuleBatchOperation;
 import org.slf4j.Logger;
 
 import java.util.Collections;
@@ -74,17 +71,18 @@ class NullFlowRuleProvider extends NullProviders.AbstractNullProvider
 
     @Override
     public void applyFlowRule(FlowRule... flowRules) {
-        // FIXME: invoke executeBatch
+        for (FlowRule rule : flowRules) {
+            flowTable.getOrDefault(rule.deviceId(), Sets.newConcurrentHashSet())
+                .add(new DefaultFlowEntry(rule));
+        }
     }
 
     @Override
     public void removeFlowRule(FlowRule... flowRules) {
-        // FIXME: invoke executeBatch
-    }
-
-    @Override
-    public void removeRulesById(ApplicationId id, FlowRule... flowRules) {
-        throw new UnsupportedOperationException("Cannot remove by appId from null provider");
+        for (FlowRule rule : flowRules) {
+            flowTable.getOrDefault(rule.deviceId(), Sets.newConcurrentHashSet())
+                    .remove(new DefaultFlowEntry(rule));
+        }
     }
 
     @Override

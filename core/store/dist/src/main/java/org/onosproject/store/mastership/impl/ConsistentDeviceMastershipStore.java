@@ -15,31 +15,8 @@
  */
 package org.onosproject.store.mastership.impl;
 
-import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.mastership.MastershipEvent.Type.BACKUPS_CHANGED;
-import static org.onosproject.mastership.MastershipEvent.Type.MASTER_CHANGED;
-import static org.onosproject.mastership.MastershipEvent.Type.SUSPENDED;
-import static org.slf4j.LoggerFactory.getLogger;
-import static com.google.common.base.Preconditions.checkArgument;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.Leadership;
@@ -50,6 +27,7 @@ import org.onosproject.cluster.LeadershipService;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.cluster.RoleInfo;
 import org.onosproject.mastership.MastershipEvent;
+import org.onosproject.mastership.MastershipInfo;
 import org.onosproject.mastership.MastershipStore;
 import org.onosproject.mastership.MastershipStoreDelegate;
 import org.onosproject.mastership.MastershipTerm;
@@ -60,34 +38,54 @@ import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.cluster.messaging.MessageSubject;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.Serializer;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
-import com.google.common.base.Objects;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static org.onlab.util.Tools.groupedThreads;
+import static org.onosproject.mastership.MastershipEvent.Type.BACKUPS_CHANGED;
+import static org.onosproject.mastership.MastershipEvent.Type.MASTER_CHANGED;
+import static org.onosproject.mastership.MastershipEvent.Type.RESTORED;
+import static org.onosproject.mastership.MastershipEvent.Type.SUSPENDED;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Implementation of the MastershipStore on top of Leadership Service.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = MastershipStore.class)
 public class ConsistentDeviceMastershipStore
     extends AbstractStore<MastershipEvent, MastershipStoreDelegate>
     implements MastershipStore {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected LeadershipService leadershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected LeadershipAdminService leadershipAdminService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ClusterService clusterService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ClusterCommunicationService clusterCommunicator;
 
     private NodeId localNodeId;
@@ -95,8 +93,10 @@ public class ConsistentDeviceMastershipStore
     private static final MessageSubject ROLE_RELINQUISH_SUBJECT =
             new MessageSubject("mastership-store-device-role-relinquish");
 
+    private static final String DEVICE_MASTERSHIP_TOPIC_PREFIX = "device-mastership:";
+
     private static final Pattern DEVICE_MASTERSHIP_TOPIC_PATTERN =
-            Pattern.compile("device:(.*)");
+            Pattern.compile("^" + DEVICE_MASTERSHIP_TOPIC_PREFIX + "(.*)");
 
     private ExecutorService eventHandler;
     private ExecutorService messageHandlingExecutor;
@@ -158,7 +158,7 @@ public class ConsistentDeviceMastershipStore
         NodeId leader = leadership == null ? null : leadership.leaderNodeId();
         List<NodeId> candidates = leadership == null ?
                 ImmutableList.of() : ImmutableList.copyOf(leadership.candidates());
-        MastershipRole role = Objects.equal(localNodeId, leader) ?
+        MastershipRole role = Objects.equals(localNodeId, leader) ?
                 MastershipRole.MASTER : candidates.contains(localNodeId) ? MastershipRole.STANDBY : MastershipRole.NONE;
         return CompletableFuture.completedFuture(role);
     }
@@ -173,7 +173,7 @@ public class ConsistentDeviceMastershipStore
         NodeId leader = leadership == null ? null : leadership.leaderNodeId();
         List<NodeId> candidates = leadership == null ?
                 ImmutableList.of() : ImmutableList.copyOf(leadership.candidates());
-        return Objects.equal(nodeId, leader) ?
+        return Objects.equals(nodeId, leader) ?
                 MastershipRole.MASTER : candidates.contains(nodeId) ? MastershipRole.STANDBY : MastershipRole.NONE;
     }
 
@@ -187,27 +187,15 @@ public class ConsistentDeviceMastershipStore
     @Override
     public RoleInfo getNodes(DeviceId deviceId) {
         checkArgument(deviceId != null, DEVICE_ID_NULL);
+        MastershipInfo mastership = getMastership(deviceId);
+        return new RoleInfo(mastership.master().orElse(null), mastership.backups());
+    }
 
-        Map<NodeId, MastershipRole> roles = Maps.newHashMap();
-        clusterService.getNodes()
-                      .forEach((node) -> roles.put(node.id(), getRole(node.id(), deviceId)));
-
-        NodeId master = null;
-        final List<NodeId> standbys = Lists.newLinkedList();
-
-        List<NodeId> candidates = leadershipService.getCandidates(createDeviceMastershipTopic(deviceId));
-
-        for (Map.Entry<NodeId, MastershipRole> entry : roles.entrySet()) {
-            if (entry.getValue() == MastershipRole.MASTER) {
-                master = entry.getKey();
-            } else if (entry.getValue() == MastershipRole.STANDBY) {
-                standbys.add(entry.getKey());
-            }
-        }
-
-        List<NodeId> sortedStandbyList = candidates.stream().filter(standbys::contains).collect(Collectors.toList());
-
-        return new RoleInfo(master, sortedStandbyList);
+    @Override
+    public MastershipInfo getMastership(DeviceId deviceId) {
+        checkArgument(deviceId != null, DEVICE_ID_NULL);
+        Leadership leadership = leadershipService.getLeadership(createDeviceMastershipTopic(deviceId));
+        return buildMastershipFromLeadership(leadership);
     }
 
     @Override
@@ -263,7 +251,7 @@ public class ConsistentDeviceMastershipStore
         List<NodeId> candidates = leadershipService.getCandidates(leadershipTopic);
 
         NodeId newMaster = candidates.stream()
-                                     .filter(candidate -> !Objects.equal(nodeId, candidate))
+                                     .filter(candidate -> !Objects.equals(nodeId, candidate))
                                      .findFirst()
                                      .orElse(null);
         log.info("Transitioning to role {} for {}. Next master: {}",
@@ -304,12 +292,33 @@ public class ConsistentDeviceMastershipStore
         MastershipEvent.Type eventType = localNodeId.equals(leadershipService.getLeader(leadershipTopic)) ?
                 MastershipEvent.Type.MASTER_CHANGED : MastershipEvent.Type.BACKUPS_CHANGED;
         leadershipService.withdraw(leadershipTopic);
-        return CompletableFuture.completedFuture(new MastershipEvent(eventType, deviceId, getNodes(deviceId)));
+        return CompletableFuture.completedFuture(new MastershipEvent(eventType, deviceId, getMastership(deviceId)));
     }
 
     @Override
     public void relinquishAllRole(NodeId nodeId) {
         // Noop. LeadershipService already takes care of detecting and purging stale locks.
+    }
+
+    private MastershipInfo buildMastershipFromLeadership(Leadership leadership) {
+        ImmutableMap.Builder<NodeId, MastershipRole> builder = ImmutableMap.builder();
+        if (leadership.leaderNodeId() != null) {
+            builder.put(leadership.leaderNodeId(), MastershipRole.MASTER);
+        }
+        leadership.candidates().stream()
+            .filter(nodeId -> !Objects.equals(leadership.leaderNodeId(), nodeId))
+            .forEach(nodeId -> builder.put(nodeId, MastershipRole.STANDBY));
+        clusterService.getNodes().stream()
+            .filter(node -> !Objects.equals(leadership.leaderNodeId(), node.id()))
+            .filter(node -> !leadership.candidates().contains(node.id()))
+            .forEach(node -> builder.put(node.id(), MastershipRole.NONE));
+
+        return new MastershipInfo(
+            leadership.leader() != null ? leadership.leader().term() : 0,
+            leadership.leader() != null
+                ? Optional.of(leadership.leader().nodeId())
+                : Optional.empty(),
+            builder.build());
     }
 
     private class InternalDeviceMastershipEventListener implements LeadershipEventListener {
@@ -328,33 +337,35 @@ public class ConsistentDeviceMastershipStore
         private void handleEvent(LeadershipEvent event) {
             Leadership leadership = event.subject();
             DeviceId deviceId = extractDeviceIdFromTopic(leadership.topic());
-            RoleInfo roleInfo = event.type() != LeadershipEvent.Type.SERVICE_DISRUPTED ?
-                    getNodes(deviceId) : new RoleInfo();
+            MastershipInfo mastershipInfo = event.type() != LeadershipEvent.Type.SERVICE_DISRUPTED
+                ? buildMastershipFromLeadership(event.subject())
+                : new MastershipInfo();
+
             switch (event.type()) {
-            case LEADER_AND_CANDIDATES_CHANGED:
-                notifyDelegate(new MastershipEvent(BACKUPS_CHANGED, deviceId, roleInfo));
-                notifyDelegate(new MastershipEvent(MASTER_CHANGED, deviceId, roleInfo));
-                break;
-            case LEADER_CHANGED:
-                notifyDelegate(new MastershipEvent(MASTER_CHANGED, deviceId, roleInfo));
-                break;
-            case CANDIDATES_CHANGED:
-                notifyDelegate(new MastershipEvent(BACKUPS_CHANGED, deviceId, roleInfo));
-                break;
-            case SERVICE_DISRUPTED:
-                notifyDelegate(new MastershipEvent(SUSPENDED, deviceId, roleInfo));
-                break;
-            case SERVICE_RESTORED:
-                // Do nothing, wait for updates from peers
-                break;
-            default:
-                return;
+                case LEADER_AND_CANDIDATES_CHANGED:
+                    notifyDelegate(new MastershipEvent(BACKUPS_CHANGED, deviceId, mastershipInfo));
+                    notifyDelegate(new MastershipEvent(MASTER_CHANGED, deviceId, mastershipInfo));
+                    break;
+                case LEADER_CHANGED:
+                    notifyDelegate(new MastershipEvent(MASTER_CHANGED, deviceId, mastershipInfo));
+                    break;
+                case CANDIDATES_CHANGED:
+                    notifyDelegate(new MastershipEvent(BACKUPS_CHANGED, deviceId, mastershipInfo));
+                    break;
+                case SERVICE_DISRUPTED:
+                    notifyDelegate(new MastershipEvent(SUSPENDED, deviceId, mastershipInfo));
+                    break;
+                case SERVICE_RESTORED:
+                    notifyDelegate(new MastershipEvent(RESTORED, deviceId, mastershipInfo));
+                    break;
+                default:
+                    return;
             }
         }
     }
 
     private String createDeviceMastershipTopic(DeviceId deviceId) {
-        return String.format("device:%s", deviceId.toString());
+        return String.format("%s%s", DEVICE_MASTERSHIP_TOPIC_PREFIX, deviceId.toString());
     }
 
     private DeviceId extractDeviceIdFromTopic(String topic) {

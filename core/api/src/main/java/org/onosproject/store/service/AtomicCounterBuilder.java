@@ -21,8 +21,6 @@ import org.onosproject.store.primitives.DistributedPrimitiveBuilder;
  * Builder for AtomicCounter.
  */
 public abstract class AtomicCounterBuilder
-    extends DistributedPrimitiveBuilder<AtomicCounterBuilder, AsyncAtomicCounter> {
-    public AtomicCounterBuilder() {
-        super(DistributedPrimitive.Type.COUNTER);
-    }
+    extends AtomicCounterOptions<AtomicCounterBuilder>
+    implements DistributedPrimitiveBuilder<AsyncAtomicCounter> {
 }

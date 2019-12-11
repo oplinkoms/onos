@@ -19,22 +19,28 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.onosproject.net.AnnotationKeys;
-import org.onosproject.net.ChannelSpacing;
 import org.onosproject.net.ConnectPoint;
-import org.onosproject.net.DefaultOchSignalComparator;
-import org.onosproject.net.DeviceId;
 import org.onosproject.net.GridType;
-import org.onosproject.net.Link;
 import org.onosproject.net.OchSignal;
-import org.onosproject.net.OchSignalType;
 import org.onosproject.net.Path;
+import org.onosproject.net.ChannelSpacing;
 import org.onosproject.net.Port;
+import org.onosproject.net.Link;
+import org.onosproject.net.DeviceId;
+import org.onosproject.net.Annotations;
+import org.onosproject.net.AnnotationKeys;
+import org.onosproject.net.DefaultAnnotations;
+import org.onosproject.net.DefaultPath;
+import org.onosproject.net.OchSignalType;
+import org.onosproject.net.DefaultOchSignalComparator;
+import org.onosproject.net.DefaultLink;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.onlab.graph.ScalarWeight;
+import org.onlab.graph.Weight;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.intent.Intent;
 import org.onosproject.net.intent.IntentCompiler;
@@ -42,29 +48,29 @@ import org.onosproject.net.intent.IntentExtensionService;
 import org.onosproject.net.intent.OpticalConnectivityIntent;
 import org.onosproject.net.intent.OpticalPathIntent;
 import org.onosproject.net.optical.OchPort;
+import org.onosproject.net.provider.ProviderId;
 import org.onosproject.net.resource.Resource;
 import org.onosproject.net.resource.ResourceAllocation;
 import org.onosproject.net.resource.ResourceService;
 import org.onosproject.net.resource.Resources;
-import org.onosproject.net.topology.AdapterLinkWeigher;
-import org.onosproject.net.topology.LinkWeight;
+import org.onosproject.net.topology.LinkWeigher;
 import org.onosproject.net.topology.Topology;
 import org.onosproject.net.topology.TopologyEdge;
 import org.onosproject.net.topology.TopologyService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Collection;
+import java.util.LinkedList;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.onosproject.net.optical.device.OpticalDeviceServiceView.opticalView;
@@ -75,20 +81,22 @@ import static org.onosproject.net.optical.device.OpticalDeviceServiceView.optica
 @Component(immediate = true)
 public class OpticalConnectivityIntentCompiler implements IntentCompiler<OpticalConnectivityIntent> {
 
-    protected static final Logger log = LoggerFactory.getLogger(OpticalConnectivityIntentCompiler.class);
+    private static final Logger log = LoggerFactory.getLogger(OpticalConnectivityIntentCompiler.class);
     // By default, allocate 50 GHz lambdas (4 slots of 12.5 GHz) for each intent.
     private static final int SLOT_COUNT = 4;
+    private static final ProviderId PROVIDER_ID = new ProviderId("opticalConnectivityIntent",
+            "org.onosproject.net.optical.intent");
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected IntentExtensionService intentManager;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TopologyService topologyService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ResourceService resourceService;
 
     @Activate
@@ -131,13 +139,20 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
         resources.add(srcPortResource);
         resources.add(dstPortResource);
 
+        // If there is a suggestedPath, use this path without further checking, otherwise trigger path computation
+        Stream<Path> paths;
+        if (intent.suggestedPath().isPresent()) {
+            paths = Stream.of(intent.suggestedPath().get());
+        } else {
+            paths = getOpticalPaths(intent);
+        }
+
         // Find first path that has the required resources
-        Stream<Path> paths = getOpticalPaths(intent);
         Optional<Map.Entry<Path, List<OchSignal>>> found = paths
                 .map(path -> Maps.immutableEntry(path, findFirstAvailableLambda(intent, path)))
                 .filter(entry -> !entry.getValue().isEmpty())
                 .filter(entry -> convertToResources(entry.getKey(),
-                                                    entry.getValue()).stream().allMatch(resourceService::isAvailable))
+                        entry.getValue()).stream().allMatch(resourceService::isAvailable))
                 .findFirst();
 
         // Allocate resources and create optical path intent
@@ -157,8 +172,8 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
      * Only supports fixed grid for now.
      *
      * @param parentIntent this intent (used for resource tracking)
-     * @param path the path to use
-     * @param lambda the lambda to use
+     * @param path         the path to use
+     * @param lambda       the lambda to use
      * @return optical path intent
      */
     private Intent createIntent(OpticalConnectivityIntent parentIntent, Path path, OchSignal lambda) {
@@ -180,7 +195,7 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
     /**
      * Convert given lambda as discrete resource of all path ports.
      *
-     * @param path the path
+     * @param path   the path
      * @param lambda the lambda
      * @return list of discrete resources
      */
@@ -197,7 +212,7 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
     /**
      * Reserve all required resources for this intent.
      *
-     * @param intent the intent
+     * @param intent    the intent
      * @param resources list of resources to reserve
      */
     private void allocateResources(Intent intent, List<Resource> resources) {
@@ -252,7 +267,7 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
 
     /**
      * Get the number of 12.5 GHz slots required for the path.
-     *
+     * <p>
      * For now this returns a constant value of 4 (i.e., fixed grid 50 GHz slot),
      * but in the future can depend on optical reach, line rate, transponder port capabilities, etc.
      *
@@ -284,14 +299,17 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
      * Returns list of consecutive resources in given set of lambdas.
      *
      * @param lambdas list of lambdas
-     * @param count number of consecutive lambdas to return
+     * @param count   number of consecutive lambdas to return
      * @return list of consecutive lambdas
      */
     private List<OchSignal> findFirstLambda(Set<OchSignal> lambdas, int count) {
         // Sort available lambdas
         List<OchSignal> lambdaList = new ArrayList<>(lambdas);
         lambdaList.sort(new DefaultOchSignalComparator());
-
+        //Means there is only exactly one set of lambdas available
+        if (lambdaList.size() == count) {
+            return lambdaList;
+        }
         // Look ahead by count and ensure spacing multiplier is as expected (i.e., no gaps)
         for (int i = 0; i < lambdaList.size() - count; i++) {
             if (lambdaList.get(i).spacingMultiplier() + 2 * count ==
@@ -330,45 +348,88 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
         // Route in WDM topology
         Topology topology = topologyService.currentTopology();
         //TODO: refactor with LinkWeigher class Implementation
-        LinkWeight weight = new LinkWeight() {
+        LinkWeigher weight = new LinkWeigher() {
 
             @Override
-            public double weight(TopologyEdge edge) {
+            public Weight getInitialWeight() {
+                return ScalarWeight.toWeight(0.0);
+            }
+
+            @Override
+            public Weight getNonViableWeight() {
+                return ScalarWeight.NON_VIABLE_WEIGHT;
+            }
+
+            /**
+             *
+             * @param edge edge to be weighed
+             * @return the metric retrieved from the annotations otherwise 1
+             */
+            @Override
+            public Weight weight(TopologyEdge edge) {
+
+                log.debug("Link {} metric {}", edge.link(), edge.link().annotations().value("metric"));
+
                 // Disregard inactive or non-optical links
                 if (edge.link().state() == Link.State.INACTIVE) {
-                    return -1;
+                    return ScalarWeight.toWeight(-1);
                 }
                 if (edge.link().type() != Link.Type.OPTICAL) {
-                    return -1;
+                    return ScalarWeight.toWeight(-1);
                 }
                 // Adhere to static port mappings
                 DeviceId srcDeviceId = edge.link().src().deviceId();
                 if (srcDeviceId.equals(intent.getSrc().deviceId())) {
                     ConnectPoint srcStaticPort = staticPort(intent.getSrc());
                     if (srcStaticPort != null) {
-                        return srcStaticPort.equals(edge.link().src()) ? 1 : -1;
+                        return ScalarWeight.toWeight(srcStaticPort.equals(edge.link().src()) ? 1 : -1);
                     }
                 }
                 DeviceId dstDeviceId = edge.link().dst().deviceId();
                 if (dstDeviceId.equals(intent.getDst().deviceId())) {
                     ConnectPoint dstStaticPort = staticPort(intent.getDst());
                     if (dstStaticPort != null) {
-                        return dstStaticPort.equals(edge.link().dst()) ? 1 : -1;
+                        return ScalarWeight.toWeight(dstStaticPort.equals(edge.link().dst()) ? 1 : -1);
                     }
                 }
 
-                return 1;
+                Annotations annotations = edge.link().annotations();
+                if (annotations != null &&
+                        annotations.value("metric") != null && !annotations.value("metric").isEmpty()) {
+                    double metric = Double.parseDouble(annotations.value("metric"));
+                    return ScalarWeight.toWeight(metric);
+                } else {
+                    return ScalarWeight.toWeight(1);
+                }
             }
         };
 
         ConnectPoint start = intent.getSrc();
         ConnectPoint end = intent.getDst();
+
+        // 0 hop case
+        if (start.deviceId().equals(end.deviceId())) {
+            log.debug("install optical intent for 0 hop i.e srcDeviceId=dstDeviceId");
+            DefaultLink defaultLink = DefaultLink.builder()
+                    .providerId(PROVIDER_ID)
+                    .src(start)
+                    .dst(end)
+                    .state(Link.State.ACTIVE)
+                    .type(Link.Type.DIRECT)
+                    .isExpected(true)
+                    .build();
+            List<Link> links = ImmutableList.<Link>builder().add(defaultLink).build();
+            Annotations annotations = DefaultAnnotations.builder().build();
+            DefaultPath defaultPath = new DefaultPath(PROVIDER_ID, links, null, annotations);
+            return ImmutableList.<Path>builder().add(defaultPath).build().stream();
+        }
+
         //head link's src port should be same as intent src port and tail link dst port
         //should be same as intent dst port in the path.
         Stream<Path> paths = topologyService.getKShortestPaths(topology,
                 start.deviceId(),
                 end.deviceId(),
-                AdapterLinkWeigher.adapt(weight))
+                weight)
                 .filter(p -> p.links().get(0).src().port().equals(start.port()) &&
                         p.links().get(p.links().size() - 1).dst().port().equals(end.port()));
         if (log.isDebugEnabled()) {
@@ -376,12 +437,13 @@ public class OpticalConnectivityIntentCompiler implements IntentCompiler<Optical
                     .map(path -> {
                         // no-op map stage to add debug logging
                         log.debug("Candidate path: {}",
-                                  path.links().stream()
-                                          .map(lk -> lk.src() + "-" + lk.dst())
-                                          .collect(Collectors.toList()));
+                                path.links().stream()
+                                        .map(lk -> lk.src() + "-" + lk.dst())
+                                        .collect(Collectors.toList()));
                         return path;
                     });
         }
+
         return paths;
     }
 }

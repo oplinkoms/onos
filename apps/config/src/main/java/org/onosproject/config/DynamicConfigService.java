@@ -115,10 +115,9 @@ public interface DynamicConfigService
     /**
      * Invokes an RPC.
      *
-     * @param id of RPC node
-     * @param input RPC input
+     * @param input RPC input with ResourceId and DataNode
      * @return future that will be completed with RpcOutput
      * @throws FailedException if the RPC could not be invoked
      */
-    CompletableFuture<RpcOutput> invokeRpc(ResourceId id, RpcInput input);
+    CompletableFuture<RpcOutput> invokeRpc(RpcInput input);
 }

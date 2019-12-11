@@ -73,8 +73,17 @@ public interface NextObjective extends Objective {
      * The collection of treatments that need to be applied to a set of traffic.
      *
      * @return a collection of traffic treatments
+     * @deprecated in 1.14.2, replaced by {@link #nextTreatments}
      */
+    @Deprecated
     Collection<TrafficTreatment> next();
+
+    /**
+     * The collection of next treatments that need to be applied to a set of traffic.
+     *
+     * @return a collection of next treatments
+     */
+    Collection<NextTreatment> nextTreatments();
 
     /**
      * The type of operation that will be applied to the traffic using the collection
@@ -93,6 +102,14 @@ public interface NextObjective extends Objective {
      *         Value may be null if no meta information is provided.
      */
     TrafficSelector meta();
+
+    /**
+     * Returns a new builder set to create a copy of this objective.
+     *
+     * @return new builder
+     */
+    @Override
+    Builder copy();
 
     /**
      * A next step builder.
@@ -120,8 +137,18 @@ public interface NextObjective extends Objective {
          *
          * @param treatment a traffic treatment
          * @return a next step builder
+         * @deprecated in 1.14.2, replaced by {@link #addTreatment(NextTreatment)}
          */
+        @Deprecated
         Builder addTreatment(TrafficTreatment treatment);
+
+        /**
+         * Adds a next treatment to this next step.
+         *
+         * @param nextTreatment a next treatment
+         * @return a next step builder
+         */
+        Builder addTreatment(NextTreatment nextTreatment);
 
         /**
          * Specifies the application which applied the filter.
@@ -218,6 +245,23 @@ public interface NextObjective extends Objective {
          * @return a next objective
          */
         NextObjective removeFromExisting(ObjectiveContext context);
+
+        /**
+         * Build the next objective that will be modified with {@link Operation}
+         * MODIFY.
+         *
+         * @return a next objective
+         */
+
+        NextObjective modify();
+        /**
+         * Build the next objective that will be modified, with {@link Operation}
+         * MODIFY. The context will be used to notify the calling application.
+         *
+         * @param context an objective context
+         * @return a next objective
+         */
+        NextObjective modify(ObjectiveContext context);
 
         /**
          * Builds the next objective that needs to be verified.

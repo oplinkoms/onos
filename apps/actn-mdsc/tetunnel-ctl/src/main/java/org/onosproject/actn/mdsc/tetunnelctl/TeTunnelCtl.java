@@ -16,11 +16,11 @@
 package org.onosproject.actn.mdsc.tetunnelctl;
 
 import com.google.common.collect.Lists;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.onosproject.actn.mdsc.pce.TeTunnelPceService;
 import org.onosproject.incubator.net.tunnel.Tunnel;
 import org.onosproject.incubator.net.tunnel.TunnelAdminService;
@@ -63,22 +63,22 @@ public class TeTunnelCtl {
 
     private final TunnelListener tunnelListener = new InternalTunnelListener();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TunnelService tunnelService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TunnelAdminService tunnelAdminService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TeTunnelService teTunnelService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TeTunnelAdminService teTunnelAdminService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TeTopologyService teTopologyService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TeTunnelPceService teTunnelPceService;
 
     @Activate
@@ -254,7 +254,7 @@ public class TeTunnelCtl {
 
     private TeTunnelKey getNextTeTunnelKey(TeTopologyKey key) {
         //FIXME need a better way to get a te tunnel id
-        long teTunnelId = teTunnelService.getTeTunnels(key).size() + 1;
+        long teTunnelId = teTunnelService.getTeTunnels(key).size() + 1L;
         return new TeTunnelKey(key, teTunnelId);
     }
 

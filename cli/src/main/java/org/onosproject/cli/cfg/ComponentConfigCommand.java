@@ -18,9 +18,11 @@ package org.onosproject.cli.cfg;
 import java.util.Optional;
 import java.util.Set;
 
-import org.apache.karaf.shell.commands.Argument;
-import org.apache.karaf.shell.commands.Command;
-import org.apache.karaf.shell.commands.Option;
+import org.apache.karaf.shell.api.action.Argument;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.Completion;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.api.action.Option;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cfg.ConfigProperty;
 import org.onosproject.cli.AbstractShellCommand;
@@ -35,12 +37,14 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 /**
  * Manages component configuration.
  */
+@Service
 @Command(scope = "onos", name = "cfg",
         description = "Manages component configuration")
 public class ComponentConfigCommand extends AbstractShellCommand {
 
     static final String GET = "get";
     static final String SET = "set";
+    static final String PRESET = "preset";
 
     private static final String FMT = "    name=%s, type=%s, value=%s, defaultValue=%s, description=%s";
     private static final String SHORT_FMT = "    %s=%s";
@@ -51,16 +55,19 @@ public class ComponentConfigCommand extends AbstractShellCommand {
 
 
     @Argument(index = 0, name = "command",
-            description = "Command name (get|set)",
+            description = "Command name (get|set|preset)",
             required = false, multiValued = false)
+    @Completion(ComponentConfigCommandCompleter.class)
     String command = null;
 
     @Argument(index = 1, name = "component", description = "Component name",
             required = false, multiValued = false)
+    @Completion(ComponentNameCompleter.class)
     String component = null;
 
     @Argument(index = 2, name = "name", description = "Property name",
             required = false, multiValued = false)
+    @Completion(ComponentPropertyNameCompleter.class)
     String name = null;
 
     @Argument(index = 3, name = "value", description = "Property value",
@@ -70,7 +77,7 @@ public class ComponentConfigCommand extends AbstractShellCommand {
     ComponentConfigService service;
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         service = get(ComponentConfigService.class);
         try {
             if (isNullOrEmpty(command)) {
@@ -85,6 +92,8 @@ public class ComponentConfigCommand extends AbstractShellCommand {
                 service.unsetProperty(component, name);
             } else if (command.equals(SET)) {
                 service.setProperty(component, name, value);
+            } else if (command.equals(PRESET)) {
+                service.preSetProperty(component, name, value);
             } else {
                 error("Illegal usage");
             }

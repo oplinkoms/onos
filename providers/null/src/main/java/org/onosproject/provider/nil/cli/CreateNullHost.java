@@ -16,104 +16,111 @@
 
 package org.onosproject.provider.nil.cli;
 
-import org.apache.karaf.shell.commands.Argument;
-import org.apache.karaf.shell.commands.Command;
+import com.google.common.collect.ImmutableSet;
+import org.apache.karaf.shell.api.action.Argument;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onlab.packet.IpAddress;
-import org.onosproject.cli.AbstractShellCommand;
+import org.onlab.util.Tools;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.HostId;
 import org.onosproject.net.HostLocation;
 import org.onosproject.net.config.NetworkConfigService;
 import org.onosproject.net.config.basics.BasicHostConfig;
-import org.onosproject.net.edge.EdgePortService;
-import org.onosproject.net.host.HostService;
 import org.onosproject.provider.nil.CustomTopologySimulator;
 import org.onosproject.provider.nil.NullProviders;
 import org.onosproject.provider.nil.TopologySimulator;
 
-import java.util.HashSet;
-import java.util.Iterator;
+import java.util.Set;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Adds a simulated end-station host to the custom topology simulation.
  */
+@Service
 @Command(scope = "onos", name = "null-create-host",
         description = "Adds a simulated end-station host to the custom topology simulation")
-public class CreateNullHost extends AbstractShellCommand {
-    private static final String GEO = "geo";
-    private static final String GRID = "grid";
+public class CreateNullHost extends CreateNullEntity {
 
-    @Argument(index = 0, name = "deviceName", description = "Name of device where host is attached",
-            required = true, multiValued = false)
-    String deviceName = null;
+    @Argument(index = 0, name = "deviceNames", description = "Name of device where host is attached; comma-separated",
+            required = true)
+    String deviceNames = null;
 
-    @Argument(index = 1, name = "hostIp", description = "Host IP address",
-            required = true, multiValued = false)
-    String hostIp = null;
+    @Argument(index = 1, name = "hostIps", description = "Host IP addresses; comma-separated",
+            required = true)
+    String hostIps = null;
 
     @Argument(index = 2, name = "latOrY",
             description = "Geo latitude / Grid y-coord",
-            required = true, multiValued = false)
+            required = false)
     Double latOrY = null;
 
     @Argument(index = 3, name = "longOrX",
             description = "Geo longitude / Grid x-coord",
-            required = true, multiValued = false)
+            required = false)
     Double longOrX = null;
 
     @Argument(index = 4, name = "locType", description = "Location type {geo|grid}",
-            required = false, multiValued = false)
+            required = false)
     String locType = GEO;
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         NullProviders service = get(NullProviders.class);
         NetworkConfigService cfgService = get(NetworkConfigService.class);
 
         TopologySimulator simulator = service.currentSimulator();
-        if (!(simulator instanceof CustomTopologySimulator)) {
-            error("Custom topology simulator is not active.");
-            return;
-        }
-
-        if (!(GEO.equals(locType) || GRID.equals(locType))) {
-            error("locType must be 'geo' or 'grid'.");
+        if (!validateSimulator(simulator) || !validateLocType(locType)) {
             return;
         }
 
         CustomTopologySimulator sim = (CustomTopologySimulator) simulator;
-        DeviceId deviceId = sim.deviceId(deviceName);
         HostId id = sim.nextHostId();
-        HostLocation location = findAvailablePort(deviceId);
-        BasicHostConfig cfg = cfgService.addConfig(id, BasicHostConfig.class);
-
-        cfg.locType(locType);
-        cfg.setLocations(new HashSet<HostLocation>() {{ add(location); }});
-
-        if (GEO.equals(locType)) {
-            cfg.latitude(latOrY).longitude(longOrX);
-        } else {
-            cfg.gridX(longOrX).gridY(latOrY);
+        Set<HostLocation> locations;
+        try {
+            locations = getLocations(sim, deviceNames);
+        } catch (NoLocationException e) {
+            error("\u001B[1;31mHost not created - no location (free port) available on %s\u001B[0m", e.getMessage());
+            return;
         }
-        cfg.apply();
+        Set<IpAddress> ips = getIps(hostIps);
 
-        sim.createHost(id, location, IpAddress.valueOf(hostIp));
+        BasicHostConfig cfg = cfgService.addConfig(id, BasicHostConfig.class);
+        setUiCoordinates(cfg, locType, latOrY, longOrX);
+
+        Tools.delay(10);
+        sim.createHost(id, locations, ips);
+    }
+
+    private Set<IpAddress> getIps(String hostIps) {
+        ImmutableSet.Builder<IpAddress> ips = ImmutableSet.builder();
+        String[] csv = hostIps.split(",");
+        for (String s : csv) {
+            ips.add(IpAddress.valueOf(s));
+        }
+        return ips.build();
+    }
+
+    private Set<HostLocation> getLocations(CustomTopologySimulator sim, String deviceNames)
+            throws NoLocationException {
+        ImmutableSet.Builder<HostLocation> locations = ImmutableSet.builder();
+        String[] csv = deviceNames.split(",");
+        for (String s : csv) {
+            HostLocation loc = findAvailablePort(sim.deviceId(s));
+            if (loc == null) {
+                throw new NoLocationException(deviceNames);
+            }
+            locations.add(requireNonNull(findAvailablePort(sim.deviceId(s))));
+        }
+        return locations.build();
     }
 
     // Finds an available connect point among edge ports of the specified device
     private HostLocation findAvailablePort(DeviceId deviceId) {
-        EdgePortService eps = get(EdgePortService.class);
-        HostService hs = get(HostService.class);
-        Iterator<ConnectPoint> points = eps.getEdgePoints(deviceId).iterator();
-
-        while (points.hasNext()) {
-            ConnectPoint point = points.next();
-            if (hs.getConnectedHosts(point).isEmpty()) {
-                return new HostLocation(point, System.currentTimeMillis());
-            }
-        }
-        return null;
+        ConnectPoint point = findAvailablePort(deviceId, null);
+        return point == null ? null : new HostLocation(point, System.currentTimeMillis());
     }
 
 }

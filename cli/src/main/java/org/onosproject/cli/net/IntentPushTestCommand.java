@@ -16,14 +16,18 @@
 package org.onosproject.cli.net;
 
 import com.google.common.collect.Lists;
-import org.apache.karaf.shell.commands.Argument;
-import org.apache.karaf.shell.commands.Command;
-import org.apache.karaf.shell.commands.Option;
+import org.apache.karaf.shell.api.action.Argument;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.Completion;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.api.action.Option;
+import org.apache.karaf.shell.support.completers.NullCompleter;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.MacAddress;
 import org.onosproject.cli.AbstractShellCommand;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.FilteredConnectPoint;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
@@ -49,6 +53,7 @@ import static org.onosproject.net.PortNumber.portNumber;
 /**
  * Installs bulk point-to-point connectivity intents between given ingress/egress devices.
  */
+@Service
 @Command(scope = "onos", name = "push-test-intents",
          description = "Installs random intents to test throughput")
 public class IntentPushTestCommand extends AbstractShellCommand
@@ -57,16 +62,19 @@ public class IntentPushTestCommand extends AbstractShellCommand
     @Argument(index = 0, name = "ingressDevice",
               description = "Ingress Device/Port Description",
               required = true, multiValued = false)
+    @Completion(ConnectPointCompleter.class)
     String ingressDeviceString = null;
 
     @Argument(index = 1, name = "egressDevice",
               description = "Egress Device/Port Description",
               required = true, multiValued = false)
+    @Completion(ConnectPointCompleter.class)
     String egressDeviceString = null;
 
     @Argument(index = 2, name = "numberOfIntents",
             description = "Number of intents to install/withdraw",
             required = true, multiValued = false)
+    @Completion(NullCompleter.class)
     String numberOfIntents = null;
 
     @Argument(index = 3, name = "keyOffset",
@@ -94,7 +102,7 @@ public class IntentPushTestCommand extends AbstractShellCommand
     List<Key> keysForWithdraw = new ArrayList<>();
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         service = get(IntentService.class);
 
 
@@ -134,7 +142,7 @@ public class IntentPushTestCommand extends AbstractShellCommand
         TrafficTreatment treatment = DefaultTrafficTreatment.emptyTreatment();
 
         List<Intent> intents = Lists.newArrayList();
-        for (int i = 0; i < count; i++) {
+        for (long i = 0; i < count; i++) {
             TrafficSelector selector = selectorBldr
                     .matchEthSrc(MacAddress.valueOf(i + keyOffset))
                     .build();
@@ -143,8 +151,8 @@ public class IntentPushTestCommand extends AbstractShellCommand
                     .key(Key.of(i + keyOffset, appId()))
                     .selector(selector)
                     .treatment(treatment)
-                    .ingressPoint(ingress)
-                    .egressPoint(egress)
+                    .filteredIngressPoint(new FilteredConnectPoint(ingress))
+                    .filteredEgressPoint(new FilteredConnectPoint(egress))
                     .build());
             keysForInstall.add(Key.of(i + keyOffset, appId()));
             keysForWithdraw.add(Key.of(i + keyOffset, appId()));
@@ -167,7 +175,7 @@ public class IntentPushTestCommand extends AbstractShellCommand
         try {
             // In this way with the tests in place the timeout will be
             // 61 seconds.
-            if (latch.await(1000 + count * 60, TimeUnit.MILLISECONDS)) {
+            if (latch.await(1000L + count * 60L, TimeUnit.MILLISECONDS)) {
                 printResults(count);
             } else {
                 print("Failure: %d intents not installed", latch.getCount());

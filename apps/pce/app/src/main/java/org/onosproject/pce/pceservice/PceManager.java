@@ -15,27 +15,14 @@
  */
 package org.onosproject.pce.pceservice;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
-import org.onosproject.net.DisjointPath;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
+import org.onlab.graph.ScalarWeight;
+import org.onlab.graph.Weight;
 import org.onlab.packet.IpAddress;
 import org.onlab.util.Bandwidth;
+import org.onosproject.bandwidthmgr.api.BandwidthMgmtService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.core.IdGenerator;
@@ -49,38 +36,38 @@ import org.onosproject.incubator.net.tunnel.TunnelListener;
 import org.onosproject.incubator.net.tunnel.TunnelName;
 import org.onosproject.incubator.net.tunnel.TunnelService;
 import org.onosproject.mastership.MastershipService;
-import org.onosproject.net.LinkKey;
-import org.onosproject.net.config.ConfigFactory;
-import org.onosproject.net.config.NetworkConfigRegistry;
-import org.onosproject.net.config.NetworkConfigService;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.DefaultAnnotations.Builder;
 import org.onosproject.net.DefaultPath;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.DisjointPath;
 import org.onosproject.net.Link;
+import org.onosproject.net.LinkKey;
+import org.onosproject.net.MastershipRole;
 import org.onosproject.net.NetworkResource;
 import org.onosproject.net.Path;
+import org.onosproject.net.config.ConfigFactory;
+import org.onosproject.net.config.NetworkConfigRegistry;
+import org.onosproject.net.config.NetworkConfigService;
 import org.onosproject.net.config.basics.SubjectFactories;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.intent.Constraint;
 import org.onosproject.net.link.LinkEvent;
-import org.onosproject.net.MastershipRole;
-import org.onosproject.bandwidthmgr.api.BandwidthMgmtService;
-import org.onosproject.pce.pceservice.constraint.CapabilityConstraint;
-import org.onosproject.pce.pceservice.constraint.CapabilityConstraint.CapabilityType;
-import org.onosproject.pce.pceservice.constraint.CostConstraint;
-import org.onosproject.pce.pceservice.constraint.PceBandwidthConstraint;
-import org.onosproject.pce.pceservice.constraint.SharedBandwidthConstraint;
 import org.onosproject.net.resource.Resource;
 import org.onosproject.net.resource.ResourceAllocation;
-import org.onosproject.net.topology.LinkWeight;
+import org.onosproject.net.topology.LinkWeigher;
 import org.onosproject.net.topology.PathService;
 import org.onosproject.net.topology.TopologyEdge;
 import org.onosproject.net.topology.TopologyEvent;
 import org.onosproject.net.topology.TopologyListener;
 import org.onosproject.net.topology.TopologyService;
 import org.onosproject.pce.pceservice.api.PceService;
+import org.onosproject.pce.pceservice.constraint.CapabilityConstraint;
+import org.onosproject.pce.pceservice.constraint.CapabilityConstraint.CapabilityType;
+import org.onosproject.pce.pceservice.constraint.CostConstraint;
+import org.onosproject.pce.pceservice.constraint.PceBandwidthConstraint;
+import org.onosproject.pce.pceservice.constraint.SharedBandwidthConstraint;
 import org.onosproject.pce.pcestore.PcePathInfo;
 import org.onosproject.pce.pcestore.api.PceStore;
 import org.onosproject.pcep.api.DeviceCapability;
@@ -89,31 +76,43 @@ import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.DistributedSet;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.incubator.net.tunnel.Tunnel.State.INIT;
 import static org.onosproject.incubator.net.tunnel.Tunnel.State.UNSTABLE;
 import static org.onosproject.incubator.net.tunnel.Tunnel.Type.MPLS;
 import static org.onosproject.pce.pceservice.LspType.WITH_SIGNALLING;
 import static org.onosproject.pce.pceservice.PcepAnnotationKeys.BANDWIDTH;
+import static org.onosproject.pce.pceservice.PcepAnnotationKeys.COST_TYPE;
+import static org.onosproject.pce.pceservice.PcepAnnotationKeys.DELEGATE;
 import static org.onosproject.pce.pceservice.PcepAnnotationKeys.LOCAL_LSP_ID;
 import static org.onosproject.pce.pceservice.PcepAnnotationKeys.LSP_SIG_TYPE;
+import static org.onosproject.pce.pceservice.PcepAnnotationKeys.PCC_TUNNEL_ID;
 import static org.onosproject.pce.pceservice.PcepAnnotationKeys.PCE_INIT;
 import static org.onosproject.pce.pceservice.PcepAnnotationKeys.PLSP_ID;
-import static org.onosproject.pce.pceservice.PcepAnnotationKeys.PCC_TUNNEL_ID;
-import static org.onosproject.pce.pceservice.PcepAnnotationKeys.DELEGATE;
-import static org.onosproject.pce.pceservice.PcepAnnotationKeys.COST_TYPE;
 
 /**
  * Implementation of PCE service.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = PceManager.class)
 public class PceManager implements PceService {
     private static final Logger log = LoggerFactory.getLogger(PceManager.class);
 
@@ -132,37 +131,37 @@ public class PceManager implements PceService {
     private IdGenerator localLspIdIdGen;
     protected DistributedSet<Short> localLspIdFreeList;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected PathService pathService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected PceStore pceStore;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TunnelService tunnelService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected StorageService storageService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected NetworkConfigService netCfgService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected MastershipService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TopologyService topologyService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected BandwidthMgmtService bandwidthMgmtService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected NetworkConfigRegistry netConfigRegistry;
 
     private TunnelListener listener = new InnerTunnelListener();
@@ -224,7 +223,7 @@ public class PceManager implements PceService {
      * @param constraints path constraints
      * @return edge-weight function
      */
-    private LinkWeight weight(List<Constraint> constraints) {
+    private LinkWeigher weight(List<Constraint> constraints) {
         return new TeConstraintBasedLinkWeight(constraints);
     }
 
@@ -398,7 +397,7 @@ public class PceManager implements PceService {
                     //Log.info("computeExplicitPath :: finalComputedPath " + finalComputedPath);
 
                     if (finalComputedPath != null && !finalComputedPath.get(finalComputedPath.size() - 1).links()
-                            .contains((Link) info.value())) {
+                            .contains(info.value())) {
                         finalComputedPath = null;
                     }
                 }
@@ -532,7 +531,8 @@ public class PceManager implements PceService {
                 links.addAll(path.links());
                 totalCost = totalCost + path.cost();
             }
-            computedPathSet.add(new DefaultPath(finalComputedPath.iterator().next().providerId(), links, totalCost));
+            computedPathSet.add(new DefaultPath(finalComputedPath.iterator().next().providerId(), links,
+                    ScalarWeight.toWeight(totalCost)));
         } else {
             computedPathSet = computePath(src, dst, constraints);
         }
@@ -610,10 +610,7 @@ public class PceManager implements PceService {
             return false;
         }
 
-        DisjointPath path = null;
-        if (!paths.isEmpty()) {
-            path = paths.iterator().next();
-        }
+        DisjointPath path = paths.iterator().next();
 
         Builder annotationBuilder = DefaultAnnotations.builder();
         double bw = 0;
@@ -807,7 +804,7 @@ public class PceManager implements PceService {
                 totalCost = totalCost + path.cost();
             }
             computedPathSet.add(new DefaultPath(finalComputedPath.iterator().next().providerId(),
-                    totalLinks, totalCost));
+                    totalLinks, ScalarWeight.toWeight(totalCost)));
         } else {
             computedPathSet = computePath(tunnel.path().src().deviceId(), tunnel.path().dst().deviceId(),
                     constraints);
@@ -916,7 +913,6 @@ public class PceManager implements PceService {
     private boolean releaseSharedBwForNewTunnel(Path computedPath, double bandwidthConstraint,
                                                 SharedBandwidthConstraint shBwConstraint) {
         checkNotNull(computedPath);
-        checkNotNull(bandwidthConstraint);
         double bwToAllocate;
 
         Double additionalBwValue = null;
@@ -959,7 +955,7 @@ public class PceManager implements PceService {
         return value;
     }
 
-    protected class TeConstraintBasedLinkWeight implements LinkWeight {
+    protected class TeConstraintBasedLinkWeight implements LinkWeigher {
 
         private final List<Constraint> constraints;
 
@@ -978,10 +974,20 @@ public class PceManager implements PceService {
         }
 
         @Override
-        public double weight(TopologyEdge edge) {
+        public Weight getInitialWeight() {
+            return ScalarWeight.toWeight(0.0);
+        }
+
+        @Override
+        public Weight getNonViableWeight() {
+            return ScalarWeight.toWeight(0.0);
+        }
+
+        @Override
+        public Weight weight(TopologyEdge edge) {
             if (!constraints.iterator().hasNext()) {
                 //Takes default cost/hopcount as 1 if no constraints specified
-                return 1.0;
+                return ScalarWeight.toWeight(1.0);
             }
 
             Iterator<Constraint> it = constraints.iterator();
@@ -1005,7 +1011,7 @@ public class PceManager implements PceService {
                     cost = constraint.cost(edge.link(), null);
                 }
             }
-            return cost;
+            return ScalarWeight.toWeight(cost);
         }
     }
 
@@ -1074,7 +1080,6 @@ public class PceManager implements PceService {
     private boolean reserveBandwidth(Path computedPath, double bandwidthConstraint,
                                   SharedBandwidthConstraint shBwConstraint) {
         checkNotNull(computedPath);
-        checkNotNull(bandwidthConstraint);
         Resource resource = null;
         double bwToAllocate = 0;
         Map<Link, Double> linkMap = new HashMap<>();

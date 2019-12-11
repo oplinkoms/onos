@@ -16,11 +16,11 @@
 
 package org.onosproject.openstacknode.cli;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.google.common.collect.Lists;
-import org.apache.karaf.shell.commands.Command;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onosproject.cli.AbstractShellCommand;
 import org.onosproject.openstacknode.api.OpenstackNode;
 import org.onosproject.openstacknode.api.OpenstackNodeService;
@@ -28,57 +28,53 @@ import org.onosproject.openstacknode.api.OpenstackNodeService;
 import java.util.Comparator;
 import java.util.List;
 
+import static org.onosproject.openstacknode.api.OpenstackNode.NodeType.GATEWAY;
+import static org.onosproject.openstacknode.util.OpenstackNodeUtil.getGwByComputeNode;
+import static org.onosproject.openstacknode.util.OpenstackNodeUtil.prettyJson;
+
 /**
  * Lists all nodes registered to the service.
  */
+@Service
 @Command(scope = "onos", name = "openstack-nodes",
         description = "Lists all nodes registered in OpenStack node service")
 public class OpenstackNodeListCommand extends AbstractShellCommand {
 
-    private static final String FORMAT = "%-20s%-15s%-24s%-24s%-20s%-20s%-15s%s";
+    private static final String FORMAT = "%-20s%-15s%-24s%-24s%-20s%-20s%-15s%-15s%-15s";
 
     @Override
-    protected void execute() {
-        OpenstackNodeService osNodeService = AbstractShellCommand.get(OpenstackNodeService.class);
+    protected void doExecute() {
+        OpenstackNodeService osNodeService = get(OpenstackNodeService.class);
         List<OpenstackNode> osNodes = Lists.newArrayList(osNodeService.nodes());
         osNodes.sort(Comparator.comparing(OpenstackNode::hostname));
 
         if (outputJson()) {
             print("%s", json(osNodes));
         } else {
-            print(FORMAT, "Hostname", "Type", "Integration Bridge", "Router Bridge",
-                    "Management IP", "Data IP", "VLAN Intf", "State");
+            print(FORMAT, "Hostname", "Type", "Integration Bridge", "Management IP",
+                    "Data IP", "VLAN Intf", "Uplink Port", "State", "SelectedGw");
             for (OpenstackNode osNode : osNodes) {
                 print(FORMAT,
                         osNode.hostname(),
                         osNode.type(),
                         osNode.intgBridge(),
-                        osNode.routerBridge() != null ? osNode.routerBridge() : "",
                         osNode.managementIp(),
                         osNode.dataIp() != null ? osNode.dataIp() : "",
                         osNode.vlanIntf() != null ? osNode.vlanIntf() : "",
-                        osNode.state());
+                        osNode.uplinkPort() != null ? osNode.uplinkPort() : "",
+                        osNode.state(),
+                        getGwByComputeNode(osNodeService.completeNodes(GATEWAY), osNode));
             }
             print("Total %s nodes", osNodeService.nodes().size());
         }
     }
 
-    private JsonNode json(List<OpenstackNode> osNodes) {
+    private String json(List<OpenstackNode> osNodes) {
         ObjectMapper mapper = new ObjectMapper();
         ArrayNode result = mapper.createArrayNode();
         for (OpenstackNode osNode : osNodes) {
-            result.add(mapper.createObjectNode()
-                    .put("hostname", osNode.hostname())
-                    .put("type", osNode.type().name())
-                    .put("integrationBridge", osNode.intgBridge().toString())
-                    .put("routerBridge", osNode.routerBridge().toString())
-                    .put("managementIp", osNode.managementIp().toString())
-                    .put("dataIp", osNode.dataIp().toString())
-                    .put("vlanIntf", osNode.vlanIntf())
-                    .put("tunnelPortNum", osNode.tunnelPortNum().toString())
-                    .put("vlanPortNum", osNode.vlanPortNum().toString())
-                    .put("state", osNode.state().name()));
+            result.add(jsonForEntity(osNode, OpenstackNode.class));
         }
-        return result;
+        return prettyJson(mapper, result.toString());
     }
 }

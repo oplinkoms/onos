@@ -41,7 +41,8 @@ import java.util.Objects;
 @Path("applications")
 public class ApplicationResource extends BaseResource {
 
-    static String lastInstalledAppName = null;
+    private static String lastInstalledAppName = null;
+    private static final Object LAST_INSTALLED_APP_NAME_LOCK = new Object();
 
 
     @Path("upload")
@@ -50,12 +51,22 @@ public class ApplicationResource extends BaseResource {
     public Response upload(@QueryParam("activate") @DefaultValue("false") String activate,
                            @FormDataParam("file") InputStream stream) throws IOException {
         ApplicationAdminService service = get(ApplicationAdminService.class);
-        Application app = service.install(stream);
-        lastInstalledAppName = app.id().name();
-        if (Objects.equals(activate, "true")) {
-            service.activate(app.id());
+        try {
+            Application app = service.install(stream);
+            synchronized (LAST_INSTALLED_APP_NAME_LOCK) {
+                lastInstalledAppName = app.id().name();
+            }
+            if (Objects.equals(activate, "true")) {
+                service.activate(app.id());
+            }
+            return Response.ok().build();
+        } catch (IllegalStateException e) {
+            return Response.status(
+                    Response.Status.PRECONDITION_FAILED.getStatusCode(),
+                    e.getMessage()).build();
+        } catch (Exception e) {
+            throw e;
         }
-        return Response.ok().build();
     }
 
     /**
@@ -86,5 +97,11 @@ public class ApplicationResource extends BaseResource {
         ApplicationId appId = service.getId(name);
         Application app = service.getApplication(appId);
         return Response.ok(app.icon()).build();
+    }
+
+    static String getLastInstalledAppName() {
+        synchronized (LAST_INSTALLED_APP_NAME_LOCK) {
+            return lastInstalledAppName;
+        }
     }
 }

@@ -30,20 +30,18 @@ _EOF_
 
 node=${1:-$OCI}
 remote=$ONOS_USER@$node
+remote_scp=$ONOS_USER@[$node]
 
 # ONOS boot features
 export ONOS_BOOT_FEATURES="${ONOS_BOOT_FEATURES:-webconsole,onos-api,onos-core,onos-incubator,onos-cli,onos-rest,onos-gui}"
 
 # ONOS builtin apps and providers ignited by default
-export ONOS_APPS="${ONOS_APPS:-drivers,openflow}"
+export ONOS_APPS="${ONOS_APPS:-gui,drivers,openflow}"
 
 ssh -tt $remote "
-    echo \"onos.ip = \$(sudo ifconfig | grep $ONOS_NIC | cut -d: -f2 | cut -d\\  -f1)\" \
-        >> $ONOS_INSTALL_DIR/$KARAF_DIST/etc/system.properties
-
-    # Drop copycat related log level for the console
-    echo "log4j.logger.net.kuujo.copycat= INFO" \
-        >> $ONOS_INSTALL_DIR/$KARAF_DIST/etc/org.ops4j.pax.logging.cfg
+    # Drop atomix related log level for the console
+    echo "log4j2.logger.atomix.name = io.atomix.protocols.raft" >> $ONOS_INSTALL_DIR/$KARAF_DIST/etc/org.ops4j.pax.logging.cfg
+    echo "log4j2.logger.atomix.level = INFO" >> $ONOS_INSTALL_DIR/$KARAF_DIST/etc/org.ops4j.pax.logging.cfg
 
     # Patch the Apache Karaf distribution file to load ONOS boot features
     perl -pi.old -e \"s|^(featuresBoot=.*,management)(,webconsole,.*)|\1,$ONOS_BOOT_FEATURES|\" \
@@ -63,12 +61,12 @@ ssh -tt $remote "
 
 # Generate a default cluster.json from the ON* environment variables
 CDEF_FILE=/tmp/${remote}.cluster.json
-onos-gen-partitions $CDEF_FILE
-scp -q $CDEF_FILE $remote:$ONOS_INSTALL_DIR/config/cluster.json
+onos-gen-config $node $CDEF_FILE
+scp -q $CDEF_FILE $remote_scp:$ONOS_INSTALL_DIR/config/cluster.json
 
 # Copy tools/package/config/ to remote
-scp -qr ${ONOS_ROOT}/tools/package/config/ $remote:$ONOS_INSTALL_DIR/
+scp -qr ${ONOS_ROOT}/tools/package/config/ $remote_scp:$ONOS_INSTALL_DIR/
 
 # Copy the desired initial network configuration to remote if needed
 [ -n "$ONOS_CFG" -a -f "$ONOS_CFG" -a "${1:-$OCI}" = "$OC1" ] && \
-    scp $ONOS_CFG $remote:$ONOS_INSTALL_DIR/config/network-cfg.json || true
+    scp $ONOS_CFG $remote_scp:$ONOS_INSTALL_DIR/config/network-cfg.json || true

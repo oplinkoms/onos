@@ -13,15 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.onosproject.openflow.controller.driver;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 import org.onosproject.net.Device;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.openflow.controller.Dpid;
+import org.onosproject.openflow.controller.OpenFlowClassifier;
+import org.onosproject.openflow.controller.OpenFlowClassifierListener;
 import org.onosproject.openflow.controller.OpenFlowSession;
 import org.onosproject.openflow.controller.RoleState;
 import org.projectfloodlight.openflow.protocol.OFDescStatsReply;
@@ -36,16 +38,22 @@ import org.projectfloodlight.openflow.protocol.OFMeterFeaturesStatsReply;
 import org.projectfloodlight.openflow.protocol.OFNiciraControllerRoleRequest;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 import org.projectfloodlight.openflow.protocol.OFPortDescStatsReply;
+import org.projectfloodlight.openflow.protocol.OFPortReason;
 import org.projectfloodlight.openflow.protocol.OFPortStatus;
 import org.projectfloodlight.openflow.protocol.OFRoleReply;
 import org.projectfloodlight.openflow.protocol.OFRoleRequest;
+import org.projectfloodlight.openflow.protocol.OFType;
 import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.types.OFPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -68,22 +76,30 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
     private OpenFlowAgent agent;
     private final AtomicInteger xidCounter = new AtomicInteger(0);
 
-    private OFVersion ofVersion;
     private OFFactory ofFactory;
 
-    protected List<OFPortDescStatsReply> ports = Lists.newCopyOnWriteArrayList();
+    // known port descriptions maintained by
+    // (all)    : OFPortStatus
+    // <  OF1.3 : feature reply
+    // >= OF1.3 : multipart stats reply (OFStatsReply:PORT_DESC)
+    private Map<OFPort, OFPortDesc> portDescs = new ConcurrentHashMap<>();
 
-    protected boolean tableFull;
+    private List<OFPortDescStatsReply> ports = Lists.newCopyOnWriteArrayList();
+
+    private boolean tableFull;
 
     private RoleHandler roleMan;
 
     // TODO this is accessed from multiple threads, but volatile may have performance implications
     protected volatile RoleState role;
 
-    protected OFFeaturesReply features;
-    protected OFDescStatsReply desc;
+    private OFFeaturesReply features;
 
-    protected OFMeterFeaturesStatsReply meterfeatures;
+    private OFDescStatsReply desc;
+
+    private OFMeterFeaturesStatsReply meterfeatures;
+
+    protected OpenFlowClassifierListener classifierListener = new InternalClassifierListener();
 
     // messagesPendingMastership is used as synchronization variable for
     // all mastership related changes. In this block, mastership (including
@@ -95,7 +111,6 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
     public void init(Dpid dpid, OFDescStatsReply desc, OFVersion ofv) {
         this.dpid = dpid;
         this.desc = desc;
-        this.ofVersion = ofv;
     }
 
     //************************
@@ -226,7 +241,6 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
 
     @Override
     public final void setOFVersion(OFVersion ofV) {
-        this.ofVersion = ofV;
         this.ofFactory = OFFactories.getFactory(ofV);
     }
 
@@ -238,6 +252,10 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
     @Override
     public void setFeaturesReply(OFFeaturesReply featuresReply) {
         this.features = featuresReply;
+        if (featuresReply.getVersion().compareTo(OFVersion.OF_13) < 0) {
+            // before OF 1.3, feature reply contains OFPortDescs
+            replacePortDescsWith(featuresReply.getPorts());
+        }
     }
 
     @Override
@@ -260,9 +278,19 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
     public final void handleMessage(OFMessage m) {
         if (this.role == RoleState.MASTER || m instanceof OFPortStatus) {
             try {
+                // TODO revisit states other than ports should
+                // also ignore role state.
+                if (m.getType() == OFType.PORT_STATUS) {
+                    OFPortStatus portStatus = (OFPortStatus) m;
+                    if (portStatus.getReason() == OFPortReason.DELETE) {
+                        portDescs.remove(portStatus.getDesc().getPortNo());
+                    } else {
+                        portDescs.put(portStatus.getDesc().getPortNo(), portStatus.getDesc());
+                    }
+                }
                 this.agent.processMessage(dpid, m);
             } catch (Exception e) {
-                log.warn("Unhandled exception processing {}@{}", m, dpid, e);
+                log.warn("Unhandled exception processing {}@{}:{}", m, dpid, e.getMessage());
             }
         } else {
             log.trace("Dropping received message {}, was not MASTER", m);
@@ -276,7 +304,11 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
 
     @Override
     public final boolean connectSwitch() {
-        return this.agent.addConnectedSwitch(dpid, this);
+        boolean status = this.agent.addConnectedSwitch(dpid, this);
+        if (status) {
+            this.agent.addClassifierListener(classifierListener);
+        }
+        return status;
     }
 
     @Override
@@ -299,7 +331,7 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
         this.agent.transitionToMasterSwitch(dpid);
         synchronized (messagesPendingMastership) {
             List<OFMessage> messages = messagesPendingMastership.get();
-            if (messages != null) {
+            if (messages != null && !messages.isEmpty()) {
                 // Cannot use sendMsg here. It will only append to pending list.
                 sendMsgsOnChannel(messages);
                 log.debug("Sending {} pending messages to switch {}",
@@ -314,6 +346,7 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
     @Override
     public final void removeConnectedSwitch() {
         this.agent.removeConnectedSwitch(dpid);
+        this.agent.removeClassifierListener(classifierListener);
     }
 
     @Override
@@ -323,11 +356,32 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
 
     @Override
     public void setPortDescReply(OFPortDescStatsReply portDescReply) {
+        portDescReply.getEntries().forEach(pd -> portDescs.put(pd.getPortNo(), pd));
+
+        // maintaining only for backward compatibility, to be removed
         this.ports.add(portDescReply);
     }
 
+    protected void replacePortDescsWith(Collection<OFPortDesc> allPorts) {
+        Map<OFPort, OFPortDesc> ports = new ConcurrentHashMap<>(allPorts.size());
+        allPorts.forEach(pd -> ports.put(pd.getPortNo(), pd));
+        // replace all
+        this.portDescs = ports;
+    }
+
+    protected Map<OFPort, OFPortDesc> portDescs() {
+        return portDescs;
+    }
+
+    // only called once during handshake WAIT_DESCRIPTION_STAT_REPLY
     @Override
     public void setPortDescReplies(List<OFPortDescStatsReply> portDescReplies) {
+        replacePortDescsWith(portDescReplies.stream()
+                       .map(OFPortDescStatsReply::getEntries)
+                       .flatMap(List::stream)
+                       .collect(Collectors.toList()));
+
+        // maintaining only for backward compatibility, to be removed
         this.ports.addAll(portDescReplies);
     }
 
@@ -466,9 +520,7 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
 
     @Override
     public List<OFPortDesc> getPorts() {
-        return this.ports.stream()
-                  .flatMap(portReply -> portReply.getEntries().stream())
-                  .collect(Collectors.toList());
+        return ImmutableList.copyOf(portDescs.values());
     }
 
     @Override
@@ -478,6 +530,11 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
         } else {
             return null;
         }
+    }
+
+    @Override
+    public OFFeaturesReply features() {
+        return this.features;
     }
 
     @Override
@@ -516,5 +573,18 @@ public abstract class AbstractOpenFlowSwitch extends AbstractHandlerBehaviour
                 .add("session", channel.sessionInfo())
                 .add("dpid", dpid)
                 .toString();
+    }
+
+    private class InternalClassifierListener implements OpenFlowClassifierListener {
+
+        @Override
+        public void handleClassifiersAdd(OpenFlowClassifier classifier) {
+            channel.addClassifier(classifier);
+        }
+
+        @Override
+        public void handleClassifiersRemove(OpenFlowClassifier classifier) {
+            channel.removeClassifier(classifier);
+        }
     }
 }

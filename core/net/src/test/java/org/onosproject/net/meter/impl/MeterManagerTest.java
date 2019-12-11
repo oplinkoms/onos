@@ -33,7 +33,6 @@ import org.onosproject.cluster.ControllerNode;
 import org.onosproject.cluster.DefaultControllerNode;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.common.event.impl.TestEventDispatcher;
-import org.onosproject.incubator.store.meter.impl.DistributedMeterStore;
 import org.onosproject.mastership.MastershipServiceAdapter;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.DefaultAnnotations;
@@ -42,6 +41,8 @@ import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.behaviour.MeterQuery;
+import org.onosproject.net.config.NetworkConfigService;
+import org.onosproject.net.config.NetworkConfigServiceAdapter;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.device.DeviceServiceAdapter;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
@@ -66,21 +67,27 @@ import org.onosproject.net.meter.MeterProviderService;
 import org.onosproject.net.meter.MeterRequest;
 import org.onosproject.net.meter.MeterService;
 import org.onosproject.net.meter.MeterState;
+import org.onosproject.net.pi.PiPipeconfServiceAdapter;
 import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
+import org.onosproject.store.meter.impl.DistributedMeterStore;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.TestStorageService;
 
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 import static org.onosproject.net.NetTestTools.APP_ID;
 import static org.onosproject.net.NetTestTools.did;
 import static org.onosproject.net.NetTestTools.injectEventDispatcher;
@@ -214,7 +221,7 @@ public class MeterManagerTest {
         deviceService = new TestDeviceService();
         //Init step for the driver registry and driver service.
         DriverRegistryManager driverRegistry = new DriverRegistryManager();
-        driverService = new TestDriverManager(driverRegistry, deviceService);
+        driverService = new TestDriverManager(driverRegistry, deviceService, new NetworkConfigServiceAdapter());
         driverRegistry.addDriver(new DefaultDriver("foo", ImmutableList.of(), "",
                 "", "",
                 ImmutableMap.of(MeterProgrammable.class,
@@ -519,9 +526,12 @@ public class MeterManagerTest {
     }
 
     private class TestDriverManager extends DriverManager {
-        TestDriverManager(DriverRegistry registry, DeviceService deviceService) {
+        TestDriverManager(DriverRegistry registry, DeviceService deviceService,
+                          NetworkConfigService networkConfigService) {
             this.registry = registry;
             this.deviceService = deviceService;
+            this.networkConfigService = networkConfigService;
+            this.pipeconfService = new PiPipeconfServiceAdapter();
             activate();
         }
     }

@@ -23,13 +23,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.CharsetUtil;
-import org.apache.commons.lang.exception.ExceptionUtils;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.json.JSONObject;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpPrefix;
@@ -66,6 +59,11 @@ import org.onosproject.ovsdb.controller.OvsdbClientService;
 import org.onosproject.ovsdb.controller.OvsdbController;
 import org.onosproject.ovsdb.controller.OvsdbInterface;
 import org.onosproject.routing.bgp.BgpInfoService;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,36 +73,35 @@ import java.util.Set;
 
 import static org.onlab.packet.Ethernet.TYPE_IPV4;
 
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = ArtemisDeaggregator.class)
 public class ArtemisDeaggregatorImpl implements ArtemisDeaggregator {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     private static final int PRIORITY = 1000;
 
     /* Services */
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private BgpInfoService bgpInfoService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private ArtemisService artemisService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private OvsdbController ovsdbController;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private InterfaceService interfaceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private FlowObjectiveService flowObjectiveService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private FlowRuleService flowRuleService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private CoreService coreService;
 
     /* Variables */
@@ -395,8 +392,7 @@ public class ArtemisDeaggregatorImpl implements ArtemisDeaggregator {
                             ByteBuf buffer = Unpooled.copiedBuffer(jsonInString, CharsetUtil.UTF_8);
                             ctx.writeAndFlush(buffer);
                         } catch (JsonProcessingException e) {
-                            e.printStackTrace();
-                            log.warn(ExceptionUtils.getFullStackTrace(e));
+                            log.warn("processMoasPacket()", e);
                         }
 
                         remoteTunnelIp = IpAddress.valueOf(msg.getLocalIp());
@@ -465,6 +461,7 @@ public class ArtemisDeaggregatorImpl implements ArtemisDeaggregator {
 
                         installRules();
                     }
+                    break;
                 }
                 default:
             }

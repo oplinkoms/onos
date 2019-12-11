@@ -21,6 +21,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.onlab.graph.GraphPathSearch;
+import org.onlab.graph.ScalarWeight;
 import org.onlab.junit.TestUtils;
 import org.onlab.junit.TestUtils.TestUtilsException;
 import org.onlab.util.Bandwidth;
@@ -37,6 +38,7 @@ import org.onosproject.incubator.net.tunnel.TunnelEndPoint;
 import org.onosproject.incubator.net.tunnel.TunnelEvent;
 import org.onosproject.incubator.net.tunnel.TunnelId;
 import org.onosproject.incubator.net.tunnel.TunnelListener;
+import org.onosproject.incubator.net.tunnel.TunnelServiceAdapter;
 import org.onosproject.mastership.MastershipServiceAdapter;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.Annotations;
@@ -56,7 +58,7 @@ import org.onosproject.net.link.LinkEvent;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.net.topology.DefaultTopologyEdge;
 import org.onosproject.net.topology.DefaultTopologyVertex;
-import org.onosproject.net.topology.LinkWeight;
+import org.onosproject.net.topology.LinkWeigher;
 import org.onosproject.net.topology.PathServiceAdapter;
 import org.onosproject.net.topology.Topology;
 import org.onosproject.net.topology.TopologyEdge;
@@ -71,7 +73,6 @@ import org.onosproject.pce.pceservice.constraint.PceBandwidthConstraint;
 import org.onosproject.pce.pcestore.api.PceStore;
 import org.onosproject.pce.util.MockDeviceService;
 import org.onosproject.pce.util.PceStoreAdapter;
-import org.onosproject.pce.util.TunnelServiceAdapter;
 import org.onosproject.pcep.api.DeviceCapability;
 import org.onosproject.pcep.api.TeLinkConfig;
 import org.onosproject.store.service.TestStorageService;
@@ -92,7 +93,6 @@ import static org.onlab.graph.GraphPathSearch.ALL_PATHS;
 import static org.onosproject.incubator.net.tunnel.Tunnel.State.ESTABLISHED;
 import static org.onosproject.incubator.net.tunnel.Tunnel.State.UNSTABLE;
 import static org.onosproject.net.MastershipRole.MASTER;
-import static org.onosproject.net.topology.AdapterLinkWeigher.adapt;
 import static org.onosproject.pce.pceservice.LspType.SR_WITHOUT_SIGNALLING;
 import static org.onosproject.pce.pceservice.LspType.WITHOUT_SIGNALLING_AND_WITHOUT_SR;
 import static org.onosproject.pce.pceservice.LspType.WITH_SIGNALLING;
@@ -1012,10 +1012,10 @@ public class PceManagerTest {
     }
 
     /**
-     * Tests resilency when L2 link is down.
+     * Tests resiliency when L2 link is down.
      */
     @Test
-    public void resilencyTest1() {
+    public void resiliencyTest1() {
         build4RouterTopo(true, false, false, false, 10);
 
 
@@ -1051,14 +1051,14 @@ public class PceManagerTest {
 
         //Path is D1-D3-D4
         assertThat(pathService.paths().iterator().next().links(), is(links));
-        assertThat(pathService.paths().iterator().next().cost(), is((double) 180));
+        assertThat(pathService.paths().iterator().next().weight(), is(ScalarWeight.toWeight(180.0)));
     }
 
     /**
-     * Tests resilency when L2 and L4 link is down.
+     * Tests resiliency when L2 and L4 link is down.
      */
     @Test
-    public void resilencyTest2() {
+    public void resiliencyTest2() {
         build4RouterTopo(true, false, false, false, 10);
 
         List<Constraint> constraints = new LinkedList<Constraint>();
@@ -1094,10 +1094,10 @@ public class PceManagerTest {
     }
 
     /**
-     * Tests resilency when D2 device is down.
+     * Tests resiliency when D2 device is down.
      */
     @Test
-    public void resilencyTest3() {
+    public void resiliencyTest3() {
         build4RouterTopo(true, false, false, false, 10);
 
         List<Constraint> constraints = new LinkedList<Constraint>();
@@ -1135,14 +1135,14 @@ public class PceManagerTest {
         Path path = tunnelService.queryAllTunnels().iterator().next().path();
         //Path is D1-D3-D4
         assertThat(path.links(), is(links));
-        assertThat(path.cost(), is((double) 180));
+        assertThat(path.weight(), is(ScalarWeight.toWeight(180.0)));
     }
 
     /**
-     * Tests resilency when ingress device is down.
+     * Tests resiliency when ingress device is down.
      */
     @Test
-    public void resilencyTest4() {
+    public void resiliencyTest4() {
         build4RouterTopo(true, false, false, false, 10);
 
         List<Constraint> constraints = new LinkedList<Constraint>();
@@ -1178,10 +1178,10 @@ public class PceManagerTest {
     }
 
     /**
-     * Tests resilency when D2 and D3 devices are down.
+     * Tests resiliency when D2 and D3 devices are down.
      */
     @Test
-    public void resilencyTest5() {
+    public void resiliencyTest5() {
         build4RouterTopo(true, false, false, false, 10);
 
         List<Constraint> constraints = new LinkedList<Constraint>();
@@ -1227,10 +1227,10 @@ public class PceManagerTest {
     }
 
     /**
-     * Tests resilency when egress device is down.
+     * Tests resiliency when egress device is down.
      */
     @Test
-    public void resilencyTest6() {
+    public void resiliencyTest6() {
         build4RouterTopo(true, false, false, false, 10);
 
         List<Constraint> constraints = new LinkedList<Constraint>();
@@ -1269,10 +1269,10 @@ public class PceManagerTest {
     }
 
     /**
-     * Tests resilency when egress device is down.
+     * Tests resiliency when egress device is down.
      */
     @Test
-    public void resilencyTest7() {
+    public void resiliencyTest7() {
         build4RouterTopo(true, false, false, false, 10);
 
         List<Constraint> constraints = new LinkedList<Constraint>();
@@ -1311,10 +1311,10 @@ public class PceManagerTest {
     }
 
     /**
-     * Tests resilency when D2 device is suspended.
+     * Tests resiliency when D2 device is suspended.
      */
     @Test
-    public void resilencyTest8() {
+    public void resiliencyTest8() {
         build4RouterTopo(true, false, false, false, 10);
 
         List<Constraint> constraints = new LinkedList<Constraint>();
@@ -1356,14 +1356,14 @@ public class PceManagerTest {
 
         //Path is D1-D3-D4
         assertThat(path.links(), is(links));
-        assertThat(path.cost(), is((double) 180));
+        assertThat(path.weight(), is(ScalarWeight.toWeight(180.0)));
     }
 
     /**
-     * Tests resilency when D2 device availability is changed.
+     * Tests resiliency when D2 device availability is changed.
      */
     @Test
-    public void resilencyTest11() {
+    public void resiliencyTest11() {
         build4RouterTopo(true, false, false, false, 10);
 
         List<Constraint> constraints = new LinkedList<Constraint>();
@@ -1405,14 +1405,14 @@ public class PceManagerTest {
 
         //Path is D1-D3-D4
         assertThat(path.links(), is(links));
-        assertThat(path.cost(), is((double) 180));
+        assertThat(path.weight(), is(ScalarWeight.toWeight(180.0)));
     }
 
     /**
-     * Tests resilency when link2 availability is changed.
+     * Tests resiliency when link2 availability is changed.
      */
     @Test
-    public void resilencyTest12() {
+    public void resiliencyTest12() {
         build4RouterTopo(true, false, false, false, 10);
 
         List<Constraint> constraints = new LinkedList<Constraint>();
@@ -1476,7 +1476,7 @@ public class PceManagerTest {
         }
 
         @Override
-        public Set<Path> getPaths(Topology topology, DeviceId src, DeviceId dst, LinkWeight weight) {
+        public Set<Path> getPaths(Topology topology, DeviceId src, DeviceId dst, LinkWeigher weight) {
             DefaultTopologyVertex srcV = new DefaultTopologyVertex(src);
             DefaultTopologyVertex dstV = new DefaultTopologyVertex(dst);
             Set<TopologyVertex> vertices = graph.getVertexes();
@@ -1486,7 +1486,7 @@ public class PceManagerTest {
             }
 
             GraphPathSearch.Result<TopologyVertex, TopologyEdge> result = PathComputationTest.graphSearch()
-                    .search(graph, srcV, dstV, adapt(weight), ALL_PATHS);
+                    .search(graph, srcV, dstV, weight, ALL_PATHS);
             ImmutableSet.Builder<Path> builder = ImmutableSet.builder();
             for (org.onlab.graph.Path<TopologyVertex, TopologyEdge> path : result.paths()) {
                 builder.add(PathComputationTest.networkPath(path));
@@ -1521,7 +1521,7 @@ public class PceManagerTest {
     private class MockPathService extends PathServiceAdapter {
         Set<Path> computedPaths;
         @Override
-        public Set<Path> getPaths(ElementId src, ElementId dst, LinkWeight weight) {
+        public Set<Path> getPaths(ElementId src, ElementId dst, LinkWeigher weight) {
             // If either edge is null, bail with no paths.
             if (src == null || dst == null) {
                 return ImmutableSet.of();

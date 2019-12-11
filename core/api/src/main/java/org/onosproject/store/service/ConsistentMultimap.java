@@ -23,13 +23,15 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 /**
  * This provides a synchronous version of the functionality provided by
  * {@link AsyncConsistentMultimap}.  Instead of returning futures this map
  * blocks until the future completes then returns the result.
  */
-public interface ConsistentMultimap<K, V> extends DistributedPrimitive {
+public interface ConsistentMultimap<K, V> extends DistributedPrimitive, Iterable<Map.Entry<K, V>> {
     /**
      * Returns the number of key-value pairs in this multimap.
      * @return the number of key-value pairs
@@ -89,6 +91,19 @@ public interface ConsistentMultimap<K, V> extends DistributedPrimitive {
     boolean put(K key, V value);
 
     /**
+     * If the key-value pair does not already exist adds either the key value
+     * pair or the value to the set of values associated with the key and
+     * returns the updated value, if the key-value pair already exists then behavior
+     * is implementation specific with some implementations allowing duplicates
+     * and others ignoring put requests for existing entries.
+     *
+     * @param key the key to add
+     * @param value the value to add
+     * @return the updated values
+     */
+    Versioned<Collection<? extends V>> putAndGet(K key, V value);
+
+    /**
      * Removes the key-value pair with the specified values if it exists. In
      * implementations that allow duplicates which matching entry will be
      * removed is undefined.
@@ -98,6 +113,17 @@ public interface ConsistentMultimap<K, V> extends DistributedPrimitive {
      * @return true if the map changed because of this call, false otherwise.
      */
     boolean remove(K key, V value);
+
+    /**
+     * Removes the key-value pair with the specified values if it exists. In
+     * implementations that allow duplicates which matching entry will be
+     * removed is undefined.
+     *
+     * @param key the key of the pair to be removed
+     * @param value the value of the pair to be removed
+     * @return the updated values
+     */
+    Versioned<Collection<? extends V>> removeAndGet(K key, V value);
 
     /**
      * Removes the key-value pairs with the specified key and values if they
@@ -191,10 +217,23 @@ public interface ConsistentMultimap<K, V> extends DistributedPrimitive {
 
     /**
      * Returns a collection of each key-value pair in this map.
+     * <p>
+     * Do not use this method to read large maps. Use an {@link #iterator()} or {@link #stream()} instead.
      *
      * @return a collection of all entries in the map, this may be empty
      */
     Collection<Map.Entry<K, V>> entries();
+
+    /**
+     * Streams entries from the map.
+     * <p>
+     * This method is optimized for large maps.
+     *
+     * @return the map entry stream
+     */
+    default Stream<Map.Entry<K, V>> stream() {
+        return StreamSupport.stream(spliterator(), false);
+    }
 
     /**
      * Returns a map of keys to collections of values that reflect the set of

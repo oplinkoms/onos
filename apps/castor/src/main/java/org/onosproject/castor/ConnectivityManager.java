@@ -14,12 +14,7 @@
  * limitations under the License.
  */
 package org.onosproject.castor;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
+
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.IPv4;
 import org.onlab.packet.IPv6;
@@ -29,7 +24,9 @@ import org.onlab.packet.MacAddress;
 import org.onlab.packet.TpPort;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
+import org.onosproject.intentsync.IntentSynchronizationService;
 import org.onosproject.net.ConnectPoint;
+import org.onosproject.net.FilteredConnectPoint;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficSelector;
@@ -37,7 +34,11 @@ import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.intent.Key;
 import org.onosproject.net.intent.MultiPointToSinglePointIntent;
 import org.onosproject.net.intent.PointToPointIntent;
-import org.onosproject.intentsync.IntentSynchronizationService;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,17 +56,16 @@ import static com.google.common.base.Preconditions.checkNotNull;
 /**
  * Manages the connectivity requirements between peers.
  */
-@Component(immediate = true, enabled = true)
-@Service
+@Component(immediate = true, service = ConnectivityManagerService.class)
 public class ConnectivityManager implements ConnectivityManagerService {
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected IntentSynchronizationService intentSynchronizer;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CastorStore castorStore;
 
     private static final int PRIORITY_OFFSET = 1000;
@@ -188,8 +188,8 @@ public class ConnectivityManager implements ConnectivityManagerService {
                 .key(key)
                 .selector(selector)
                 .treatment(treatment)
-                .ingressPoint(portOne)
-                .egressPoint(portTwo)
+                .filteredIngressPoint(new FilteredConnectPoint(portOne))
+                .filteredEgressPoint(new FilteredConnectPoint(portTwo))
                 .priority(PRIORITY_OFFSET)
                 .build());
 
@@ -207,8 +207,8 @@ public class ConnectivityManager implements ConnectivityManagerService {
                 .key(key)
                 .selector(selector)
                 .treatment(treatment)
-                .ingressPoint(portTwo)
-                .egressPoint(portOne)
+                .filteredIngressPoint(new FilteredConnectPoint(portTwo))
+                .filteredEgressPoint(new FilteredConnectPoint(portOne))
                 .priority(PRIORITY_OFFSET)
                 .build());
 
@@ -226,8 +226,8 @@ public class ConnectivityManager implements ConnectivityManagerService {
                 .key(key)
                 .selector(selector)
                 .treatment(treatment)
-                .ingressPoint(portOne)
-                .egressPoint(portTwo)
+                .filteredIngressPoint(new FilteredConnectPoint(portOne))
+                .filteredEgressPoint(new FilteredConnectPoint(portTwo))
                 .priority(PRIORITY_OFFSET)
                 .build());
 
@@ -245,8 +245,8 @@ public class ConnectivityManager implements ConnectivityManagerService {
                 .key(key)
                 .selector(selector)
                 .treatment(treatment)
-                .ingressPoint(portTwo)
-                .egressPoint(portOne)
+                .filteredIngressPoint(new FilteredConnectPoint(portTwo))
+                .filteredEgressPoint(new FilteredConnectPoint(portOne))
                 .priority(PRIORITY_OFFSET)
                 .build());
 
@@ -321,12 +321,12 @@ public class ConnectivityManager implements ConnectivityManagerService {
             updateExistingL2Intents(peer);
         }
 
-        Set<ConnectPoint> ingressPorts = new HashSet<>();
+        Set<FilteredConnectPoint> ingressPorts = new HashSet<>();
         ConnectPoint egressPort = ConnectPoint.deviceConnectPoint(peer.getPort());
 
         for (Peer inPeer : castorStore.getAllPeers()) {
             if (!inPeer.getName().equals(peer.getName())) {
-                ingressPorts.add(ConnectPoint.deviceConnectPoint(inPeer.getPort()));
+                ingressPorts.add(new FilteredConnectPoint(ConnectPoint.deviceConnectPoint(inPeer.getPort())));
             }
         }
         TrafficSelector.Builder selector = DefaultTrafficSelector.builder();
@@ -340,8 +340,8 @@ public class ConnectivityManager implements ConnectivityManagerService {
                 .key(key)
                 .selector(selector.build())
                 .treatment(treatment)
-                .ingressPoints(ingressPorts)
-                .egressPoint(egressPort)
+                .filteredIngressPoints(ingressPorts)
+                .filteredEgressPoint(new FilteredConnectPoint(egressPort))
                 .priority(FLOW_PRIORITY)
                 .build();
         intentSynchronizer.submit(intent);
@@ -363,9 +363,9 @@ public class ConnectivityManager implements ConnectivityManagerService {
 
         for (MultiPointToSinglePointIntent oldIntent : oldIntents) {
 
-            Set<ConnectPoint> ingressPoints = oldIntent.ingressPoints();
+            Set<FilteredConnectPoint> ingressPoints = oldIntent.filteredIngressPoints();
             ConnectPoint egressPoint = oldIntent.egressPoint();
-            if (ingressPoints.add(ConnectPoint.deviceConnectPoint(peer.getPort()))) {
+            if (ingressPoints.add(new FilteredConnectPoint(ConnectPoint.deviceConnectPoint(peer.getPort())))) {
 
                 MultiPointToSinglePointIntent updatedMp2pIntent =
                         MultiPointToSinglePointIntent.builder()
@@ -373,8 +373,8 @@ public class ConnectivityManager implements ConnectivityManagerService {
                                 .key(oldIntent.key())
                                 .selector(oldIntent.selector())
                                 .treatment(oldIntent.treatment())
-                                .ingressPoints(ingressPoints)
-                                .egressPoint(egressPoint)
+                                .filteredIngressPoints(ingressPoints)
+                                .filteredEgressPoint(new FilteredConnectPoint(egressPoint))
                                 .priority(oldIntent.priority())
                                 .build();
 
@@ -452,9 +452,9 @@ public class ConnectivityManager implements ConnectivityManagerService {
 
         for (MultiPointToSinglePointIntent oldIntent : oldIntents) {
 
-            Set<ConnectPoint> ingressPoints = oldIntent.ingressPoints();
-            ConnectPoint egressPoint = oldIntent.egressPoint();
-            if (ingressPoints.remove(ConnectPoint.deviceConnectPoint(peer.getPort()))) {
+            Set<FilteredConnectPoint> ingressPoints = oldIntent.filteredIngressPoints();
+            FilteredConnectPoint egressPoint = oldIntent.filteredEgressPoint();
+            if (ingressPoints.remove(new FilteredConnectPoint(ConnectPoint.deviceConnectPoint(peer.getPort())))) {
 
                 MultiPointToSinglePointIntent updatedMp2pIntent =
                         MultiPointToSinglePointIntent.builder()
@@ -462,8 +462,8 @@ public class ConnectivityManager implements ConnectivityManagerService {
                                 .key(oldIntent.key())
                                 .selector(oldIntent.selector())
                                 .treatment(oldIntent.treatment())
-                                .ingressPoints(ingressPoints)
-                                .egressPoint(egressPoint)
+                                .filteredIngressPoints(ingressPoints)
+                                .filteredEgressPoint(egressPoint)
                                 .priority(oldIntent.priority())
                                 .build();
 

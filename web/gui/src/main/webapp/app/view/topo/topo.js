@@ -527,6 +527,16 @@
         ps.setPrefs('topo_prefs', prefsState);
     }
 
+    function applyPreferences(evt) {
+//        var zoomPrefs = ps.getPrefs('topo_zoom', null);
+//        if (ps.getPrefs('topo_prefs', null)) {
+//            restoreConfigFromPrefs();
+//        }
+//        if (zoomPrefs) {
+//            $log.debug('TOPO- Zoom State:', zoomPrefs);
+//            zoomer.panZoom([zoomPrefs.tx, zoomPrefs.ty], zoomPrefs.sc, 100);
+//        }
+    }
 
     function restoreConfigFromPrefs() {
         // NOTE: toolbar will have set this for us..
@@ -545,6 +555,7 @@
         togglePorts(prefsState.porthl);
         toggleMap(prefsState.bg);
         toggleSprites(prefsState.spr);
+        ttbs.setToolbar(prefsState.toolbar);
         t3s.setDevLabIndex(prefsState.dlbls);
         t3s.setHostLabIndex(prefsState.hlbls);
         flash.enable(true);
@@ -695,6 +706,8 @@
             // set the svg size to match that of the window, less the masthead
             svg.attr(fs.windowSize(mast.mastHeight()));
             dim = [svg.attr('width'), svg.attr('height')];
+
+            ps.addListener(applyPreferences);
 
             setUpKeys();
             setUpToolbar();

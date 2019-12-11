@@ -23,11 +23,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.commons.lang.StringUtils;
-import org.apache.karaf.shell.commands.Command;
-import org.apache.karaf.shell.commands.Option;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.api.action.Option;
 import org.onlab.util.StringFilter;
 import org.onlab.util.Tools;
 import org.onosproject.cli.AbstractShellCommand;
+import org.onosproject.cluster.NodeId;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.FilteredConnectPoint;
 import org.onosproject.net.flow.TrafficSelector;
@@ -38,6 +40,7 @@ import org.onosproject.net.intent.Intent;
 import org.onosproject.net.intent.IntentService;
 import org.onosproject.net.intent.IntentState;
 import org.onosproject.net.intent.LinkCollectionIntent;
+import org.onosproject.net.intent.Key;
 import org.onosproject.net.intent.MultiPointToSinglePointIntent;
 import org.onosproject.net.intent.OpticalCircuitIntent;
 import org.onosproject.net.intent.OpticalConnectivityIntent;
@@ -45,6 +48,7 @@ import org.onosproject.net.intent.OpticalOduIntent;
 import org.onosproject.net.intent.PathIntent;
 import org.onosproject.net.intent.PointToPointIntent;
 import org.onosproject.net.intent.SinglePointToMultiPointIntent;
+import org.onosproject.net.intent.WorkPartitionService;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static java.lang.String.format;
@@ -60,6 +64,7 @@ import java.util.stream.Collectors;
 /**
  * Lists the inventory of intents and their states.
  */
+@Service
 @Command(scope = "onos", name = "intents",
          description = "Lists the inventory of intents and their states")
 public class IntentsListCommand extends AbstractShellCommand {
@@ -70,6 +75,8 @@ public class IntentsListCommand extends AbstractShellCommand {
 
     // Messages and string formatter
     private static final String APP_ID = BOLD + "Application Id:" + RESET + " %s";
+
+    private static final String LEADER_ID = BOLD + "Leader Id:" + RESET + " %s";
 
     private static final String COMMON_SELECTOR = BOLD + "Common ingress " +
             "selector:" + RESET + " %s";
@@ -98,6 +105,8 @@ public class IntentsListCommand extends AbstractShellCommand {
 
     private static final String KEY = BOLD + "Key:" + RESET + " %s";
 
+    private static final String NONE = "None";
+
     private static final String RESOURCES = BOLD + "Resources:" + RESET + " %s";
 
     private static final String SELECTOR = BOLD + "Selector:" + RESET + " %s";
@@ -119,7 +128,7 @@ public class IntentsListCommand extends AbstractShellCommand {
      */
     private static final String SUMMARY_TITLES =
             BOLD + format(
-            "\n%1s%21s%14s%14s%14s%14s%14s%14s%14s%14s%14s%14s",
+            "%n%1s%21s%14s%14s%14s%14s%14s%14s%14s%14s%14s%14s",
             "Intent type",
             "Total",
             "Installed",
@@ -171,10 +180,17 @@ public class IntentsListCommand extends AbstractShellCommand {
 
     private StringFilter contentFilter;
     private IntentService service;
+    private WorkPartitionService workPartitionService;
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         service = get(IntentService.class);
+        workPartitionService = get(WorkPartitionService.class);
+
+        if (workPartitionService == null) {
+            return;
+        }
+
         contentFilter = new StringFilter(filter, StringFilter.Strategy.AND);
 
         Iterable<Intent> intents;
@@ -355,7 +371,7 @@ public class IntentsListCommand extends AbstractShellCommand {
             StringBuilder builder = new StringBuilder();
 
             builder.append(format(
-                    "\n%1s%s%14d%14d%14d%14d%14d%14d%14d%14d%14d%14d",
+                    "%n%1s%s%14d%14d%14d%14d%14d%14d%14d%14d%14d%14d",
                     BOLD + intentType + RESET,
                     Strings.padStart(String.valueOf(total),
                                      (32 - intentType.length()),
@@ -553,8 +569,9 @@ public class IntentsListCommand extends AbstractShellCommand {
             builder.append('\n').append(format("bidirectional=%s", ci.isBidirectional()));
         }
 
-        List<Intent> installable = service.getInstallableIntents(intent.key());
-        installable.stream().filter(i -> contentFilter.filter(i));
+        List<Intent> installable = service.getInstallableIntents(intent.key())
+            .stream().filter(i -> contentFilter.filter(i))
+            .collect(Collectors.toList());
         if (showInstallable && installable != null && !installable.isEmpty()) {
             builder.append('\n').append(format(INSTALLABLE, installable));
         }
@@ -613,6 +630,8 @@ public class IntentsListCommand extends AbstractShellCommand {
      */
     private StringBuilder fullFormat(Intent intent, IntentState state) {
         StringBuilder builder = new StringBuilder();
+        NodeId nodeId = workPartitionService.getLeader(intent.key(), Key::hash);
+
         builder.append(format(ID, intent.id()));
         if (state != null) {
             builder.append('\n').append(format(STATE, state));
@@ -620,6 +639,7 @@ public class IntentsListCommand extends AbstractShellCommand {
         builder.append('\n').append(format(KEY, intent.key()));
         builder.append('\n').append(format(TYPE, intent.getClass().getSimpleName()));
         builder.append('\n').append(format(APP_ID, intent.appId().name()));
+        builder.append('\n').append(nodeId == null ? NONE : format(LEADER_ID, nodeId.id()));
 
         return builder;
     }

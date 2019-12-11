@@ -17,15 +17,20 @@
 package org.onosproject.driver.pipeline.ofdpa;
 
 import com.google.common.collect.Lists;
+import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.GroupId;
+import org.onosproject.driver.extensions.Ofdpa3AllowVlanTranslationType;
 import org.onosproject.driver.extensions.Ofdpa3PushCw;
 import org.onosproject.driver.extensions.Ofdpa3PushL2Header;
+import org.onosproject.driver.extensions.OfdpaSetAllowVlanTranslation;
+import org.onosproject.driver.extensions.OfdpaSetVlanVid;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.instructions.Instruction;
+import org.onosproject.net.flow.instructions.Instructions;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction;
 import org.onosproject.net.flow.instructions.L3ModificationInstruction;
 import org.onosproject.net.flowobjective.NextObjective;
@@ -63,11 +68,16 @@ public class Ofdpa3GroupHandler extends Ofdpa2GroupHandler {
     protected GroupInfo createL2L3Chain(TrafficTreatment treatment, int nextId,
                                         ApplicationId appId, boolean mpls,
                                         TrafficSelector meta) {
-        return createL2L3ChainInternal(treatment, nextId, appId, mpls, meta, false);
+        return isUnfiltered(treatment, meta) ?
+                createUnfilteredL2L3Chain(treatment, nextId, appId, false) :
+                createL2L3ChainInternal(treatment, nextId, appId, mpls, meta, false);
     }
 
     @Override
     protected void processPwNextObjective(NextObjective nextObjective) {
+
+        log.info("Started deploying nextObjective id={} for pseudowire", nextObjective.id());
+
         TrafficTreatment treatment = nextObjective.next().iterator().next();
         Deque<GroupKey> gkeyChain = new ArrayDeque<>();
         GroupChainElem groupChainElem;
@@ -89,7 +99,7 @@ public class Ofdpa3GroupHandler extends Ofdpa2GroupHandler {
         );
         if (groupInfo == null) {
             log.error("Could not process nextObj={} in dev:{}", nextObjective.id(), deviceId);
-            Ofdpa2Pipeline.fail(nextObjective, ObjectiveError.GROUPINSTALLATIONFAILED);
+            OfdpaPipelineUtility.fail(nextObjective, ObjectiveError.GROUPINSTALLATIONFAILED);
             return;
         }
         // We update the chain with the last two groups;
@@ -109,22 +119,31 @@ public class Ofdpa3GroupHandler extends Ofdpa2GroupHandler {
                     mplsInstructionSets.add(mplsInstructionSet);
                     mplsInstructionSet = Lists.newArrayList();
                 }
-
             }
         }
+
         if (mplsInstructionSets.size() > MAX_DEPTH_UNPROTECTED_PW) {
             log.error("Next Objective for pseudo wire should have at "
                               + "most {} mpls instruction sets. Next Objective Id:{}",
                       MAX_DEPTH_UNPROTECTED_PW, nextObjective.id());
-            Ofdpa2Pipeline.fail(nextObjective, ObjectiveError.BADPARAMS);
+            OfdpaPipelineUtility.fail(nextObjective, ObjectiveError.BADPARAMS);
             return;
         }
+
+        log.debug("Size of mpls instructions is {}.", mplsInstructionSets.size());
+        log.debug("mpls instructions sets are {}.", mplsInstructionSets);
+
         int nextGid = groupInfo.nextGroupDesc().givenGroupId();
         int index;
+
         // We create the mpls tunnel label groups.
         // In this case we need to use also the
         // tunnel label group 2;
+        // this is for inter-co pws
         if (mplsInstructionSets.size() == MAX_DEPTH_UNPROTECTED_PW) {
+
+            log.debug("Creating inter-co pw mpls chains with nextid {}", nextObjective.id());
+
             // We deal with the label 2 group.
             index = getNextAvailableIndex();
             groupDescription = createMplsTunnelLabelGroup(
@@ -154,62 +173,74 @@ public class Ofdpa3GroupHandler extends Ofdpa2GroupHandler {
                       deviceId, Integer.toHexString(nextGid),
                       groupKey, nextObjective.id());
         }
-        // We deal with the label 1 group.
-        index = getNextAvailableIndex();
-        groupDescription = createMplsTunnelLabelGroup(
-                nextGid,
-                OfdpaMplsGroupSubType.MPLS_TUNNEL_LABEL_1,
-                index,
-                mplsInstructionSets.get(1),
-                nextObjective.appId()
-        );
-        groupKey = new DefaultGroupKey(
-                Ofdpa2Pipeline.appKryo.serialize(index)
-        );
-        groupChainElem = new GroupChainElem(groupDescription, 1, false, deviceId);
-        updatePendingGroups(
-                groupInfo.nextGroupDesc().appCookie(),
-                groupChainElem
-        );
-        gkeyChain.addFirst(groupKey);
-        // We have to create the l2 vpn group before
-        // to send the inner most group.
-        nextGid = groupDescription.givenGroupId();
-        groupInfo = new GroupInfo(groupInfo.innerMostGroupDesc(), groupDescription);
 
-        log.debug("Trying Label 1 Group: device:{} gid:{} gkey:{} nextId:{}",
-                  deviceId, Integer.toHexString(nextGid),
-                  groupKey, nextObjective.id());
-        // Finally we create the l2 vpn group.
-        index = getNextAvailableIndex();
-        groupDescription = createMplsL2VpnGroup(
-                nextGid,
-                index,
-                mplsInstructionSets.get(0),
-                nextObjective.appId()
-        );
-        groupKey = new DefaultGroupKey(
-                Ofdpa2Pipeline.appKryo.serialize(index)
-        );
-        groupChainElem = new GroupChainElem(groupDescription, 1, false, deviceId);
-        updatePendingGroups(
-                groupInfo.nextGroupDesc().appCookie(),
-                groupChainElem
-        );
-        gkeyChain.addFirst(groupKey);
-        OfdpaNextGroup ofdpaGrp = new OfdpaNextGroup(
-                Collections.singletonList(gkeyChain),
-                nextObjective
-        );
-        updatePendingNextObjective(groupKey, ofdpaGrp);
+        // if treatment has 2 mpls labels, then this is a pseudowire from leaf to another leaf
+        // inside a single co
+        if (mplsInstructionSets.size() == 2) {
 
-        log.debug("Trying L2 Vpn Group: device:{} gid:{} gkey:{} nextId:{}",
-                  deviceId, Integer.toHexString(nextGid),
-                  groupKey, nextObjective.id());
-        // Finally we send the innermost group.
-        log.debug("Sending innermost group {} in group chain on device {} ",
-                  Integer.toHexString(groupInfo.innerMostGroupDesc().givenGroupId()), deviceId);
-        groupService.addGroup(groupInfo.innerMostGroupDesc());
+            log.debug("Creating leaf-leaf pw mpls chains with nextid {}", nextObjective.id());
+            // We deal with the label 1 group.
+            index = getNextAvailableIndex();
+            groupDescription = createMplsTunnelLabelGroup(nextGid,
+                                                           OfdpaMplsGroupSubType.MPLS_TUNNEL_LABEL_1,
+                                                           index,
+                                                           mplsInstructionSets.get(1),
+                                                           nextObjective.appId());
+            groupKey = new DefaultGroupKey(Ofdpa2Pipeline.appKryo.serialize(index));
+            groupChainElem = new GroupChainElem(groupDescription, 1, false, deviceId);
+            updatePendingGroups(groupInfo.nextGroupDesc().appCookie(), groupChainElem);
+            gkeyChain.addFirst(groupKey);
+            // We have to create the l2 vpn group before
+            // to send the inner most group.
+            nextGid = groupDescription.givenGroupId();
+            groupInfo = new GroupInfo(groupInfo.innerMostGroupDesc(), groupDescription);
+
+            log.debug("Trying Label 1 Group: device:{} gid:{} gkey:{} nextId:{}",
+                      deviceId, Integer.toHexString(nextGid),
+                      groupKey, nextObjective.id());
+            // Finally we create the l2 vpn group.
+            index = getNextAvailableIndex();
+            groupDescription = createMplsL2VpnGroup(nextGid, index,
+                                                    mplsInstructionSets.get(0), nextObjective.appId());
+            groupKey = new DefaultGroupKey(Ofdpa2Pipeline.appKryo.serialize(index));
+            groupChainElem = new GroupChainElem(groupDescription, 1, false, deviceId);
+            updatePendingGroups(groupInfo.nextGroupDesc().appCookie(), groupChainElem);
+            gkeyChain.addFirst(groupKey);
+            OfdpaNextGroup ofdpaGrp = new OfdpaNextGroup(Collections.singletonList(gkeyChain), nextObjective);
+            updatePendingNextObjective(groupKey, ofdpaGrp);
+
+            log.debug("Trying L2 Vpn Group: device:{} gid:{} gkey:{} nextId:{}", deviceId,
+                      Integer.toHexString(nextGid), groupKey, nextObjective.id());
+            // Finally we send the innermost group.
+            log.debug("Sending innermost group {} in group chain on device {} ",
+                      Integer.toHexString(groupInfo.innerMostGroupDesc().givenGroupId()), deviceId);
+            groupService.addGroup(groupInfo.innerMostGroupDesc());
+        }
+
+        // this is a pseudowire from leaf to spine,
+        // only one label is used
+        if (mplsInstructionSets.size() == 1) {
+
+            log.debug("Creating leaf-spine pw mpls chains with nextid {}", nextObjective.id());
+
+            // Finally we create the l2 vpn group.
+            index = getNextAvailableIndex();
+            groupDescription = createMplsL2VpnGroup(nextGid, index, mplsInstructionSets.get(0),
+                                                    nextObjective.appId());
+            groupKey = new DefaultGroupKey(Ofdpa2Pipeline.appKryo.serialize(index));
+            groupChainElem = new GroupChainElem(groupDescription, 1, false, deviceId);
+            updatePendingGroups(groupInfo.nextGroupDesc().appCookie(), groupChainElem);
+            gkeyChain.addFirst(groupKey);
+            OfdpaNextGroup ofdpaGrp = new OfdpaNextGroup(Collections.singletonList(gkeyChain), nextObjective);
+            updatePendingNextObjective(groupKey, ofdpaGrp);
+
+            log.debug("Trying L2 Vpn Group: device:{} gid:{} gkey:{} nextId:{}",
+                      deviceId, Integer.toHexString(nextGid), groupKey, nextObjective.id());
+            // Finally we send the innermost group.
+            log.debug("Sending innermost group {} in group chain on device {} ",
+                      Integer.toHexString(groupInfo.innerMostGroupDesc().givenGroupId()), deviceId);
+            groupService.addGroup(groupInfo.innerMostGroupDesc());
+        }
     }
 
     /**
@@ -319,9 +350,8 @@ public class Ofdpa3GroupHandler extends Ofdpa2GroupHandler {
                         mplsTreatment.add(ins);
                         break;
                     default:
-                        log.warn("Driver does not handle this type of TrafficTreatment"
-                                         + " instruction in nextObjectives: {} - {}",
-                                 ins.type(), ins);
+                    log.warn("Driver does not handle TrafficTreatment"
+                            + " L2Mod {} for pw next-obj", l2ins.subtype());
                         break;
                 }
             } else if (ins.type() == Instruction.Type.OUTPUT) {
@@ -335,19 +365,124 @@ public class Ofdpa3GroupHandler extends Ofdpa2GroupHandler {
                         mplsTreatment.add(ins);
                         break;
                     default:
-                        log.warn("Driver does not handle this type of TrafficTreatment"
-                                         + " instruction in nextObjectives: {} - {}",
-                                 ins.type(), ins);
+                    log.warn("Driver does not handle TrafficTreatment"
+                            + " L3Mod for pw next-obj", l3ins.subtype());
                 }
 
             } else {
                 log.warn("Driver does not handle this type of TrafficTreatment"
-                                 + " instruction in nextObjectives: {} - {}",
+                        + " instruction for pw next-obj: {} - {}",
                          ins.type(), ins);
             }
         }
-        // We add in a transparent way the set vlan to 4094.
-        l2L3Treatment.setVlanId(VlanId.vlanId((short) PW_INTERNAL_VLAN));
     }
     // TODO Introduce in the future an inner class to return two treatments
+
+    /**
+     * Internal implementation of createL2L3Chain for L2 unfiltered interface group.
+     *
+     * @param treatment that needs to be broken up to create the group chain
+     * @param nextId of the next objective that needs this group chain
+     * @param appId of the application that sent this next objective
+     * @param useSetVlanExtension use the setVlanVid extension that has is_present bit set to 0.
+     * @return GroupInfo containing the GroupDescription of the
+     *         L2 Unfiltered Interface group(inner) and the GroupDescription of the (outer)
+     *         L3Unicast group. May return null if there is an error in processing the chain.
+     */
+    private GroupInfo createUnfilteredL2L3Chain(TrafficTreatment treatment, int nextId,
+                                                  ApplicationId appId, boolean useSetVlanExtension) {
+        // for the l2 unfiltered interface group, get port info
+        // for the l3 unicast group, get the src/dst mac, and vlan info
+        TrafficTreatment.Builder outerTtb = DefaultTrafficTreatment.builder();
+        TrafficTreatment.Builder innerTtb = DefaultTrafficTreatment.builder();
+        VlanId vlanId;
+        long portNum = 0;
+        MacAddress srcMac;
+        MacAddress dstMac;
+        for (Instruction ins : treatment.allInstructions()) {
+            if (ins.type() == Instruction.Type.L2MODIFICATION) {
+                L2ModificationInstruction l2ins = (L2ModificationInstruction) ins;
+                switch (l2ins.subtype()) {
+                    case ETH_DST:
+                        dstMac = ((L2ModificationInstruction.ModEtherInstruction) l2ins).mac();
+                        outerTtb.setEthDst(dstMac);
+                        break;
+                    case ETH_SRC:
+                        srcMac = ((L2ModificationInstruction.ModEtherInstruction) l2ins).mac();
+                        outerTtb.setEthSrc(srcMac);
+                        break;
+                    case VLAN_ID:
+                        vlanId = ((L2ModificationInstruction.ModVlanIdInstruction) l2ins).vlanId();
+                        if (useSetVlanExtension) {
+                            OfdpaSetVlanVid ofdpaSetVlanVid = new OfdpaSetVlanVid(vlanId);
+                            outerTtb.extension(ofdpaSetVlanVid, deviceId);
+                        } else {
+                            outerTtb.setVlanId(vlanId);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            } else if (ins.type() == Instruction.Type.OUTPUT) {
+                portNum = ((Instructions.OutputInstruction) ins).port().toLong();
+                innerTtb.add(ins);
+            } else {
+                log.debug("Driver does not handle this type of TrafficTreatment"
+                                  + " instruction in l2l3chain:  {} - {}", ins.type(),
+                          ins);
+            }
+        }
+
+        innerTtb.extension(new OfdpaSetAllowVlanTranslation(
+                Ofdpa3AllowVlanTranslationType.ALLOW), deviceId);
+
+        // assemble information for ofdpa l2 unfiltered interface group
+        int l2groupId = l2UnfilteredGroupId(portNum);
+        // a globally unique groupkey that is different for ports in the same device,
+        // but different for the same portnumber on different devices. Also different
+        // for the various group-types created out of the same next objective.
+        int l2gk = l2UnfilteredGroupKey(deviceId, portNum);
+        final GroupKey l2groupkey = new DefaultGroupKey(Ofdpa3Pipeline.appKryo.serialize(l2gk));
+
+        // assemble information for outer group (L3Unicast)
+        GroupDescription outerGrpDesc;
+        int l3unicastIndex = getNextAvailableIndex();
+        int l3groupId = L3_UNICAST_TYPE | (TYPE_MASK & l3unicastIndex);
+        final GroupKey l3groupkey = new DefaultGroupKey(
+                Ofdpa3Pipeline.appKryo.serialize(l3unicastIndex));
+        outerTtb.group(new GroupId(l2groupId));
+        // create the l3unicast group description to wait for the
+        // l2 unfiltered interface group to be processed
+        GroupBucket l3unicastGroupBucket =
+                DefaultGroupBucket.createIndirectGroupBucket(outerTtb.build());
+        outerGrpDesc = new DefaultGroupDescription(
+                deviceId,
+                GroupDescription.Type.INDIRECT,
+                new GroupBuckets(Collections.singletonList(l3unicastGroupBucket)),
+                l3groupkey,
+                l3groupId,
+                appId);
+        log.debug("Trying L3Unicast: device:{} gid:{} gkey:{} nextid:{}",
+                  deviceId, Integer.toHexString(l3groupId),
+                  l3groupkey, nextId);
+
+        // store l2groupkey with the groupChainElem for the outer-group that depends on it
+        GroupChainElem gce = new GroupChainElem(outerGrpDesc, 1, false, deviceId);
+        updatePendingGroups(l2groupkey, gce);
+
+        // create group description for the inner l2 unfiltered interface group
+        GroupBucket l2InterfaceGroupBucket =
+                DefaultGroupBucket.createIndirectGroupBucket(innerTtb.build());
+        GroupDescription l2groupDescription =
+                new DefaultGroupDescription(deviceId,
+                                            GroupDescription.Type.INDIRECT,
+                                            new GroupBuckets(Collections.singletonList(l2InterfaceGroupBucket)),
+                                            l2groupkey,
+                                            l2groupId,
+                                            appId);
+        log.debug("Trying L2Unfiltered: device:{} gid:{} gkey:{} nextId:{}",
+                  deviceId, Integer.toHexString(l2groupId), l2groupkey, nextId);
+        return new GroupInfo(l2groupDescription, outerGrpDesc);
+    }
+
 }

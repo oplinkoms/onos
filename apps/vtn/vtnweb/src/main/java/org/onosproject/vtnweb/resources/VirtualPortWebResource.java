@@ -65,6 +65,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
 import static javax.ws.rs.core.Response.Status.NOT_FOUND;
 import static javax.ws.rs.core.Response.Status.OK;
+import static org.onlab.util.Tools.readTreeFromStream;
 
 /**
  * REST resource for interacting with the inventory of infrastructure
@@ -76,7 +77,7 @@ public class VirtualPortWebResource extends AbstractWebResource {
     public static final String VPORT_ID_EXIST = "VirtualPort id is exist";
     public static final String VPORT_ID_NOT_EXIST = "VirtualPort id is not exist";
     public static final String JSON_NOT_NULL = "JsonNode can not be null";
-    protected static final Logger log = LoggerFactory
+    private static final Logger log = LoggerFactory
             .getLogger(VirtualPortService.class);
 
     @GET
@@ -113,7 +114,7 @@ public class VirtualPortWebResource extends AbstractWebResource {
     public Response createPorts(InputStream input) {
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode cfg = mapper.readTree(input);
+            JsonNode cfg = readTreeFromStream(mapper, input);
             Iterable<VirtualPort> vPorts = createOrUpdateByInputStream(cfg);
             Boolean issuccess = nullIsNotFound(get(VirtualPortService.class)
                     .createPorts(vPorts), VPORT_NOT_FOUND);
@@ -162,7 +163,7 @@ public class VirtualPortWebResource extends AbstractWebResource {
     public Response updatePorts(@PathParam("id") String id, InputStream input) {
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode cfg = mapper.readTree(input);
+            JsonNode cfg = readTreeFromStream(mapper, input);
             Iterable<VirtualPort> vPorts = createOrUpdateByInputStream(cfg);
             Boolean issuccess = nullIsNotFound(get(VirtualPortService.class)
                     .updatePorts(vPorts), VPORT_NOT_FOUND);

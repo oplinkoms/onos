@@ -17,22 +17,25 @@
 package org.onosproject.faultmanagement.impl;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import org.junit.Before;
 import org.junit.Test;
 import org.onlab.osgi.ComponentContextAdapter;
 import org.onlab.packet.ChassisId;
+import org.onosproject.cfg.ComponentConfigAdapter;
+import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.NodeId;
-import org.onosproject.cluster.RoleInfo;
-import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmConsumer;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmId;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmProvider;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmProviderRegistry;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmProviderRegistryAdapter;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmProviderService;
-import org.onosproject.incubator.net.faultmanagement.alarm.DefaultAlarm;
+import org.onosproject.alarm.Alarm;
+import org.onosproject.alarm.AlarmConsumer;
+import org.onosproject.alarm.AlarmId;
+import org.onosproject.alarm.AlarmProvider;
+import org.onosproject.alarm.AlarmProviderRegistry;
+import org.onosproject.alarm.AlarmProviderRegistryAdapter;
+import org.onosproject.alarm.AlarmProviderService;
+import org.onosproject.alarm.DefaultAlarm;
 import org.onosproject.mastership.MastershipEvent;
+import org.onosproject.mastership.MastershipInfo;
 import org.onosproject.mastership.MastershipListener;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.mastership.MastershipServiceAdapter;
@@ -62,6 +65,7 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.Assert.*;
@@ -80,6 +84,8 @@ public class PollingAlarmProviderTest {
 
     private final AlarmProviderService alarmProviderService = new MockAlarmProviderService();
 
+    private final ComponentConfigService cfgService = new ComponentConfigAdapter();
+
     private final ComponentContext context = new MockComponentContext();
 
     private static final DeviceId DEVICE_ID = DeviceId.deviceId("foo:1.1.1.1:1");
@@ -92,7 +98,7 @@ public class PollingAlarmProviderTest {
 
     private final MastershipEvent mastershipEvent =
             new MastershipEvent(MastershipEvent.Type.MASTER_CHANGED, DEVICE_ID,
-                                new RoleInfo(nodeId, ImmutableList.of()));
+                                new MastershipInfo(1, Optional.of(nodeId), ImmutableMap.of()));
 
     private final DeviceEvent deviceEvent =
             new DeviceEvent(DeviceEvent.Type.DEVICE_AVAILABILITY_CHANGED, device);
@@ -114,13 +120,14 @@ public class PollingAlarmProviderTest {
         provider.providerRegistry = providerRegistry;
         provider.deviceService = deviceService;
         provider.mastershipService = mastershipService;
+        provider.cfgService = cfgService;
         AbstractProjectableModel.setDriverService(null, new DriverServiceAdapter());
         provider.activate(context);
     }
 
     @Test
     public void activate() throws Exception {
-        assertFalse("Provider should be registered", providerRegistry.getProviders().contains(provider));
+        assertFalse("Provider should be registered", providerRegistry.getProviders().contains(provider.id()));
         assertEquals("Device listener should be added", 1, deviceListeners.size());
         assertEquals("Incorrect alarm provider service", alarmProviderService, provider.providerService);
         assertEquals("Mastership listener should be added", 1, mastershipListeners.size());
@@ -135,7 +142,7 @@ public class PollingAlarmProviderTest {
         provider.deactivate();
         assertEquals("Device listener should be removed", 0, deviceListeners.size());
         assertEquals("Mastership listener should be removed", 0, mastershipListeners.size());
-        assertFalse("Provider should not be registered", providerRegistry.getProviders().contains(provider));
+        assertFalse("Provider should not be registered", providerRegistry.getProviders().contains(provider.id()));
         assertTrue(provider.alarmsExecutor.isShutdown());
         assertNull(provider.providerService);
     }
@@ -300,7 +307,7 @@ public class PollingAlarmProviderTest {
 
         @Override
         public Object get(Object key) {
-            if ("pollFrequency".equals(key)) {
+            if (OsgiPropertyConstants.POLL_FREQUENCY_SECONDS.equals(key)) {
                 return "1";
             }
             return null;

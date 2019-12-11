@@ -19,38 +19,30 @@
 # -----------------------------------------------------------------------------
 # ONOS network configuration uploader.
 # -----------------------------------------------------------------------------
+function usage() {
+     echo "usage: onos-netcfg [-v] [-P port] [-u user] [-p password] node file|DELETE [url]"
+     exit 1
+}
 
-# If ONOS_HOME is set, respect its value.
-# If ONOS_HOME is not set (e.g. in the init or service environment),
-# set it based on this script's path.
-ONOS_HOME=${ONOS_HOME:-$(cd $(dirname $0)/.. >/dev/null 2>&1 && pwd)}
-ONOS_WEB_USER=${ONOS_WEB_USER:-onos} # ONOS WEB User defaults to 'onos'
-ONOS_WEB_PASS=${ONOS_WEB_PASS:-rocks} # ONOS WEB Password defaults to 'rocks'
-
-. ${ONOS_HOME}/bin/_find-node
-. ${ONOS_HOME}/bin/_check-json
-
-fail="--fail"
-[ "$1" == "-v" ] && shift && fail=""
+. $(dirname $0)/_rest-port
+. $(dirname $0)/_find-node
+. $(dirname $0)/_check-json
 
 node=$(find_node $1)
 file="${2}"
 url="${3}"
 
-if [ "$node" == "" -o "$file" == "" ]; then
-     echo "Usage: onos-netcfg [-v] node file|DELETE [url]"
-     exit 1
-fi
+export URL="http://$node:$port/onos/v1/network/configuration/${url}"
+export curl="curl ${fail} -sSL --user $user:$password --noproxy ${node} "
+
+[ "$node" == "" -o "$file" == "" ] && usage;
 
 method="POST"
 [ $(echo $file | awk '{print tolower($0)}') == "delete" ] && method="DELETE"
 
 if [ $method == "POST" ]; then
     checkJson $file
-    curl $fail -sSL --user $ONOS_WEB_USER:$ONOS_WEB_PASS \
-        -X POST -H 'Content-Type:application/json' \
-        http://$node:8181/onos/v1/network/configuration/${url} -d@$file
+    $curl -X POST -H 'Content-Type:application/json' $URL -d@$file
 elif [ $method == "DELETE" ]; then
-    curl $fail -sSL --user $ONOS_WEB_USER:$ONOS_WEB_PASS \
-        -X DELETE http://$node:8181/onos/v1/network/configuration/${url}
+    $curl -X DELETE $URL
 fi

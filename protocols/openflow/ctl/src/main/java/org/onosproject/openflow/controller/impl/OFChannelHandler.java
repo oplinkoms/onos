@@ -16,28 +16,51 @@
 
 package org.onosproject.openflow.controller.impl;
 
+import static org.onlab.packet.Ethernet.TYPE_BSN;
+import static org.onlab.packet.Ethernet.TYPE_LLDP;
 import static org.onlab.util.Tools.groupedThreads;
+import static org.onosproject.openflow.controller.Dpid.uri;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.util.ArrayDeque;
+import java.security.cert.Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.BlockingQueue;
+import java.util.Set;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.onlab.osgi.DefaultServiceDirectory;
+import org.onlab.packet.Ethernet;
 import org.onlab.packet.IpAddress;
+import org.onosproject.net.ConnectPoint;
+import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
+import org.onosproject.net.packet.DefaultInboundPacket;
+import org.onosproject.openflow.controller.DefaultOpenFlowPacketContext;
 import org.onosproject.openflow.controller.Dpid;
+import org.onosproject.openflow.controller.OpenFlowClassifier;
+import org.onosproject.openflow.controller.OpenFlowPacketContext;
+import org.onosproject.openflow.controller.OpenFlowService;
 import org.onosproject.openflow.controller.OpenFlowSession;
 import org.onosproject.openflow.controller.driver.OpenFlowSwitchDriver;
 import org.onosproject.openflow.controller.driver.SwitchStateException;
@@ -86,9 +109,12 @@ import org.slf4j.LoggerFactory;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.util.ReferenceCountUtil;
+
+import javax.net.ssl.SSLPeerUnverifiedException;
 
 /**
  * Channel handler deals with the switch connection and dispatches
@@ -101,11 +127,12 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
 
     private static final String RESET_BY_PEER = "Connection reset by peer";
     private static final String BROKEN_PIPE = "Broken pipe";
+    static final int NUM_OF_QUEUES = 8;
 
     private final Controller controller;
     private OpenFlowSwitchDriver sw;
     private long thisdpid; // channelHandler cached value of connected switch id
-
+    private DeviceId deviceId;
     private Channel channel;
     private String channelId;
 
@@ -141,28 +168,44 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
     protected OFVersion ofVersion;
     protected OFFactory factory;
 
-    // deprecated in 1.10.0
-    @Deprecated
-    protected OFFactory factory13;
-    // deprecated in 1.10.0
-    @Deprecated
-    protected OFFactory factory10;
-
     /** transaction Ids to use during handshake. Since only one thread
      * calls into an OFChannelHandler instance, we don't need atomic.
      * We will count down
      */
     private int handshakeTransactionIds = -1;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    private OpenFlowService openFlowManager;
 
-
-    private static final int MSG_READ_BUFFER = 5000;
+    private static final int BACKLOG_READ_BUFFER_DEFAULT = 1000;
 
     /**
-     * OFMessage dispatch queue.
+     * Map with all LinkedBlockingMessagesQueue queues which contains OFMessages.
      */
-    private final BlockingQueue<OFMessage> dispatchQueue =
-            new LinkedBlockingQueue<>(MSG_READ_BUFFER);
+    private Map<Integer, LinkedBlockingMessagesQueue<OFMessage>> dispatchQueuesMapProducer = new ConcurrentHashMap<>();
+
+    /**
+     * OFMessage classifiers map.
+     */
+    private List<Set<OpenFlowClassifier>> messageClassifiersMapProducer =
+            new CopyOnWriteArrayList<Set<OpenFlowClassifier>>();
+
+
+    /**
+     * Lock held by take, poll, etc.
+     */
+    private final ReentrantLock takeLock = new ReentrantLock();
+
+    /**
+     * Wait queue for waiting takes.
+     */
+    private final Condition notEmpty = takeLock.newCondition();
+
+    /**
+     * Current number of elements in enabled sub-queues.
+     */
+    private final AtomicInteger totalCount = new AtomicInteger();
+
 
     /**
      * Single thread executor for OFMessage dispatching.
@@ -183,7 +226,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
      * <p>
      * Should only be touched from the Channel I/O thread
      */
-    private final Deque<OFMessage> dispatchBacklog = new ArrayDeque<>();
+    private final Deque<OFMessage> dispatchBacklog;
 
     /**
      * Create a new unconnected OFChannelHandler.
@@ -195,9 +238,18 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
         this.state = ChannelState.INIT;
         this.pendingPortStatusMsg = new CopyOnWriteArrayList<>();
         this.portDescReplies = new ArrayList<>();
-        factory13 = OFFactories.getFactory(OFVersion.OF_13);
-        factory10 = OFFactories.getFactory(OFVersion.OF_10);
         duplicateDpidFound = Boolean.FALSE;
+        //Initialize queues and classifiers
+        dispatchBacklog = new LinkedBlockingDeque<>(BACKLOG_READ_BUFFER_DEFAULT);
+        for (int i = 0; i < NUM_OF_QUEUES; i++) {
+            if (controller.getQueueSize(i) > 0) {
+                dispatchQueuesMapProducer.put(i,
+                        new LinkedBlockingMessagesQueue<>(i, controller.getQueueSize(i), controller.getBulkSize(i)));
+            }
+            if (i != NUM_OF_QUEUES) {
+                messageClassifiersMapProducer.add(i, new CopyOnWriteArraySet<>());
+            }
+        }
     }
 
 
@@ -319,9 +371,16 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
          */
         WAIT_FEATURES_REPLY(false) {
             @Override
-            void processOFFeaturesReply(OFChannelHandler h, OFFeaturesReply  m)
+            void processOFFeaturesReply(OFChannelHandler h, OFFeaturesReply m)
                     throws IOException {
-                h.thisdpid = m.getDatapathId().getLong();
+                Long dpid = m.getDatapathId().getLong();
+                if (!h.setDpid(dpid, h.channel)) {
+                    log.error("Switch presented invalid certificate for dpid {}. Disconnecting",
+                            dpid);
+                    h.channel.disconnect();
+                    return;
+                }
+                h.deviceId = DeviceId.deviceId(uri(h.thisdpid));
                 log.debug("Received features reply for switch at {} with dpid {}",
                         h.getSwitchInfoString(), h.thisdpid);
 
@@ -380,8 +439,9 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
                     h.portDescReplies.add((OFPortDescStatsReply) m);
                 }
                 //h.portDescReply = (OFPortDescStatsReply) m; // temp store
-                log.info("Received port desc reply for switch at {}",
-                        h.getSwitchInfoString());
+                log.debug("Received port desc reply for switch at {}: {}",
+                         h.getSwitchInfoString(),
+                         ((OFPortDescStatsReply) m).getEntries());
                 try {
                     h.sendHandshakeSetConfig();
                 } catch (IOException e) {
@@ -458,6 +518,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
                     throws IOException, SwitchStateException {
                 illegalMessageReceived(h, m);
             }
+
             @Override
             void processOFStatisticsReply(OFChannelHandler h,
                     OFStatsReply  m)
@@ -528,6 +589,11 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
                 // Here is where we differentiate between different kinds of switches
                 h.sw = h.controller.getOFSwitchInstance(h.thisdpid, drep, h.ofVersion);
 
+                if (h.sw == null) {
+                    log.info("Switch not found for {}", h.thisdpid);
+                    return;
+                }
+
                 h.sw.setOFVersion(h.ofVersion);
                 h.sw.setFeaturesReply(h.featuresReply);
                 h.sw.setPortDescReplies(h.portDescReplies);
@@ -554,8 +620,15 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
 
                 h.sw.startDriverHandshake();
                 if (h.sw.isDriverHandshakeComplete()) {
+                    // We are not able to complete the connection for a dpid collision.
+                    // Same device reconnecting or different device configured with
+                    // the same dpid.
                     if (!h.sw.connectSwitch()) {
+                        // Disconnect from the device and return
                         disconnectDuplicate(h);
+                        return;
+                    } else {
+                        h.initClassifiers();
                     }
                     handlePendingPortStatusMessages(h);
                     h.setState(ACTIVE);
@@ -648,11 +721,13 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
 
             private void moveToActive(OFChannelHandler h) {
                 boolean success = h.sw.connectSwitch();
-                handlePendingPortStatusMessages(h);
-                h.setState(ACTIVE);
+                // Disconnect from the device and return
                 if (!success) {
                     disconnectDuplicate(h);
+                    return;
                 }
+                handlePendingPortStatusMessages(h);
+                h.setState(ACTIVE);
             }
 
         },
@@ -780,6 +855,9 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
             void processOFStatisticsReply(OFChannelHandler h,
                     OFStatsReply m) {
                 if (m.getStatsType().equals(OFStatsType.PORT_DESC)) {
+                    log.debug("Received port desc message from {}: {}",
+                             h.sw.getDpid(),
+                             ((OFPortDescStatsReply) m).getEntries());
                     h.sw.setPortDescReply((OFPortDescStatsReply) m);
                 }
                 h.dispatchMessage(m);
@@ -1012,6 +1090,8 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
                         "happen");
                 throw new SwitchStateException(msg);
             }
+            log.info("Received port status message from {}/{}: {}",
+                     h.sw.getDpid(), m.getDesc().getPortNo(), m);
 
             h.sw.handleMessage(m);
         }
@@ -1267,6 +1347,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
 
         if (dispatcher != null) {
             dispatcher.shutdownNow();
+            dispatcher = null;
         }
 
          if (thisdpid != 0) {
@@ -1350,15 +1431,18 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
         return getSwitchInfoString();
     }
 
-    protected void channelIdle(ChannelHandlerContext ctx,
+    private void channelIdle(ChannelHandlerContext ctx,
                                IdleStateEvent e)
-            throws Exception {
-        OFMessage m = factory.buildEchoRequest().build();
-        log.debug("Sending Echo Request on idle channel: {}",
-                  ctx.channel());
-        ctx.write(Collections.singletonList(m), ctx.voidPromise());
-        // XXX S some problems here -- echo request has no transaction id, and
-        // echo reply is not correlated to the echo request.
+            throws IOException {
+        // Factory can be null if the channel goes idle during initial handshake. Since the switch
+        // is not even initialized properly, we just skip this and disconnect the channel.
+        if (factory != null) {
+            OFMessage m = factory.buildEchoRequest().build();
+            log.debug("Sending Echo Request on idle channel: {}", ctx.channel());
+            ctx.writeAndFlush(Collections.singletonList(m), ctx.voidPromise());
+            // XXX S some problems here -- echo request has no transaction id, and
+            // echo reply is not correlated to the echo request.
+        }
         state.processIdle(this);
     }
 
@@ -1366,12 +1450,13 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
     public void userEventTriggered(ChannelHandlerContext ctx,
                                    Object evt)
             throws Exception {
-
+        // If the connection is READER/WRITER idle try to send an echo request
         if (evt instanceof IdleStateEvent) {
+            log.info("Channel {} is {}", ctx.channel(), ((IdleStateEvent) evt).state());
             channelIdle(ctx, (IdleStateEvent) evt);
+        } else {
+            super.userEventTriggered(ctx, evt);
         }
-
-        super.userEventTriggered(ctx, evt);
     }
 
     // SimpleChannelInboundHandler without dependency to TypeParameterMatcher
@@ -1404,63 +1489,152 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
 
     /**
      * Is this a state in which the handshake has completed?
+     *
      * @return true if the handshake is complete
      */
     public boolean isHandshakeComplete() {
         return this.state.isHandshakeComplete();
     }
 
-    private void dispatchMessage(OFMessage m) {
-
-        if (dispatchBacklog.isEmpty()) {
-            if (!dispatchQueue.offer(m)) {
-                // queue full
-                channel.config().setAutoRead(false);
-                // put it on the head of backlog
-                dispatchBacklog.addFirst(m);
-                return;
+    /**
+     * Increment totalCount variable and send signal to executor.
+     */
+    private void incrementAndSignal() {
+        try {
+            totalCount.incrementAndGet();
+            takeLock.lockInterruptibly();
+            try {
+                notEmpty.signal();
+            } finally {
+                takeLock.unlock();
             }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Try to push OpenFlow message to queue.
+     *
+     * @param message OpenFlow message
+     * @param idQueue id of Queue
+     * @return true if message was successful added to queue
+     */
+    private boolean pushMessageToQueue(OFMessage message, int idQueue) {
+        if (!dispatchQueuesMapProducer.get(idQueue).offer(message)) {
+            return false;
         } else {
-            dispatchBacklog.addLast(m);
+            incrementAndSignal();
+            return true;
         }
+    }
 
+    /**
+     * Process backlog - move messages from backlog to default queue.
+     *
+     * @return true if whole backlog was processed, otherwise false
+     */
+    private boolean processDispatchBacklogQueue() {
         while (!dispatchBacklog.isEmpty()) {
-            OFMessage msg = dispatchBacklog.pop();
-
-            if (!dispatchQueue.offer(msg)) {
-                // queue full
-                channel.config().setAutoRead(false);
-                // put it back to the head of backlog
-                dispatchBacklog.addFirst(msg);
-                return;
+            OFMessage msgFromBacklog = dispatchBacklog.removeFirst();
+            if (!pushMessageToQueue(msgFromBacklog, NUM_OF_QUEUES - 1)) {
+                dispatchBacklog.addFirst(msgFromBacklog);
+                return false;
             }
         }
+        return true;
 
+    }
+
+    /**
+     * Parse OpenFlow message context for get Ethernet packet.
+     *
+     * @param message OpenFlow message
+     * @return parsed Ethernet packet
+     */
+    private Ethernet parsePacketInMessage(OFMessage message) {
+        OpenFlowPacketContext pktCtx = DefaultOpenFlowPacketContext
+                .packetContextFromPacketIn(sw, (OFPacketIn) message);
+        DeviceId id = DeviceId.deviceId(Dpid.uri(pktCtx.dpid().value()));
+        DefaultInboundPacket inPkt = new DefaultInboundPacket(
+                new ConnectPoint(id, PortNumber.portNumber(pktCtx.inPort())),
+                pktCtx.parsed(), ByteBuffer.wrap(pktCtx.unparsed()),
+                pktCtx.cookie());
+        return inPkt.parsed();
+    }
+
+    /**
+     * Classify the Ethernet packet for membership on one of the queues.
+     *
+     * @param packet ethernet packet
+     * @return Id of destination Queue
+     */
+    private int classifyEthernetPacket(Ethernet packet) {
+        for (Set<OpenFlowClassifier> classifiers : this.messageClassifiersMapProducer) {
+            for (OpenFlowClassifier classifier : classifiers) {
+                if (classifier.ethernetType() == packet.getEtherType()) {
+                    return classifier.idQueue();
+                }
+            }
+        }
+        return NUM_OF_QUEUES - 1;
+    }
+
+    /**
+     * Process messages from dispatch queues.
+     *
+     * @param queuesSize count of messages in all queues
+     */
+    private void processMessages(int queuesSize) {
+        List<OFMessage> msgs = new ArrayList<>();
+        int processed;
+        do {
+            processed = 0;
+            while (processed < queuesSize) {
+                for (LinkedBlockingMessagesQueue<OFMessage> queue :
+                        dispatchQueuesMapProducer.values()) {
+                    processed += queue.drainTo(msgs);
+                }
+            }
+
+            msgs.forEach(sw::handleMessage);
+            msgs.clear();
+            /* Decrement conditional variable */
+            queuesSize = totalCount.addAndGet(-1 * processed);
+        } while (queuesSize > 0);
+    }
+
+    private void dispatchMessage(OFMessage m) {
+        log.debug("Begin dispatch OpenFlow Message");
+        boolean backlogEmpty = processDispatchBacklogQueue();
+        if (m.getType() == OFType.PACKET_IN) {
+            Ethernet pkt = parsePacketInMessage(m);
+            pushMessageToQueue(m, classifyEthernetPacket(pkt));
+        } else {
+            if (!backlogEmpty || !pushMessageToQueue(m, NUM_OF_QUEUES - 1)) {
+                dispatchBacklog.offer(m);
+            }
+        }
 
         if (dispatcherHandle.isDone()) {
             // dispatcher terminated for some reason, restart
-
-            dispatcherHandle = dispatcher.submit(() -> {
+            dispatcherHandle = dispatcher.submit((Runnable) () -> {
                 try {
-                    List<OFMessage> msgs = new ArrayList<>();
                     for (;;) {
-                        // wait for new message
-                        OFMessage msg = dispatchQueue.take();
-                        sw.handleMessage(msg);
-
-                        while (dispatchQueue.drainTo(msgs, MSG_READ_BUFFER) > 0) {
-                            if (!channel.config().isAutoRead()) {
-                                channel.config().setAutoRead(true);
+                        int tc = 0;
+                        takeLock.lockInterruptibly();
+                        try {
+                            while ((tc = totalCount.get()) == 0) {
+                                notEmpty.await();
                             }
-                            msgs.forEach(sw::handleMessage);
-                            msgs.clear();
+                        } finally {
+                            takeLock.unlock();
                         }
 
-                        if (!channel.config().isAutoRead()) {
-                            channel.config().setAutoRead(true);
-                        }
+                        processMessages(tc);
                     }
                 } catch (InterruptedException e) {
+                    log.warn("Dispatcher interrupted");
                     Thread.currentThread().interrupt();
                     // interrupted. gracefully shutting down
                     return;
@@ -1497,11 +1671,30 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
     /**
      * Update the channels state. Only called from the state machine.
      * TODO: enforce restricted state transitions
-     * @param state
+     * @param state new state
      */
-    private void setState(ChannelState state) {
+    void setState(ChannelState state) {
         this.state = state;
         this.lastStateChange = System.currentTimeMillis();
+    }
+
+    private boolean setDpid(Long dpid, Channel channel) {
+        ChannelHandlerContext sslContext = channel.pipeline().context(SslHandler.class);
+        if (sslContext != null) {
+            try {
+                SslHandler sslHandler = (SslHandler) sslContext.handler();
+                Certificate[] certs = sslHandler.engine().getSession().getPeerCertificates();
+                Certificate cert = certs.length > 0 ? certs[0] : null;
+                if (!controller.isValidCertificate(dpid, cert)) {
+                    return false;
+                }
+            } catch (SSLPeerUnverifiedException e) {
+                log.info("Switch with dpid {} is an unverified SSL peer.", dpid, e);
+                return false;
+            }
+        }
+        this.thisdpid = dpid;
+        return true;
     }
 
     /**
@@ -1661,4 +1854,50 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
         return channelId;
     }
 
+    @Override
+    public void addClassifier(OpenFlowClassifier classifier) {
+        if (this.deviceId.equals(classifier.deviceId())) {
+            log.debug("Add OpenFlow Classifier for switch {} to queue {} with type {}",
+                     classifier.deviceId().toString(), classifier.idQueue(), classifier.ethernetType());
+            this.messageClassifiersMapProducer.get(classifier.idQueue()).add(classifier);
+        }
+    }
+
+    @Override
+    public void removeClassifier(OpenFlowClassifier classifier) {
+        if (this.deviceId.equals(classifier.deviceId())) {
+            log.debug("Remove OpenFlow Classifier for switch {} from queue {} with type {}",
+                      classifier.deviceId().toString(), classifier.idQueue(), classifier.ethernetType());
+            this.messageClassifiersMapProducer.get(classifier.idQueue()).remove(classifier);
+        }
+    }
+
+    /**
+     * Init classifier configuration for the switch. Use stored configuration if exist.
+     * Otherwise add LLDP and BDDP classifiers for Queue N0.
+     */
+    private void initClassifiers() {
+        try {
+            openFlowManager = DefaultServiceDirectory.getService(OpenFlowService.class);
+            DeviceId did = DeviceId.deviceId(uri(thisdpid));
+            Set<OpenFlowClassifier> classifiers = openFlowManager.getClassifiersByDeviceId(did);
+            if (classifiers == null) {
+                OpenFlowClassifier classifier =
+                        new OpenFlowClassifier.Builder(did, 0).ethernetType(TYPE_LLDP).build();
+                openFlowManager.add(classifier);
+                classifier = new OpenFlowClassifier.Builder(did, 0).ethernetType(TYPE_BSN).build();
+                openFlowManager.add(classifier);
+            } else {
+                this.messageClassifiersMapProducer.forEach((v) -> {
+                        v.clear();
+                });
+                classifiers.forEach((c) -> {
+                        messageClassifiersMapProducer.get(c.idQueue()).add(c);
+                });
+            }
+        } catch (Exception e) {
+            log.error("Initialize default classifier failed: {}", e.toString());
+            e.printStackTrace();
+        }
+    }
 }

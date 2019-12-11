@@ -16,14 +16,13 @@
 package org.onosproject.virtualbng;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Service;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
 import org.onosproject.net.ConnectPoint;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,8 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Implementation of ConfigurationService which reads virtual BNG
  * configuration from a file.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = VbngConfigurationService.class)
 public class VbngConfigurationManager implements VbngConfigurationService {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -167,7 +165,7 @@ public class VbngConfigurationManager implements VbngConfigurationService {
                 return publicIpAddress;
             }
 
-            int prefixLen = prefix.getKey().prefixLength();
+            double prefixLen = prefix.getKey().prefixLength();
             int availableIpNum = (int) Math.pow(2,
                     IpPrefix.MAX_INET_MASK_LENGTH - prefixLen) - 1;
             for (int i = 1; i <= availableIpNum; i++) {
@@ -263,7 +261,7 @@ public class VbngConfigurationManager implements VbngConfigurationService {
 
                 // Judge whether the prefix of this public IP address is used
                 // up, if so, update the IP prefix status.
-                int prefixLen = prefix.getKey().prefixLength();
+                double prefixLen = prefix.getKey().prefixLength();
                 int availableIpNum = (int) Math.pow(2,
                         IpPrefix.MAX_INET_MASK_LENGTH - prefixLen) - 1;
                 int usedIpNum = 0;
@@ -280,10 +278,10 @@ public class VbngConfigurationManager implements VbngConfigurationService {
                 return true;
             }
         }
-        if (!isPublicIpExist) {
-            log.info("The public IP address {} retrieved from XOS mapping does "
-                    + "not exist", publicIpAddress);
-        }
+
+        log.info("The public IP address {} retrieved from XOS mapping does "
+                + "not exist", publicIpAddress);
+
         return false;
     }
 

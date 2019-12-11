@@ -18,21 +18,16 @@ package org.onosproject.store.app;
 import com.google.common.base.Charsets;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onosproject.app.ApplicationDescription;
 import org.onosproject.app.ApplicationEvent;
 import org.onosproject.app.ApplicationException;
+import org.onosproject.app.ApplicationIdStore;
 import org.onosproject.app.ApplicationState;
 import org.onosproject.app.ApplicationStore;
 import org.onosproject.app.ApplicationStoreDelegate;
@@ -41,23 +36,29 @@ import org.onosproject.cluster.ControllerNode;
 import org.onosproject.common.app.ApplicationArchive;
 import org.onosproject.core.Application;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.app.ApplicationIdStore;
 import org.onosproject.core.CoreService;
 import org.onosproject.core.DefaultApplication;
+import org.onosproject.core.Version;
+import org.onosproject.core.VersionService;
 import org.onosproject.security.Permission;
 import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.cluster.messaging.MessageSubject;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.ConsistentMap;
+import org.onosproject.store.service.DistributedPrimitive.Status;
 import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.MapEventListener;
+import org.onosproject.store.service.RevisionType;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageException;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.Topic;
 import org.onosproject.store.service.Versioned;
-import org.onosproject.store.service.DistributedPrimitive.Status;
-import org.onosproject.upgrade.UpgradeService;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.io.ByteArrayInputStream;
@@ -83,16 +84,21 @@ import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.onlab.util.Tools.randomDelay;
-import static org.onosproject.app.ApplicationEvent.Type.*;
-import static org.onosproject.store.app.DistributedApplicationStore.InternalState.*;
+import static org.onosproject.app.ApplicationEvent.Type.APP_ACTIVATED;
+import static org.onosproject.app.ApplicationEvent.Type.APP_DEACTIVATED;
+import static org.onosproject.app.ApplicationEvent.Type.APP_INSTALLED;
+import static org.onosproject.app.ApplicationEvent.Type.APP_PERMISSIONS_CHANGED;
+import static org.onosproject.app.ApplicationEvent.Type.APP_UNINSTALLED;
+import static org.onosproject.store.app.DistributedApplicationStore.InternalState.ACTIVATED;
+import static org.onosproject.store.app.DistributedApplicationStore.InternalState.DEACTIVATED;
+import static org.onosproject.store.app.DistributedApplicationStore.InternalState.INSTALLED;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Manages inventory of applications in a distributed data store providing
  * stronger consistency guarantees.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = ApplicationStore.class)
 public class DistributedApplicationStore extends ApplicationArchive
         implements ApplicationStore {
 
@@ -119,20 +125,20 @@ public class DistributedApplicationStore extends ApplicationArchive
     private ConsistentMap<ApplicationId, InternalApplicationHolder> apps;
     private Topic<Application> appActivationTopic;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ClusterCommunicationService clusterCommunicator;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ClusterService clusterService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected StorageService storageService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ApplicationIdStore idStore;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected UpgradeService upgradeService;
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected VersionService versionService;
 
     private final InternalAppsListener appsListener = new InternalAppsListener();
     private final Consumer<Application> appActivator = new AppActivator();
@@ -150,33 +156,44 @@ public class DistributedApplicationStore extends ApplicationArchive
     @Activate
     public void activate() {
         messageHandlingExecutor = newSingleThreadExecutor(groupedThreads("onos/store/app",
-                                                                         "message-handler", log));
+                "message-handler", log));
         clusterCommunicator.addSubscriber(APP_BITS_REQUEST,
-                                          bytes -> new String(bytes, Charsets.UTF_8),
-                                          name -> {
-                                              try {
-                                                  log.info("Sending bits for application {}", name);
-                                                  return toByteArray(getApplicationInputStream(name));
-                                              } catch (IOException e) {
-                                                  throw new StorageException(e);
-                                              }
-                                          },
-                                          Function.identity(),
-                                          messageHandlingExecutor);
+                bytes -> new String(bytes, Charsets.UTF_8),
+                name -> {
+                    try {
+                        log.info("Sending bits for application {}", name);
+                        return toByteArray(getApplicationInputStream(name));
+                    } catch (ApplicationException e) {
+                        log.warn("Bits for application {} are not available on this node yet", name);
+                        return null;
+                    } catch (IOException e) {
+                        throw new StorageException(e);
+                    }
+                },
+                Function.identity(),
+                messageHandlingExecutor);
 
         apps = storageService.<ApplicationId, InternalApplicationHolder>consistentMapBuilder()
                 .withName("onos-apps")
                 .withRelaxedReadConsistency()
                 .withSerializer(Serializer.using(KryoNamespaces.API,
-                                                 InternalApplicationHolder.class,
-                                                 InternalState.class))
+                        InternalApplicationHolder.class,
+                        InternalState.class))
+                .withVersion(versionService.version())
+                .withRevisionType(RevisionType.PROPAGATE)
+                .withCompatibilityFunction(this::convertApplication)
                 .build();
 
-        appActivationTopic = storageService.getTopic("onos-apps-activation-topic",
-                                                     Serializer.using(KryoNamespaces.API));
+        appActivationTopic = storageService.<Application>topicBuilder()
+            .withName("onos-apps-activation-topic")
+            .withSerializer(Serializer.using(KryoNamespaces.API))
+            .withVersion(versionService.version())
+            .withRevisionType(RevisionType.PROPAGATE)
+            .withCompatibilityFunction(this::convertApplication)
+            .build();
 
         activationExecutor = newSingleThreadExecutor(groupedThreads("onos/store/app",
-                                                                    "app-activation", log));
+                "app-activation", log));
         appActivationTopic.subscribe(appActivator, activationExecutor);
 
         executor = newSingleThreadScheduledExecutor(groupedThreads("onos/app", "store", log));
@@ -189,45 +206,72 @@ public class DistributedApplicationStore extends ApplicationArchive
         apps.addStatusChangeListener(statusChangeListener);
         coreAppId = getId(CoreService.CORE_APP_NAME);
 
-        upgradeExistingApplications();
+        downloadMissingApplications();
+        activateExistingApplications();
         log.info("Started");
     }
 
     /**
-     * Upgrades application versions for existing applications that are stored on disk after an upgrade.
+     * Converts the versions of stored applications propagated from the prior version to the local application versions.
      */
-    private void upgradeExistingApplications() {
-        if (upgradeService.isUpgrading() && upgradeService.isLocalUpgraded()) {
-            getApplicationNames().forEach(appName -> {
-                // Only update the application version if the application has already been installed.
-                ApplicationId appId = getId(appName);
-                if (appId != null) {
-                    Application application = getApplication(appId);
-                    if (application != null) {
-                        InternalApplicationHolder appHolder = Versioned.valueOrNull(apps.get(application.id()));
-
-                        // Load the application description from disk. If the version doesn't match the persisted
-                        // version, update the stored application with the new version.
-                        ApplicationDescription appDesc = getApplicationDescription(appName);
-                        if (!appDesc.version().equals(application.version())) {
-                            Application newApplication = DefaultApplication.builder(application)
-                                    .withVersion(appDesc.version())
-                                    .build();
-                            InternalApplicationHolder newHolder = new InternalApplicationHolder(
-                                    newApplication, appHolder.state, appHolder.permissions);
-                            apps.put(newApplication.id(), newHolder);
-                        }
-
-                        // If the application was activated in the previous version, set the local state to active.
-                        if (appHolder.state == ACTIVATED) {
-                            setActive(appName);
-                            updateTime(appName);
-                        }
-                    }
-                }
-            });
+    private InternalApplicationHolder convertApplication(InternalApplicationHolder appHolder, Version version) {
+        // Load the application description from disk. If the version doesn't match the persisted
+        // version, update the stored application with the new version.
+        ApplicationDescription appDesc = getApplicationDescription(appHolder.app.id().name());
+        if (!appDesc.version().equals(appHolder.app().version())) {
+            Application newApplication = DefaultApplication.builder(appDesc)
+                .withAppId(appHolder.app.id())
+                .build();
+            return new InternalApplicationHolder(
+                newApplication, appHolder.state, appHolder.permissions);
         }
+        return appHolder;
     }
+
+    /**
+     * Converts the versions of stored applications propagated from the prior version to the local application versions.
+     */
+    private Application convertApplication(Application app, Version version) {
+        // Load the application description from disk. If the version doesn't match the persisted
+        // version, update the stored application with the new version.
+        ApplicationDescription appDesc = getApplicationDescription(app.id().name());
+        if (!appDesc.version().equals(app.version())) {
+            return DefaultApplication.builder(appDesc)
+                .withAppId(app.id())
+                .build();
+        }
+        return app;
+    }
+
+    /**
+     * Downloads any missing bits for installed applications.
+     */
+    private void downloadMissingApplications() {
+        apps.asJavaMap().forEach((appId, holder) -> fetchBitsIfNeeded(holder.app));
+    }
+
+    /**
+     * Activates applications that should be activated according to the distributed store.
+     */
+    private void activateExistingApplications() {
+        getApplicationNames().forEach(appName -> {
+            // Only update the application version if the application has already been installed.
+            ApplicationId appId = getId(appName);
+            if (appId != null) {
+                ApplicationDescription appDesc = getApplicationDescription(appName);
+                InternalApplicationHolder appHolder = Versioned.valueOrNull(apps.get(appId));
+
+                // If the application has already been activated, set the local state to active.
+                if (appHolder != null
+                    && appDesc.version().equals(appHolder.app().version())
+                    && appHolder.state == ACTIVATED) {
+                    setActive(appName);
+                    updateTime(appName);
+                }
+            }
+        });
+    }
+
 
     /**
      * Processes existing applications from the distributed map. This is done to
@@ -245,6 +289,10 @@ public class DistributedApplicationStore extends ApplicationArchive
         getApplicationNames().forEach(appName -> {
             Application app = loadFromDisk(appName);
             if (app != null && isActive(app.id().name())) {
+                // For now, apps loaded from disk will be marked as having been
+                // activated explicitly, which means they won't deactivate
+                // implicitly when all dependent apps have been deactivated.
+                requiredBy.put(app.id(), coreAppId);
                 activate(app.id(), false);
                 // TODO Load app permissions
             }
@@ -280,14 +328,23 @@ public class DistributedApplicationStore extends ApplicationArchive
                         .noneMatch(requiredApp -> loadFromDisk(requiredApp) == null);
                 pendingApps.remove(appName);
 
-                return success ? create(appDesc, false) : null;
+                if (success) {
+                    return create(appDesc, false);
+                } else {
+                    log.error("Unable to load dependencies for application {}", appName);
+                    return null;
+                }
 
             } catch (Exception e) {
-                log.warn("Unable to load application {} from disk; retrying", appName);
+                log.warn("Unable to load application {} from disk: {}; retrying",
+                         appName,
+                         Throwables.getRootCause(e).getMessage());
+                log.debug("Full error details:", e);
                 randomDelay(RETRY_DELAY_MS); //FIXME: This is a deliberate hack; fix in Falcon
             }
         }
         pendingApps.remove(appName);
+        log.error("Unable to load application {}", appName);
         return null;
     }
 
@@ -313,10 +370,10 @@ public class DistributedApplicationStore extends ApplicationArchive
     @Override
     public Set<Application> getApplications() {
         return ImmutableSet.copyOf(apps.values()
-                                       .stream()
-                                       .map(Versioned::value)
-                                       .map(InternalApplicationHolder::app)
-                                       .collect(Collectors.toSet()));
+                .stream()
+                .map(Versioned::value)
+                .map(InternalApplicationHolder::app)
+                .collect(Collectors.toSet()));
     }
 
     @Override
@@ -425,11 +482,11 @@ public class DistributedApplicationStore extends ApplicationArchive
         if (requiredBy.get(appId).isEmpty()) {
             AtomicBoolean stateChanged = new AtomicBoolean(false);
             apps.computeIf(appId,
-                v -> v != null && v.state() != DEACTIVATED,
-                (k, v) -> {
-                    stateChanged.set(true);
-                    return new InternalApplicationHolder(v.app(), DEACTIVATED, v.permissions());
-                });
+                    v -> v != null && v.state() != DEACTIVATED,
+                    (k, v) -> {
+                        stateChanged.set(true);
+                        return new InternalApplicationHolder(v.app(), DEACTIVATED, v.permissions());
+                    });
             if (stateChanged.get()) {
                 updateTime(appId.name());
                 deactivateRequiredApps(appId);
@@ -440,22 +497,22 @@ public class DistributedApplicationStore extends ApplicationArchive
     // Deactivates all apps that require this application.
     private void deactivateDependentApps(ApplicationId appId) {
         apps.values()
-            .stream()
-            .map(Versioned::value)
-            .filter(a -> a.state() == ACTIVATED)
-            .filter(a -> a.app().requiredApps().contains(appId.name()))
-            .forEach(a -> deactivate(a.app().id()));
+                .stream()
+                .map(Versioned::value)
+                .filter(a -> a.state() == ACTIVATED)
+                .filter(a -> a.app().requiredApps().contains(appId.name()))
+                .forEach(a -> deactivate(a.app().id()));
     }
 
     // Deactivates all apps required by this application.
     private void deactivateRequiredApps(ApplicationId appId) {
         getApplication(appId).requiredApps()
-                             .stream()
-                             .map(this::getId)
-                             .map(apps::get)
-                             .map(Versioned::value)
-                             .filter(a -> a.state() == ACTIVATED)
-                             .forEach(a -> deactivate(a.app().id(), appId));
+                .stream()
+                .map(this::getId)
+                .map(apps::get)
+                .map(Versioned::value)
+                .filter(a -> a.state() == ACTIVATED)
+                .forEach(a -> deactivate(a.app().id(), appId));
     }
 
     @Override
@@ -468,11 +525,11 @@ public class DistributedApplicationStore extends ApplicationArchive
     public void setPermissions(ApplicationId appId, Set<Permission> permissions) {
         AtomicBoolean permissionsChanged = new AtomicBoolean(false);
         Versioned<InternalApplicationHolder> appHolder = apps.computeIf(appId,
-            v -> v != null && !Sets.symmetricDifference(v.permissions(), permissions).isEmpty(),
-            (k, v) -> {
-                permissionsChanged.set(true);
-                return new InternalApplicationHolder(v.app(), v.state(), ImmutableSet.copyOf(permissions));
-            });
+                v -> v != null && !Sets.symmetricDifference(v.permissions(), permissions).isEmpty(),
+                (k, v) -> {
+                    permissionsChanged.set(true);
+                    return new InternalApplicationHolder(v.app(), v.state(), ImmutableSet.copyOf(permissions));
+                });
         if (permissionsChanged.get()) {
             notifyDelegate(new ApplicationEvent(APP_PERMISSIONS_CHANGED, appHolder.value().app()));
         }
@@ -509,14 +566,18 @@ public class DistributedApplicationStore extends ApplicationArchive
             ApplicationId appId = event.key();
             InternalApplicationHolder newApp = event.newValue() == null ? null : event.newValue().value();
             InternalApplicationHolder oldApp = event.oldValue() == null ? null : event.oldValue().value();
-            if (event.type() == MapEvent.Type.INSERT || event.type() == MapEvent.Type.UPDATE) {
-                if (event.type() == MapEvent.Type.UPDATE && newApp.state() == oldApp.state()) {
-                    return;
-                }
+            if (event.type() == MapEvent.Type.UPDATE && (newApp == null || oldApp == null ||
+                    newApp.state() == oldApp.state())) {
+                log.warn("Can't update the application {}", event.key());
+                return;
+            }
+            if ((event.type() == MapEvent.Type.INSERT || event.type() == MapEvent.Type.UPDATE) && newApp != null) {
                 setupApplicationAndNotify(appId, newApp.app(), newApp.state());
-            } else if (event.type() == MapEvent.Type.REMOVE) {
+            } else if (event.type() == MapEvent.Type.REMOVE && oldApp != null) {
                 notifyDelegate(new ApplicationEvent(APP_UNINSTALLED, oldApp.app()));
                 purgeApplication(appId.name());
+            } else {
+                log.warn("Can't perform {} on application {}", event.type(), event.key());
             }
         }
     }
@@ -580,22 +641,22 @@ public class DistributedApplicationStore extends ApplicationArchive
                 continue;
             }
             clusterCommunicator.sendAndReceive(app.id().name(),
-                                               APP_BITS_REQUEST,
-                                               s -> s.getBytes(Charsets.UTF_8),
-                                               Function.identity(),
-                                               node.id())
+                    APP_BITS_REQUEST,
+                    s -> s.getBytes(Charsets.UTF_8),
+                    Function.identity(),
+                    node.id())
                     .whenCompleteAsync((bits, error) -> {
                         if (error == null && latch.getCount() > 0) {
                             saveApplication(new ByteArrayInputStream(bits));
                             log.info("Downloaded bits for application {} from node {}",
-                                     app.id().name(), node.id());
+                                    app.id().name(), node.id());
                             latch.countDown();
                             if (delegateInstallation) {
                                 notifyDelegate(new ApplicationEvent(APP_INSTALLED, app));
                             }
                         } else if (error != null) {
                             log.warn("Unable to fetch bits for application {} from node {}",
-                                     app.id().name(), node.id());
+                                    app.id().name(), node.id());
                         }
                     }, messageHandlingExecutor);
         }
@@ -606,6 +667,7 @@ public class DistributedApplicationStore extends ApplicationArchive
             }
         } catch (InterruptedException e) {
             log.warn("Interrupted while fetching bits for application {}", app.id().name());
+            Thread.currentThread().interrupt();
         }
     }
 

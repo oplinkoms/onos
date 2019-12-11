@@ -15,38 +15,36 @@
  */
 package org.onosproject.cluster.impl;
 
-import static java.net.NetworkInterface.getNetworkInterfaces;
-import static org.slf4j.LoggerFactory.getLogger;
-
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.util.Collections;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
+import com.google.common.collect.ImmutableSet;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.onlab.packet.IpAddress;
 import org.onosproject.cluster.ClusterMetadata;
 import org.onosproject.cluster.ClusterMetadataProvider;
 import org.onosproject.cluster.ClusterMetadataProviderRegistry;
 import org.onosproject.cluster.ControllerNode;
 import org.onosproject.cluster.DefaultControllerNode;
-import org.onosproject.cluster.DefaultPartition;
 import org.onosproject.cluster.NodeId;
-import org.onosproject.cluster.Partition;
 import org.onosproject.cluster.PartitionId;
 import org.onosproject.core.VersionService;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.store.service.Versioned;
 import org.slf4j.Logger;
 
-import com.google.common.collect.ImmutableSet;
+import static java.net.NetworkInterface.getNetworkInterfaces;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Provider of default {@link ClusterMetadata cluster metadata}.
@@ -56,10 +54,10 @@ public class DefaultClusterMetadataProvider implements ClusterMetadataProvider {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ClusterMetadataProviderRegistry providerRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected VersionService versionService;
 
     private static final String ONOS_IP = "ONOS_IP";
@@ -75,15 +73,9 @@ public class DefaultClusterMetadataProvider implements ClusterMetadataProvider {
         String localIp = getSiteLocalAddress();
         ControllerNode localNode =
                 new DefaultControllerNode(new NodeId(localIp), IpAddress.valueOf(localIp), DEFAULT_ONOS_PORT);
-        // partition 1
-        Partition partition = new DefaultPartition(
-                PartitionId.from(1),
-                versionService.version(),
-                ImmutableSet.of(localNode.id()));
-        ClusterMetadata metadata = new ClusterMetadata(PROVIDER_ID,
-                                        "default",
-                                        ImmutableSet.of(localNode),
-                                        ImmutableSet.of(partition));
+        ClusterMetadata metadata = new ClusterMetadata(
+            PROVIDER_ID, "default", localNode, ImmutableSet.of(), ImmutableSet.of(),
+            UUID.randomUUID().toString());
         long version = System.currentTimeMillis();
         cachedMetadata.set(new Versioned<>(metadata, version));
         providerRegistry.register(this);

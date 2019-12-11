@@ -17,15 +17,6 @@
 package org.onosproject.net.intent.impl.compiler;
 
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Modified;
-import org.apache.felix.scr.annotations.Property;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.net.intent.Intent;
@@ -33,76 +24,72 @@ import org.onosproject.net.intent.IntentCompiler;
 import org.onosproject.net.intent.IntentExtensionService;
 import org.onosproject.net.resource.impl.LabelAllocator;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Modified;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.Map;
-import java.util.Set;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
+import static org.onosproject.net.OsgiPropertyConstants.ICR_COPY_TTL;
+import static org.onosproject.net.OsgiPropertyConstants.ICR_COPY_TTL_DEFAULT;
+import static org.onosproject.net.OsgiPropertyConstants.ICR_FLOW_OPTIMIZATION;
+import static org.onosproject.net.OsgiPropertyConstants.ICR_LABEL_SELECTION;
+import static org.onosproject.net.OsgiPropertyConstants.ICR_OPT_LABEL_SELECTION;
+import static org.onosproject.net.OsgiPropertyConstants.ICR_USE_FLOW_OBJECTIVES;
+import static org.onosproject.net.OsgiPropertyConstants.ICR_USE_FLOW_OBJECTIVES_DEFAULT;
+import static org.onosproject.net.OsgiPropertyConstants.ICR_FLOW_OPTIMIZATION_DEFAULT;
+import static org.onosproject.net.OsgiPropertyConstants.ICR_LABEL_SELECTION_DEFAULT;
+import static org.onosproject.net.OsgiPropertyConstants.ICR_OPT_LABEL_SELECTION_DEFAULT;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Auxiliary utility to register either flow-rule compilers or flow-objective
  * compilers.
  */
-@Component
-@Service(value = IntentConfigurableRegistrator.class)
+@Component(
+    service = IntentConfigurableRegistrator.class,
+    property = {
+        ICR_USE_FLOW_OBJECTIVES + ":Boolean=" + ICR_USE_FLOW_OBJECTIVES_DEFAULT,
+        ICR_LABEL_SELECTION + "=" + ICR_LABEL_SELECTION_DEFAULT,
+        ICR_OPT_LABEL_SELECTION + "=" + ICR_LABEL_SELECTION_DEFAULT,
+        ICR_FLOW_OPTIMIZATION + ":Boolean=" + ICR_FLOW_OPTIMIZATION_DEFAULT,
+        ICR_COPY_TTL + ":Boolean=" + ICR_COPY_TTL_DEFAULT
+    }
+)
 public class IntentConfigurableRegistrator {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected IntentExtensionService extensionService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ComponentConfigService cfgService;
 
-    private static final boolean DEFAULT_FLOW_OBJECTIVES = false;
-    @Property(name = "useFlowObjectives",
-            boolValue = DEFAULT_FLOW_OBJECTIVES,
-            label = "Indicates whether or not to use flow objective-based compilers")
-    private boolean useFlowObjectives = DEFAULT_FLOW_OBJECTIVES;
+    /** Indicates whether or not to use flow objective-based compilers. */
+    private boolean useFlowObjectives = ICR_USE_FLOW_OBJECTIVES_DEFAULT;
 
-    private static final String DEFAULT_LABEL_SELECTION = "RANDOM";
-    @Property(name = "labelSelection",
-            value = DEFAULT_LABEL_SELECTION,
-            label = "Defines the label selection algorithm - RANDOM or FIRST_FIT")
-    private String labelSelection = DEFAULT_LABEL_SELECTION;
+    /** Defines the label selection algorithm - RANDOM or FIRST_FIT. */
+    private String labelSelection = ICR_LABEL_SELECTION_DEFAULT;
 
-    private static final String DEFAULT_OPT_LABEL_SELECTION = "NONE";
-    @Property(name = "optLabelSelection",
-            value = DEFAULT_OPT_LABEL_SELECTION,
-            label = "Defines the optimization for label selection algorithm - NONE, NO_SWAP, MIN_SWAP")
-    private String optLabelSelection = DEFAULT_OPT_LABEL_SELECTION;
+    /** Defines the optimization for label selection algorithm - NONE, NO_SWAP, MIN_SWAP. */
+    private String optLabelSelection = ICR_OPT_LABEL_SELECTION_DEFAULT;
 
-    private static final boolean DEFAULT_FLOW_OPTIMIZATION = false;
-    @Property(name = "optimizeInstructions",
-            boolValue = DEFAULT_FLOW_OPTIMIZATION,
-            label = "Indicates whether or not to optimize the flows in the link collection compiler")
-    private boolean optimizeInstructions = DEFAULT_FLOW_OPTIMIZATION;
+    /** Indicates whether or not to optimize the flows in the link collection compiler. */
+    private boolean optimizeInstructions = ICR_FLOW_OPTIMIZATION_DEFAULT;
 
-    private static final boolean DEFAULT_COPY_TTL = false;
-    @Property(name = "useCopyTtl",
-            boolValue = DEFAULT_COPY_TTL,
-            label = "Indicates whether or not to use copy ttl in the link collection compiler")
-    private boolean useCopyTtl = DEFAULT_COPY_TTL;
-
-    /**
-     * Temporary for switching old compiler and new compiler.
-     * @deprecated 1.10 Kingfisher
-     */
-    private static final String DEFAULT_FLOW_OBJECTIVE_COMPILER =
-            "org.onosproject.net.intent.impl.compiler.LinkCollectionIntentFlowObjectiveCompiler";
-    @Deprecated
-    @Property(name = "defaultFlowObjectiveCompiler",
-            value = DEFAULT_FLOW_OBJECTIVE_COMPILER,
-            label = "Default compiler to generate flow objective")
-    private String defaultFlowObjectiveCompiler = DEFAULT_FLOW_OBJECTIVE_COMPILER;
+    /** Indicates whether or not to use copy ttl in the link collection compiler. */
+    private boolean useCopyTtl = ICR_COPY_TTL_DEFAULT;
 
     private final Map<Class<Intent>, IntentCompiler<Intent>> flowRuleBased = Maps.newConcurrentMap();
 
     // FIXME: temporary code for switching old compiler to new compiler
-    private final Map<Class<Intent>, Set<IntentCompiler<Intent>>> flowObjectiveBased = Maps.newConcurrentMap();
+    private final Map<Class<Intent>, IntentCompiler<Intent>> flowObjectiveBased = Maps.newConcurrentMap();
 
     @Activate
     public void activate() {
@@ -125,14 +112,12 @@ public class IntentConfigurableRegistrator {
             log.info("Settings: useCopyTtl={}", useCopyTtl);
             log.info("Settings: optLabelSelection={}", optLabelSelection);
 
-            // FIXME: temporary code for switching old compiler to new compiler
-            log.info("Settings: defaultFlowObjectiveCompiler={}", defaultFlowObjectiveCompiler);
             return;
         }
 
         boolean newFlowObjectives;
         try {
-            String s = Tools.get(context.getProperties(), "useFlowObjectives");
+            String s = Tools.get(context.getProperties(), ICR_USE_FLOW_OBJECTIVES);
             newFlowObjectives = isNullOrEmpty(s) ? useFlowObjectives : Boolean.parseBoolean(s.trim());
         } catch (ClassCastException e) {
             newFlowObjectives = useFlowObjectives;
@@ -144,24 +129,9 @@ public class IntentConfigurableRegistrator {
             log.info("Settings: useFlowObjectives={}", useFlowObjectives);
         }
 
-        // FIXME: temporary code for switching old compiler to new compiler
-        String newDefaultFlowObjectiveCompiler;
-        try {
-            String s = Tools.get(context.getProperties(), "defaultFlowObjectiveCompiler");
-            newDefaultFlowObjectiveCompiler = isNullOrEmpty(s) ? defaultFlowObjectiveCompiler : s.trim();
-        } catch (ClassCastException e) {
-            newDefaultFlowObjectiveCompiler = defaultFlowObjectiveCompiler;
-        }
-
-        if (!defaultFlowObjectiveCompiler.equals(newDefaultFlowObjectiveCompiler)) {
-            defaultFlowObjectiveCompiler = newDefaultFlowObjectiveCompiler;
-            changeCompilers();
-            log.info("Settings: defaultFlowObjectiveCompiler={}", defaultFlowObjectiveCompiler);
-        }
-
         String newLabelSelection;
         try {
-            String s = Tools.get(context.getProperties(), "labelSelection");
+            String s = Tools.get(context.getProperties(), ICR_LABEL_SELECTION);
             newLabelSelection = isNullOrEmpty(s) ? labelSelection : s.trim();
         } catch (ClassCastException e) {
             newLabelSelection = labelSelection;
@@ -176,7 +146,7 @@ public class IntentConfigurableRegistrator {
         String newOptLabelSelection;
         try {
             // The optimization behavior provided by the user
-            String optLabelSelected = Tools.get(context.getProperties(), "optLabelSelection");
+            String optLabelSelected = Tools.get(context.getProperties(), ICR_OPT_LABEL_SELECTION);
             // Parse the content of the string
             newOptLabelSelection = isNullOrEmpty(optLabelSelected) ? optLabelSelection : optLabelSelected.trim();
         } catch (ClassCastException e) {
@@ -191,7 +161,7 @@ public class IntentConfigurableRegistrator {
 
         boolean newFlowOptimization;
         try {
-            String s = Tools.get(context.getProperties(), "useFlowOptimization");
+            String s = Tools.get(context.getProperties(), ICR_FLOW_OPTIMIZATION);
             newFlowOptimization = isNullOrEmpty(s) ? optimizeInstructions : Boolean.parseBoolean(s.trim());
         } catch (ClassCastException e) {
             newFlowOptimization = optimizeInstructions;
@@ -205,7 +175,7 @@ public class IntentConfigurableRegistrator {
 
         boolean newCopyTtl;
         try {
-            String s = Tools.get(context.getProperties(), "useCopyTtl");
+            String s = Tools.get(context.getProperties(), ICR_COPY_TTL);
             newCopyTtl = isNullOrEmpty(s) ? useCopyTtl : Boolean.parseBoolean(s.trim());
         } catch (ClassCastException e) {
             newCopyTtl = useCopyTtl;
@@ -230,15 +200,7 @@ public class IntentConfigurableRegistrator {
     <T extends Intent> void registerCompiler(Class<T> cls, IntentCompiler<T> compiler,
                                              boolean flowBased) {
         if (flowBased) {
-            // FIXME: temporary code for switching old compiler to new compiler
-            flowObjectiveBased.compute((Class<Intent>) cls, (clz, compilers) -> {
-                if (compilers == null) {
-                    compilers = Sets.newHashSet();
-                }
-
-                compilers.add((IntentCompiler<Intent>) compiler);
-                return compilers;
-            });
+            flowObjectiveBased.put((Class<Intent>) cls, (IntentCompiler<Intent>) compiler);
         } else {
             flowRuleBased.put((Class<Intent>) cls, (IntentCompiler<Intent>) compiler);
         }
@@ -269,14 +231,8 @@ public class IntentConfigurableRegistrator {
     private void changeCompilers() {
         if (useFlowObjectives) {
             flowRuleBased.forEach((cls, compiler) -> extensionService.unregisterCompiler(cls));
-            // FIXME: temporary code for switching old compiler to new compiler
-            flowObjectiveBased.forEach((cls, compilers) -> {
-                compilers.forEach(compiler -> {
-                    // filter out flow objective compiler which doesn't match
-                    if (compiler.getClass().getName().equals(defaultFlowObjectiveCompiler)) {
-                        extensionService.registerCompiler(cls, compiler);
-                    }
-                });
+            flowObjectiveBased.forEach((cls, compiler) -> {
+                extensionService.registerCompiler(cls, compiler);
             });
         } else {
             flowObjectiveBased.forEach((cls, compiler) -> extensionService.unregisterCompiler(cls));

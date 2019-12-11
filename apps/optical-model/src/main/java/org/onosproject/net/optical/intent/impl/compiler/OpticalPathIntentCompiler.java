@@ -17,18 +17,20 @@ package org.onosproject.net.optical.intent.impl.compiler;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.onosproject.core.ApplicationId;
-import org.onosproject.core.CoreService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Device;
-import org.onosproject.net.Device.Type;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Link;
+import org.onosproject.net.PortNumber;
+import org.onosproject.net.Port;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.onosproject.core.ApplicationId;
+import org.onosproject.core.CoreService;
+import org.onosproject.net.Device.Type;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.device.DeviceServiceAdapter;
 import org.onosproject.net.flow.DefaultFlowRule;
@@ -59,13 +61,13 @@ public class OpticalPathIntentCompiler implements IntentCompiler<OpticalPathInte
 
     private static final Logger log = LoggerFactory.getLogger(OpticalPathIntentCompiler.class);
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected IntentExtensionService intentManager;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceService deviceService = new DeviceServiceAdapter();
 
     private ApplicationId appId;
@@ -99,11 +101,11 @@ public class OpticalPathIntentCompiler implements IntentCompiler<OpticalPathInte
 
         return Collections.singletonList(
                 new FlowRuleIntent(appId,
-                                   intent.key(),
-                                   rules,
-                                   intent.resources(),
-                                   PathIntent.ProtectionType.PRIMARY,
-                                   intent.resourceGroup()
+                        intent.key(),
+                        rules,
+                        intent.resources(),
+                        PathIntent.ProtectionType.PRIMARY,
+                        intent.resourceGroup()
                 )
         );
     }
@@ -119,6 +121,32 @@ public class OpticalPathIntentCompiler implements IntentCompiler<OpticalPathInte
         selectorBuilder.matchInPort(intent.src().port());
 
         List<FlowRule> rules = new LinkedList<>();
+
+        /*
+         * especial case for 0 hop when srcDeviceId = dstDeviceId
+         * and path contain only one fake default path.
+         */
+        if (intent.src().deviceId().equals(intent.dst().deviceId()) &&
+                intent.path().links().size() == 1) {
+            log.debug("handling 0 hop case for intent {}", intent);
+            TrafficTreatment.Builder treatmentBuilder = DefaultTrafficTreatment.builder();
+            if (!isTransparent(intent.src().deviceId())) {
+                treatmentBuilder.add(Instructions.modL0Lambda(intent.lambda()));
+            }
+            treatmentBuilder.setOutput(intent.dst().port());
+
+            FlowRule rule = DefaultFlowRule.builder()
+                    .forDevice(intent.src().deviceId())
+                    .withSelector(selectorBuilder.build())
+                    .withTreatment(treatmentBuilder.build())
+                    .withPriority(intent.priority())
+                    .fromApp(appId)
+                    .makePermanent()
+                    .build();
+            rules.add(rule);
+            return rules;
+        }
+
         ConnectPoint current = intent.src();
 
         for (Link link : intent.path().links()) {
@@ -178,9 +206,35 @@ public class OpticalPathIntentCompiler implements IntentCompiler<OpticalPathInte
      */
     private List<FlowRule> createReverseRules(OpticalPathIntent intent) {
         TrafficSelector.Builder selectorBuilder = DefaultTrafficSelector.builder();
-        selectorBuilder.matchInPort(intent.dst().port());
+        selectorBuilder.matchInPort(reversePort(intent.dst().deviceId(), intent.dst().port()));
 
         List<FlowRule> rules = new LinkedList<>();
+
+        /*
+         * especial case for 0 hop when srcDeviceId = dstDeviceId
+         * and path contain only one fake default path.
+         */
+        if (intent.src().deviceId().equals(intent.dst().deviceId()) &&
+                intent.path().links().size() == 1) {
+            log.debug("handling 0 hop reverse path case for intent {}", intent);
+            TrafficTreatment.Builder treatmentBuilder = DefaultTrafficTreatment.builder();
+            if (!isTransparent(intent.src().deviceId())) {
+                treatmentBuilder.add(Instructions.modL0Lambda(intent.lambda()));
+            }
+            treatmentBuilder.setOutput(reversePort(intent.src().deviceId(), intent.src().port()));
+
+            FlowRule rule = DefaultFlowRule.builder()
+                    .forDevice(intent.src().deviceId())
+                    .withSelector(selectorBuilder.build())
+                    .withTreatment(treatmentBuilder.build())
+                    .withPriority(intent.priority())
+                    .fromApp(appId)
+                    .makePermanent()
+                    .build();
+            rules.add(rule);
+            return rules;
+        }
+
         ConnectPoint current = intent.dst();
 
         for (Link link : Lists.reverse(intent.path().links())) {
@@ -188,7 +242,7 @@ public class OpticalPathIntentCompiler implements IntentCompiler<OpticalPathInte
             if (!isTransparent(current.deviceId())) {
                 treatmentBuilder.add(Instructions.modL0Lambda(intent.lambda()));
             }
-            treatmentBuilder.setOutput(link.dst().port());
+            treatmentBuilder.setOutput(reversePort(link.dst().deviceId(), link.dst().port()));
 
             FlowRule rule = DefaultFlowRule.builder()
                     .forDevice(current.deviceId())
@@ -205,7 +259,7 @@ public class OpticalPathIntentCompiler implements IntentCompiler<OpticalPathInte
             }
 
             current = link.src();
-            selectorBuilder.matchInPort(link.src().port());
+            selectorBuilder.matchInPort(reversePort(link.src().deviceId(), link.src().port()));
             if (!isTransparent(current.deviceId())) {
                 selectorBuilder.add(Criteria.matchLambda(intent.lambda()));
                 selectorBuilder.add(Criteria.matchOchSignalType(intent.signalType()));
@@ -214,7 +268,7 @@ public class OpticalPathIntentCompiler implements IntentCompiler<OpticalPathInte
 
         // Build the egress ROADM rule
         TrafficTreatment.Builder treatmentLast = DefaultTrafficTreatment.builder();
-        treatmentLast.setOutput(intent.src().port());
+        treatmentLast.setOutput(reversePort(intent.src().deviceId(), intent.src().port()));
 
         FlowRule rule = new DefaultFlowRule.Builder()
                 .forDevice(intent.src().deviceId())
@@ -230,6 +284,25 @@ public class OpticalPathIntentCompiler implements IntentCompiler<OpticalPathInte
         }
 
         return rules;
+    }
+
+    /**
+     * Returns the PortNum of reverse port if annotation is present, otherwise return PortNum of the port itself.
+     * In the OpenROADM YANG models it is used the term "partner-port.
+     *
+     * @param portNumber the port
+     * @return the PortNum of reverse port if annotation is present, otherwise PortNum of the port itself.
+     */
+    private PortNumber reversePort(DeviceId deviceId, PortNumber portNumber) {
+        Port port = deviceService.getPort(deviceId, portNumber);
+
+        String reversePort = port.annotations().value(OpticalPathIntent.REVERSE_PORT_ANNOTATION_KEY);
+        if (reversePort != null) {
+            PortNumber reversePortNumber = PortNumber.portNumber(reversePort);
+            return reversePortNumber;
+        } else {
+            return portNumber;
+        }
     }
 
     /**
@@ -254,7 +327,7 @@ public class OpticalPathIntentCompiler implements IntentCompiler<OpticalPathInte
     private boolean isTransparent(DeviceId deviceId) {
         return TRANSPARENT_DEVICES.contains(
                 Optional.ofNullable(deviceService.getDevice(deviceId))
-                .map(Device::type)
-                .orElse(Type.OTHER));
+                        .map(Device::type)
+                        .orElse(Type.OTHER));
     }
 }

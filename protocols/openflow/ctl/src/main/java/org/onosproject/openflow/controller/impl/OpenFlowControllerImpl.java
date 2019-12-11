@@ -18,32 +18,38 @@ package org.onosproject.openflow.controller.impl;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Modified;
-import org.apache.felix.scr.annotations.Property;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.CoreService;
-import org.onosproject.net.device.DeviceEvent;
-import org.onosproject.net.device.DeviceListener;
-import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.DeviceId;
+import org.onosproject.net.config.ConfigFactory;
+import org.onosproject.net.config.NetworkConfigEvent;
+import org.onosproject.net.config.NetworkConfigListener;
+import org.onosproject.net.config.NetworkConfigRegistry;
+import org.onosproject.net.config.basics.SubjectFactories;
 import org.onosproject.net.driver.DriverService;
+import org.onosproject.openflow.config.OpenFlowDeviceConfig;
 import org.onosproject.openflow.controller.DefaultOpenFlowPacketContext;
 import org.onosproject.openflow.controller.Dpid;
+import org.onosproject.openflow.controller.OpenFlowClassifierListener;
 import org.onosproject.openflow.controller.OpenFlowController;
 import org.onosproject.openflow.controller.OpenFlowEventListener;
 import org.onosproject.openflow.controller.OpenFlowMessageListener;
 import org.onosproject.openflow.controller.OpenFlowPacketContext;
 import org.onosproject.openflow.controller.OpenFlowSwitch;
 import org.onosproject.openflow.controller.OpenFlowSwitchListener;
+import org.onosproject.openflow.controller.OpenFlowListener;
+import org.onosproject.openflow.controller.OpenFlowService;
+import org.onosproject.openflow.controller.OpenFlowEvent;
 import org.onosproject.openflow.controller.PacketListener;
 import org.onosproject.openflow.controller.RoleState;
 import org.onosproject.openflow.controller.driver.OpenFlowAgent;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Modified;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.projectfloodlight.openflow.protocol.OFCalientFlowStatsEntry;
 import org.projectfloodlight.openflow.protocol.OFCalientFlowStatsReply;
 import org.projectfloodlight.openflow.protocol.OFCircuitPortStatus;
@@ -77,7 +83,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -89,42 +95,130 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.net.Device.Type.CONTROLLER;
-import static org.onosproject.net.device.DeviceEvent.Type.DEVICE_REMOVED;
-import static org.onosproject.openflow.controller.Dpid.dpid;
+import static org.onosproject.openflow.controller.impl.OsgiPropertyConstants.*;
 
+@Component(
+        immediate = true,
+        service = OpenFlowController.class,
+        property = {
+                OFPORTS + "=" + OFPORTS_DEFAULT,
+                WORKER_THREADS + ":Integer=" + WORKER_THREADS_DEFAULT,
+                TLS_MODE + "=" + TLS_MODE_DEFAULT,
+                KEY_STORE + "=" + KEY_STORE_DEFAULT,
+                KEY_STORE_PASSWORD + "=" + KEY_STORE_PASSWORD_DEFAULT,
+                TRUST_STORE + "=" + TRUST_STORE_DEFAULT,
+                TRUST_STORE_PASSWORD + "=" + TRUST_STORE_PASSWORD_DEFAULT,
+                DEFAULT_QUEUE_SIZE + ":Integer=" + DEFAULT_QUEUE_SIZE_DEFAULT,
+                DEBAULT_BULK_SIZE + ":Integer=" + BULK_SIZE_DEFAULT,
+                QUEUE_SIZE_N0 + ":Integer=" + QUEUE_SIZE_N0_DEFAULT,
+                BULK_SIZE_N0 + ":Integer=" + BULK_SIZE_DEFAULT,
+                QUEUE_SIZE_N1 + ":Integer=" + QUEUE_SIZE_DEFAULT,
+                BULK_SIZE_N1 + ":Integer=" + BULK_SIZE_DEFAULT,
+                QUEUE_SIZE_N2 + ":Integer=" + QUEUE_SIZE_DEFAULT,
+                BULK_SIZE_N2 + ":Integer=" + BULK_SIZE_DEFAULT,
+                QUEUE_SIZE_N3 + ":Integer=" + QUEUE_SIZE_DEFAULT,
+                BULK_SIZE_N3 + ":Integer=" + BULK_SIZE_DEFAULT,
+                QUEUE_SIZE_N4 + ":Integer=" + QUEUE_SIZE_DEFAULT,
+                BULK_SIZE_N4 + ":Integer=" + BULK_SIZE_DEFAULT,
+                QUEUE_SIZE_N5 + ":Integer=" + QUEUE_SIZE_DEFAULT,
+                BULK_SIZE_N5 + ":Integer=" + BULK_SIZE_DEFAULT,
+                QUEUE_SIZE_N6 + ":Integer=" + QUEUE_SIZE_DEFAULT,
+                BULK_SIZE_N6 + ":Integer=" + BULK_SIZE_DEFAULT,
+        }
+)
 
-@Component(immediate = true)
-@Service
 public class OpenFlowControllerImpl implements OpenFlowController {
     private static final String APP_ID = "org.onosproject.openflow-base";
-    private static final String DEFAULT_OFPORT = "6633,6653";
-    private static final int DEFAULT_WORKER_THREADS = 0;
     protected static final String SCHEME = "of";
 
     private static final Logger log =
             LoggerFactory.getLogger(OpenFlowControllerImpl.class);
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DriverService driverService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ComponentConfigService cfgService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected DeviceService deviceService;
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected NetworkConfigRegistry netCfgService;
 
+    /** Port numbers (comma separated) used by OpenFlow protocol; default is 6633,6653. */
+    private String openflowPorts = OFPORTS_DEFAULT;
 
-    @Property(name = "openflowPorts", value = DEFAULT_OFPORT,
-            label = "Port numbers (comma separated) used by OpenFlow protocol; default is 6633,6653")
-    private String openflowPorts = DEFAULT_OFPORT;
+    /** Number of controller worker threads. */
+    private int workerThreads = WORKER_THREADS_DEFAULT;
 
-    @Property(name = "workerThreads", intValue = DEFAULT_WORKER_THREADS,
-            label = "Number of controller worker threads")
-    private int workerThreads = DEFAULT_WORKER_THREADS;
+    /** TLS mode for OpenFlow channel; options are: disabled [default], enabled, strict. */
+    private String tlsMode;
+
+    /** File path to key store for TLS connections. */
+    private String keyStore;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected OpenFlowService openFlowManager;
+
+    private final OpenFlowListener openFlowListener = new InternalOpenFlowListener();
+
+    /** Key store password. */
+    private String keyStorePassword;
+
+    /** File path to trust store for TLS connections. */
+    private String trustStore;
+
+    /** Trust store password. */
+    private String trustStorePassword;
+
+    /** Size of deafult queue. */
+    private int defaultQueueSize = DEFAULT_QUEUE_SIZE_DEFAULT;
+
+    /** Size of deafult bulk. */
+    private int defaultBulkSize = BULK_SIZE_DEFAULT;
+
+    /** Size of queue N0. */
+    private int queueSizeN0 = QUEUE_SIZE_N0_DEFAULT;
+
+    /** Size of bulk N0. */
+    private int bulkSizeN0 = BULK_SIZE_DEFAULT;
+
+    /** Size of queue N1. */
+    private int queueSizeN1 = QUEUE_SIZE_DEFAULT;
+
+    /** Size of bulk N1. */
+    private int bulkSizeN1 = BULK_SIZE_DEFAULT;
+
+    /** Size of queue N2. */
+    private int queueSizeN2 = QUEUE_SIZE_DEFAULT;
+
+    /** Size of bulk N2. */
+    private int bulkSizeN2 = BULK_SIZE_DEFAULT;
+
+    /** Size of queue N3. */
+    private int queueSizeN3 = QUEUE_SIZE_DEFAULT;
+
+    /** Size of bulk N3. */
+    private int bulkSizeN3 = BULK_SIZE_DEFAULT;
+
+    /** Size of queue N4. */
+    private int queueSizeN4 = QUEUE_SIZE_DEFAULT;
+
+    /** Size of bulk N4. */
+    private int bulkSizeN4 = BULK_SIZE_DEFAULT;
+
+    /** Size of queue N5. */
+    private int queueSizeN5 = QUEUE_SIZE_DEFAULT;
+
+    /** Size of bulk N5. */
+    private int bulkSizeN5 = BULK_SIZE_DEFAULT;
+
+    /** Size of queue N6. */
+    private int queueSizeN6 = QUEUE_SIZE_DEFAULT;
+
+    /** Size of bulk N6. */
+    private int bulkSizeN6 = BULK_SIZE_DEFAULT;
 
     protected ExecutorService executorMsgs =
         Executors.newFixedThreadPool(32, groupedThreads("onos/of", "event-stats-%d", log));
@@ -159,6 +253,8 @@ public class OpenFlowControllerImpl implements OpenFlowController {
 
     protected Set<OpenFlowEventListener> ofEventListener = new CopyOnWriteArraySet<>();
 
+    protected Set<OpenFlowClassifierListener> ofClassifierListener = new CopyOnWriteArraySet<>();
+
     protected Set<OpenFlowMessageListener> ofMessageListener = new CopyOnWriteArraySet<>();
 
     protected Multimap<Dpid, OFFlowStatsEntry> fullFlowStats =
@@ -184,16 +280,69 @@ public class OpenFlowControllerImpl implements OpenFlowController {
     protected Multimap<Dpid, OFQueueStatsEntry> fullQueueStats =
             ArrayListMultimap.create();
 
+    protected final ConfigFactory factory =
+            new ConfigFactory<DeviceId, OpenFlowDeviceConfig>(
+                    SubjectFactories.DEVICE_SUBJECT_FACTORY,
+                    OpenFlowDeviceConfig.class, OpenFlowDeviceConfig.CONFIG_KEY) {
+                @Override
+                public OpenFlowDeviceConfig createConfig() {
+                    return new OpenFlowDeviceConfig();
+                }
+            };
+
     private final Controller ctrl = new Controller();
-    private InternalDeviceListener listener = new InternalDeviceListener();
+
+    private final NetworkConfigListener netCfgListener = new NetworkConfigListener() {
+        @Override
+        public boolean isRelevant(NetworkConfigEvent event) {
+            return OpenFlowDeviceConfig.class.equals(event.configClass());
+        }
+
+        @Override
+        public void event(NetworkConfigEvent event) {
+            // We only receive NetworkConfigEvents
+            OpenFlowDeviceConfig prevConfig = null;
+            if (event.prevConfig().isPresent()) {
+                prevConfig = (OpenFlowDeviceConfig) event.prevConfig().get();
+            }
+
+            OpenFlowDeviceConfig newConfig = null;
+            if (event.config().isPresent()) {
+                newConfig = (OpenFlowDeviceConfig) event.config().get();
+            }
+
+            boolean closeConnection = false;
+            if (prevConfig != null && newConfig != null) {
+                if (!Objects.equals(prevConfig.keyAlias(), newConfig.keyAlias())) {
+                    closeConnection = true;
+                }
+            } else if (prevConfig != null) {
+                // config was removed
+                closeConnection = true;
+            }
+            if (closeConnection) {
+                if (event.subject() instanceof DeviceId) {
+                    DeviceId deviceId = (DeviceId) event.subject();
+                    Dpid dpid = Dpid.dpid(deviceId.uri());
+                    OpenFlowSwitch sw = getSwitch(dpid);
+                    if (sw != null && ctrl.tlsParams.mode == Controller.TlsMode.STRICT) {
+                        sw.disconnectSwitch();
+                        log.info("Disconnecting switch {} because key has been updated or removed", dpid);
+                    }
+                }
+            }
+        }
+    };
 
     @Activate
     public void activate(ComponentContext context) {
         coreService.registerApplication(APP_ID, this::cleanup);
         cfgService.registerProperties(getClass());
-        deviceService.addListener(listener);
+        netCfgService.registerConfigFactory(factory);
+        netCfgService.addListener(netCfgListener);
         ctrl.setConfigParams(context.getProperties());
-        ctrl.start(agent, driverService);
+        ctrl.start(agent, driverService, netCfgService);
+        openFlowManager.addListener(openFlowListener);
     }
 
     private void cleanup() {
@@ -204,20 +353,20 @@ public class OpenFlowControllerImpl implements OpenFlowController {
         connectedSwitches.clear();
         activeMasterSwitches.clear();
         activeEqualSwitches.clear();
+        openFlowManager.removeListener(openFlowListener);
     }
 
     @Deactivate
     public void deactivate() {
-        deviceService.removeListener(listener);
         cleanup();
         cfgService.unregisterProperties(getClass(), false);
+        netCfgService.removeListener(netCfgListener);
+        netCfgService.unregisterConfigFactory(factory);
     }
 
     @Modified
     public void modified(ComponentContext context) {
-        ctrl.stop();
         ctrl.setConfigParams(context.getProperties());
-        ctrl.start(agent, driverService);
     }
 
     @Override
@@ -260,6 +409,16 @@ public class OpenFlowControllerImpl implements OpenFlowController {
     @Override
     public void removeListener(OpenFlowSwitchListener listener) {
         this.ofSwitchListener.remove(listener);
+    }
+
+    @Override
+    public void addClassifierListener(OpenFlowClassifierListener listener) {
+        this.ofClassifierListener.add(listener);
+    }
+
+    @Override
+    public void removeClassifierListener(OpenFlowClassifierListener listener) {
+        this.ofClassifierListener.remove(listener);
     }
 
     @Override
@@ -607,47 +766,6 @@ public class OpenFlowControllerImpl implements OpenFlowController {
         sw.setRole(role);
     }
 
-    class InternalDeviceListener implements DeviceListener {
-
-        @Override
-        public boolean isRelevant(DeviceEvent event) {
-            return event.subject().type() != CONTROLLER && event.type() == DEVICE_REMOVED
-                    && event.subject().id().uri().getScheme().equals(SCHEME);
-        }
-
-        @Override
-        public void event(DeviceEvent event) {
-            switch (event.type()) {
-            case DEVICE_ADDED:
-                break;
-            case DEVICE_AVAILABILITY_CHANGED:
-                break;
-            case DEVICE_REMOVED:
-                // Device administratively removed, disconnect
-                Optional.ofNullable(getSwitch(dpid(event.subject().id().uri())))
-                        .ifPresent(OpenFlowSwitch::disconnectSwitch);
-                break;
-            case DEVICE_SUSPENDED:
-                break;
-            case DEVICE_UPDATED:
-                break;
-            case PORT_ADDED:
-                break;
-            case PORT_REMOVED:
-                break;
-            case PORT_STATS_UPDATED:
-                break;
-            case PORT_UPDATED:
-                break;
-            default:
-                break;
-
-            }
-
-        }
-
-    }
-
     /**
      * Implementation of an OpenFlow Agent which is responsible for
      * keeping track of connected switches and the state in which
@@ -810,6 +928,16 @@ public class OpenFlowControllerImpl implements OpenFlowController {
                 l.receivedRoleReply(dpid, requested, response);
             }
         }
+
+        @Override
+        public void addClassifierListener(OpenFlowClassifierListener listener) {
+            ofClassifierListener.add(listener);
+        }
+
+        @Override
+        public void removeClassifierListener(OpenFlowClassifierListener listener) {
+            ofClassifierListener.remove(listener);
+        }
     }
 
     /**
@@ -817,8 +945,8 @@ public class OpenFlowControllerImpl implements OpenFlowController {
      */
     protected final class OFMessageHandler implements Runnable {
 
-        protected final OFMessage msg;
-        protected final Dpid dpid;
+        final OFMessage msg;
+        final Dpid dpid;
 
         public OFMessageHandler(Dpid dpid, OFMessage msg) {
             this.msg = msg;
@@ -829,6 +957,30 @@ public class OpenFlowControllerImpl implements OpenFlowController {
         public void run() {
             for (OpenFlowEventListener listener : ofEventListener) {
                 listener.handleMessage(dpid, msg);
+            }
+        }
+    }
+
+    private class InternalOpenFlowListener implements OpenFlowListener {
+        public void event(OpenFlowEvent event) {
+            try {
+                switch (event.type()) {
+                case INSERT:
+                    for (OpenFlowClassifierListener listener : ofClassifierListener) {
+                        listener.handleClassifiersAdd(event.subject());
+                    }
+                    break;
+                case REMOVE:
+                    for (OpenFlowClassifierListener listener : ofClassifierListener) {
+                        listener.handleClassifiersRemove(event.subject());
+                    }
+                    break;
+                default:
+                    log.warn("Unknown OpenFlow classifier event type: {}", event.type());
+                    break;
+                }
+            } catch (Exception e) {
+                log.error("Internal OpenFlowListener exception: {}", e.getMessage());
             }
         }
     }

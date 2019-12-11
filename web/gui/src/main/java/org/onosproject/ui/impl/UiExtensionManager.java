@@ -32,12 +32,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.Tools;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.store.serializers.KryoNamespaces;
@@ -48,6 +42,8 @@ import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.ui.UiExtension;
 import org.onosproject.ui.UiExtensionService;
+import org.onosproject.ui.UiGlyph;
+import org.onosproject.ui.UiGlyphFactory;
 import org.onosproject.ui.UiMessageHandlerFactory;
 import org.onosproject.ui.UiPreferencesService;
 import org.onosproject.ui.UiSessionToken;
@@ -61,8 +57,14 @@ import org.onosproject.ui.UiViewHidden;
 import org.onosproject.ui.impl.topo.Topo2TrafficMessageHandler;
 import org.onosproject.ui.impl.topo.Topo2ViewMessageHandler;
 import org.onosproject.ui.impl.topo.Traffic2Overlay;
+import org.onosproject.ui.impl.topo.model.UiSharedTopologyModel;
 import org.onosproject.ui.lion.LionBundle;
 import org.onosproject.ui.lion.LionUtils;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,6 +81,8 @@ import java.util.concurrent.Executors;
 import static com.google.common.collect.ImmutableList.of;
 import static java.util.stream.Collectors.toSet;
 import static org.onosproject.security.AppGuard.checkPermission;
+import static org.onosproject.security.AppPermission.Type.GLYPH_READ;
+import static org.onosproject.security.AppPermission.Type.GLYPH_WRITE;
 import static org.onosproject.security.AppPermission.Type.UI_READ;
 import static org.onosproject.security.AppPermission.Type.UI_WRITE;
 import static org.onosproject.ui.UiView.Category.NETWORK;
@@ -88,8 +92,8 @@ import static org.onosproject.ui.impl.lion.BundleStitcher.generateBundles;
 /**
  * Manages the user interface extensions.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = { UiExtensionService.class, UiPreferencesService.class, SpriteService.class,
+        UiTokenService.class })
 public class UiExtensionManager
         implements UiExtensionService, UiPreferencesService, SpriteService,
         UiTokenService {
@@ -101,6 +105,8 @@ public class UiExtensionManager
     private static final String CORE = "core";
     private static final String GUI_ADDED = "guiAdded";
     private static final String GUI_REMOVED = "guiRemoved";
+    private static final String GLYPH_ADDED = "glyphAdded";
+    private static final String GLYPH_REMOVED = "glyphRemoved";
     private static final String UPDATE_PREFS = "updatePrefs";
     private static final String SLASH = "/";
 
@@ -119,6 +125,7 @@ public class UiExtensionManager
             "core.view.App",
             "core.view.Cluster",
             "core.view.Topo",
+            "core.view.Flow",
 
             // TODO: More to come...
     };
@@ -132,17 +139,22 @@ public class UiExtensionManager
     // List of all extensions
     private final List<UiExtension> extensions = Lists.newArrayList();
 
+    private final List<UiGlyph> glyphs = Lists.newArrayList();
+
     // Map of views to extensions
     private final Map<String, UiExtension> views = Maps.newHashMap();
 
     // Core views & core extension
     private final UiExtension core = createCoreExtension();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected MastershipService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected StorageService storageService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    private UiSharedTopologyModel sharedModel;
 
     // User preferences
     private ConsistentMap<String, ObjectNode> prefsConsistentMap;
@@ -187,7 +199,7 @@ public class UiExtensionManager
                 mkView(PLATFORM, "partition", "nav_partitions"),
 
                 mkView(NETWORK, "topo", "nav_topo"),
-                mkView(NETWORK, "topo2", "nav_topo2"),
+//                mkView(NETWORK, "topo2", "nav_topo2"),
                 mkView(NETWORK, "device", "nav_devs"),
 
                 new UiViewHidden("flow"),
@@ -198,8 +210,7 @@ public class UiExtensionManager
 
                 mkView(NETWORK, "link", "nav_links"),
                 mkView(NETWORK, "host", "nav_hosts"),
-                mkView(NETWORK, "intent", "nav_intents"),
-                mkView(NETWORK, "tunnel", "nav_tunnels")
+                mkView(NETWORK, "intent", "nav_intents")
         );
 
         UiMessageHandlerFactory messageHandlerFactory =
@@ -221,7 +232,6 @@ public class UiExtensionManager
                         new SettingsViewMessageHandler(),
                         new ClusterViewMessageHandler(),
                         new ProcessorViewMessageHandler(),
-                        new TunnelViewMessageHandler(),
                         new PartitionViewMessageHandler(),
                         new PipeconfViewMessageHandler()
                 );
@@ -327,9 +337,43 @@ public class UiExtensionManager
     }
 
     @Override
+    public synchronized void register(UiGlyphFactory glyphFactory) {
+        checkPermission(GLYPH_WRITE);
+        boolean glyphAdded = false;
+        for (UiGlyph glyph : glyphFactory.glyphs()) {
+            if (!glyphs.contains(glyph)) {
+                glyphs.add(glyph);
+                glyphAdded = true;
+            }
+        }
+        if (glyphAdded) {
+            UiWebSocketServlet.sendToAll(GLYPH_ADDED, null);
+        }
+    }
+
+    @Override
+    public synchronized void unregister(UiGlyphFactory glyphFactory) {
+        checkPermission(GLYPH_WRITE);
+        boolean glyphRemoved = false;
+        for (UiGlyph glyph : glyphFactory.glyphs()) {
+            glyphs.remove(glyph);
+            glyphRemoved = true;
+        }
+        if (glyphRemoved) {
+            UiWebSocketServlet.sendToAll(GLYPH_REMOVED, null);
+        }
+    }
+
+    @Override
     public synchronized List<UiExtension> getExtensions() {
         checkPermission(UI_READ);
         return ImmutableList.copyOf(extensions);
+    }
+
+    @Override
+    public synchronized List<UiGlyph> getGlyphs() {
+        checkPermission(GLYPH_READ);
+        return ImmutableList.copyOf(glyphs);
     }
 
     @Override
@@ -341,6 +385,11 @@ public class UiExtensionManager
     @Override
     public synchronized LionBundle getNavLionBundle() {
         return navLion;
+    }
+
+    @Override
+    public void refreshModel() {
+        sharedModel.reload();
     }
 
     @Override
@@ -366,7 +415,11 @@ public class UiExtensionManager
 
     @Override
     public void setPreference(String username, String key, ObjectNode value) {
-        prefs.put(key(username, key), value);
+        if (value != null) {
+            prefs.put(key(username, key), value);
+        } else {
+            prefs.remove(key(username, key));
+        }
     }
 
     // =====================================================================

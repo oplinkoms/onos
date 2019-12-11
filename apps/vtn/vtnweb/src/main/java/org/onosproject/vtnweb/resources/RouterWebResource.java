@@ -68,6 +68,7 @@ import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 import static javax.ws.rs.core.Response.Status.CONFLICT;
 import static javax.ws.rs.core.Response.Status.CREATED;
 import static javax.ws.rs.core.Response.Status.NOT_FOUND;
+import static org.onlab.util.Tools.readTreeFromStream;
 
 @Path("routers")
 public class RouterWebResource extends AbstractWebResource {
@@ -121,7 +122,7 @@ public class RouterWebResource extends AbstractWebResource {
     public Response createRouter(final InputStream input) {
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode subnode = mapper.readTree(input);
+            JsonNode subnode = readTreeFromStream(mapper, input);
             Collection<Router> routers = createOrUpdateByInputStream(subnode);
 
             Boolean result = nullIsNotFound((get(RouterService.class)
@@ -131,7 +132,7 @@ public class RouterWebResource extends AbstractWebResource {
             }
             return Response.status(CREATED).entity(result.toString()).build();
 
-        } catch (Exception e) {
+        } catch (IllegalArgumentException | IOException e) {
             return Response.status(BAD_REQUEST).entity(e.getMessage()).build();
         }
     }
@@ -144,7 +145,7 @@ public class RouterWebResource extends AbstractWebResource {
                                  final InputStream input) {
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode subnode = mapper.readTree(input);
+            JsonNode subnode = readTreeFromStream(mapper, input);
             Collection<Router> routers = changeUpdateJsonToSub(subnode, id);
             Boolean result = nullIsNotFound(get(RouterService.class)
                     .updateRouters(routers), UPDATE_FAIL);
@@ -184,7 +185,7 @@ public class RouterWebResource extends AbstractWebResource {
         }
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode subnode = mapper.readTree(input);
+            JsonNode subnode = readTreeFromStream(mapper, input);
             if (!subnode.hasNonNull("id")) {
                 throw new IllegalArgumentException("id should not be null");
             } else if (subnode.get("id").asText().isEmpty()) {
@@ -203,7 +204,7 @@ public class RouterWebResource extends AbstractWebResource {
             } else if (subnode.get("tenant_id").asText().isEmpty()) {
                 throw new IllegalArgumentException("tenant_id should not be empty");
             }
-            TenantId tenentId = TenantId
+            TenantId tenantId = TenantId
                     .tenantId(subnode.get("tenant_id").asText());
             if (!subnode.hasNonNull("port_id")) {
                 throw new IllegalArgumentException("port_id should not be null");
@@ -213,7 +214,7 @@ public class RouterWebResource extends AbstractWebResource {
             VirtualPortId portId = VirtualPortId
                     .portId(subnode.get("port_id").asText());
             RouterInterface routerInterface = RouterInterface
-                    .routerInterface(subnetId, portId, routerId, tenentId);
+                    .routerInterface(subnetId, portId, routerId, tenantId);
             get(RouterInterfaceService.class)
                     .addRouterInterface(routerInterface);
             return ok(INTFACR_ADD_SUCCESS).build();
@@ -233,7 +234,7 @@ public class RouterWebResource extends AbstractWebResource {
         }
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode subnode = mapper.readTree(input);
+            JsonNode subnode = readTreeFromStream(mapper, input);
             if (!subnode.hasNonNull("id")) {
                 throw new IllegalArgumentException("id should not be null");
             } else if (subnode.get("id").asText().isEmpty()) {
@@ -259,10 +260,10 @@ public class RouterWebResource extends AbstractWebResource {
             } else if (subnode.get("tenant_id").asText().isEmpty()) {
                 throw new IllegalArgumentException("tenant_id should not be empty");
             }
-            TenantId tenentId = TenantId
+            TenantId tenantId = TenantId
                     .tenantId(subnode.get("tenant_id").asText());
             RouterInterface routerInterface = RouterInterface
-                    .routerInterface(subnetId, portId, routerId, tenentId);
+                    .routerInterface(subnetId, portId, routerId, tenantId);
             get(RouterInterfaceService.class)
                     .removeRouterInterface(routerInterface);
             return ok(INTFACR_DEL_SUCCESS).build();
@@ -271,8 +272,7 @@ public class RouterWebResource extends AbstractWebResource {
         }
     }
 
-    private Collection<Router> createOrUpdateByInputStream(JsonNode subnode)
-            throws Exception {
+    private Collection<Router> createOrUpdateByInputStream(JsonNode subnode) {
         checkNotNull(subnode, JSON_NOT_NULL);
         JsonNode routerNode = subnode.get("routers");
         if (routerNode == null) {
@@ -281,7 +281,7 @@ public class RouterWebResource extends AbstractWebResource {
         log.debug("routerNode is {}", routerNode.toString());
 
         if (routerNode.isArray()) {
-            throw new Exception("only singleton requests allowed");
+            throw new IllegalArgumentException("only singleton requests allowed");
         } else {
             return changeJsonToSub(routerNode);
         }
@@ -292,10 +292,8 @@ public class RouterWebResource extends AbstractWebResource {
      *
      * @param routerNode the router json node
      * @return routers a collection of router
-     * @throws Exception when any argument is illegal
      */
-    public Collection<Router> changeJsonToSub(JsonNode routerNode)
-            throws Exception {
+    public Collection<Router> changeJsonToSub(JsonNode routerNode) {
         checkNotNull(routerNode, JSON_NOT_NULL);
         Map<RouterId, Router> subMap = new HashMap<RouterId, Router>();
         if (!routerNode.hasNonNull("id")) {
@@ -361,11 +359,9 @@ public class RouterWebResource extends AbstractWebResource {
      * @param subnode the router json node
      * @param routerId the router identify
      * @return routers a collection of router
-     * @throws Exception when any argument is illegal
      */
     public Collection<Router> changeUpdateJsonToSub(JsonNode subnode,
-                                                    String routerId)
-                                                            throws Exception {
+                                                    String routerId) {
         checkNotNull(subnode, JSON_NOT_NULL);
         checkNotNull(routerId, "routerId should not be null");
         Map<RouterId, Router> subMap = new HashMap<RouterId, Router>();

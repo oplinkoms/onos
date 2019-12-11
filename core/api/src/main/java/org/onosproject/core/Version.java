@@ -24,7 +24,7 @@ import static java.lang.Integer.parseInt;
 /**
  * Representation of the product version.
  */
-public final class Version {
+public final class Version implements Comparable<Version> {
 
     public static final String FORMAT_MINIMAL = "%d.%d";
     public static final String FORMAT_SHORT = "%d.%d.%s";
@@ -77,11 +77,33 @@ public final class Version {
      * @return version descriptor
      */
     public static Version version(String string) {
+        checkArgument(string != null, TOO_SHORT);
         String[] fields = string.split("[.-]", 4);
         checkArgument(fields.length >= 2, TOO_SHORT);
         return new Version(parseInt(fields[0]), parseInt(fields[1]),
                            fields.length >= 3 ? fields[2] : null,
                            fields.length >= 4 ? fields[3] : null);
+    }
+
+    /**
+     * Returns an version from integer.
+     * <p>
+     * The version integer must be in the following format (big endian):
+     * <ul>
+     *     <li>8-bit unsigned major version</li>
+     *     <li>8-bit unsigned minor version</li>
+     *     <li>16-bit unsigned patch version</li>
+     * </ul>
+     *
+     * @param version the version integer
+     * @return the version instance
+     */
+    public static Version fromInt(int version) {
+        int major = (version >> 24) & 0xff;
+        int minor = (version >> 16) & 0xff;
+        int patch = (version >> 8) & 0xff;
+        int build = version & 0xff;
+        return new Version(major, minor, String.valueOf(patch), String.valueOf(build));
     }
 
     /**
@@ -118,6 +140,54 @@ public final class Version {
      */
     public String build() {
         return build;
+    }
+
+    /**
+     * Returns an integer representation of the version.
+     * <p>
+     * The version integer can be used to compare two versions to one another.
+     * The integer representation of the version number is in the following format (big endian):
+     * <ul>
+     *     <li>8-bit unsigned major version</li>
+     *     <li>8-bit unsigned minor version</li>
+     *     <li>16-bit unsigned patch version</li>
+     * </ul>
+     * If the {@link #patch()} is not a number, it will default to {@code 0}.
+     *
+     * @return an integer representation of the version
+     */
+    public int toInt() {
+        byte major = (byte) this.major;
+        byte minor = (byte) this.minor;
+
+        byte patch;
+        if (this.patch != null) {
+            try {
+                patch = (byte) Integer.parseInt(this.patch.replaceAll("[^0-9]", ""));
+            } catch (NumberFormatException e) {
+                patch = 0;
+            }
+        } else {
+            patch = 0;
+        }
+
+        byte build;
+        if (this.build != null) {
+            try {
+                build = (byte) Integer.parseInt(this.build.replaceAll("[^0-9]", ""));
+            } catch (NumberFormatException e) {
+                build = 0;
+            }
+        } else {
+            build = 0;
+        }
+
+        return major << 24 | (minor & 0xff) << 16 | (patch & 0xff) << 8 | (build & 0xff);
+    }
+
+    @Override
+    public int compareTo(Version other) {
+        return Integer.compare(toInt(), other.toInt());
     }
 
     @Override

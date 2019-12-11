@@ -20,13 +20,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Modified;
-import org.apache.felix.scr.annotations.Property;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onlab.packet.ChassisId;
 import org.onlab.util.Frequency;
 import org.onlab.util.Spectrum;
@@ -55,6 +48,7 @@ import org.onosproject.net.device.DeviceDescription;
 import org.onosproject.net.device.DeviceProvider;
 import org.onosproject.net.device.DeviceProviderRegistry;
 import org.onosproject.net.device.DeviceProviderService;
+import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.device.PortDescription;
 import org.onosproject.net.device.PortStatistics;
 import org.onosproject.net.driver.Driver;
@@ -72,9 +66,16 @@ import org.onosproject.openflow.controller.OpenFlowSwitchListener;
 import org.onosproject.openflow.controller.PortDescPropertyType;
 import org.onosproject.openflow.controller.RoleState;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Modified;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.projectfloodlight.openflow.protocol.OFCalientPortDescProp;
 import org.projectfloodlight.openflow.protocol.OFCalientPortDescPropOptical;
 import org.projectfloodlight.openflow.protocol.OFCalientPortDescStatsEntry;
+import org.projectfloodlight.openflow.protocol.OFCapabilities;
 import org.projectfloodlight.openflow.protocol.OFErrorMsg;
 import org.projectfloodlight.openflow.protocol.OFErrorType;
 import org.projectfloodlight.openflow.protocol.OFExpPort;
@@ -85,9 +86,11 @@ import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFObject;
 import org.projectfloodlight.openflow.protocol.OFPortConfig;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
+import org.projectfloodlight.openflow.protocol.OFPortDescProp;
 import org.projectfloodlight.openflow.protocol.OFPortDescPropEthernet;
 import org.projectfloodlight.openflow.protocol.OFPortDescPropOptical;
 import org.projectfloodlight.openflow.protocol.OFPortDescPropOpticalTransport;
+import org.projectfloodlight.openflow.protocol.OFPortDescStatsRequest;
 import org.projectfloodlight.openflow.protocol.OFPortFeatures;
 import org.projectfloodlight.openflow.protocol.OFPortMod;
 import org.projectfloodlight.openflow.protocol.OFPortOptical;
@@ -96,6 +99,7 @@ import org.projectfloodlight.openflow.protocol.OFPortOpticalTransportSignalType;
 import org.projectfloodlight.openflow.protocol.OFPortReason;
 import org.projectfloodlight.openflow.protocol.OFPortState;
 import org.projectfloodlight.openflow.protocol.OFPortStatsEntry;
+import org.projectfloodlight.openflow.protocol.OFPortStatsPropOptical;
 import org.projectfloodlight.openflow.protocol.OFPortStatsReply;
 import org.projectfloodlight.openflow.protocol.OFPortStatus;
 import org.projectfloodlight.openflow.protocol.OFStatsReply;
@@ -103,6 +107,7 @@ import org.projectfloodlight.openflow.protocol.OFStatsReplyFlags;
 import org.projectfloodlight.openflow.protocol.OFStatsType;
 import org.projectfloodlight.openflow.protocol.OFVersion;
 import org.projectfloodlight.openflow.protocol.ver14.OFOpticalPortFeaturesSerializerVer14;
+import org.projectfloodlight.openflow.protocol.ver14.OFPortStatsOpticalFlagsSerializerVer14;
 import org.projectfloodlight.openflow.types.OFPort;
 import org.projectfloodlight.openflow.types.PortSpeed;
 import org.slf4j.Logger;
@@ -116,6 +121,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
@@ -133,13 +139,18 @@ import static org.onosproject.net.optical.device.OmsPortHelper.omsPortDescriptio
 import static org.onosproject.net.optical.device.OtuPortHelper.otuPortDescription;
 import static org.onosproject.openflow.controller.Dpid.dpid;
 import static org.onosproject.openflow.controller.Dpid.uri;
+import static org.onosproject.provider.of.device.impl.OsgiPropertyConstants.*;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Provider which uses an OpenFlow controller to detect network
  * infrastructure devices.
  */
-@Component(immediate = true)
+@Component(immediate = true,
+        property = {
+                POLL_FREQ + ":Integer=" + POLL_FREQ_DEFAULT,
+                PROP_FREQ + ":Boolean=" + PROP_FREQ_DEFAULT,
+        })
 public class OpenFlowDeviceProvider extends AbstractProvider implements DeviceProvider {
 
     private static final Logger LOG = getLogger(OpenFlowDeviceProvider.class);
@@ -153,17 +164,34 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
     public static final String AK_MIN_FREQ_HZ = "minFrequency";
 
     /**
+     * Annotation key for minimum lambda in nm.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_MIN_LMDA_NM = "minLambda";
+
+    /**
      * Annotation key for maximum frequency in Hz.
      * Value is expected be an integer.
      */
     public static final String AK_MAX_FREQ_HZ = "maxFrequency";
 
     /**
-     * Annotation key for grid in Hz.
+     * Annotation key for maximum lambda in nm.
+     * Value is expected be an integer.
+     */
+    public static final String AK_MAX_LMDA_NM = "maxLambda";
+
+    /**
+     * Annotation key for grid frequency in Hz.
      * Value is expected to be an integer.
      */
     public static final String AK_GRID_HZ = "grid";
 
+    /**
+     * Annotation key for grid lambda in nm.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_GRID_LMDA_NM = "gridLambda";
 
     /**
      * Annotation key for minimum frequency in Hz.
@@ -172,16 +200,34 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
     public static final String AK_TX_MIN_FREQ_HZ = "txMinFrequency";
 
     /**
+     * Annotation key for minimum lambda in nm.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_TX_MIN_LMDA_NM = "txMinLambda";
+
+    /**
      * Annotation key for maximum frequency in Hz.
      * Value is expected be an integer.
      */
     public static final String AK_TX_MAX_FREQ_HZ = "txMaxFrequency";
 
     /**
-     * Annotation key for grid in Hz.
+     * Annotation key for maximum lambda in nm.
+     * Value is expected be an integer.
+     */
+    public static final String AK_TX_MAX_LMDA_NM = "txMaxLambda";
+
+    /**
+     * Annotation key for grid frequency in Hz.
      * Value is expected to be an integer.
      */
     public static final String AK_TX_GRID_HZ = "txGrid";
+
+    /**
+     * Annotation key for grid lambda in nm.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_TX_GRID_LMDA_NM = "txGridLambda";
 
     /**
      * Annotation key for minimum frequency in Hz.
@@ -190,55 +236,238 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
     public static final String AK_RX_MIN_FREQ_HZ = "rxMinFrequency";
 
     /**
+     * Annotation key for minimum lambda in nm.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_RX_MIN_LMDA_NM = "rxMinLambda";
+
+    /**
      * Annotation key for maximum frequency in Hz.
      * Value is expected be an integer.
      */
     public static final String AK_RX_MAX_FREQ_HZ = "rxMaxFrequency";
 
     /**
-     * Annotation key for grid in Hz.
+     * Annotation key for maximum lambda in nm.
+     * Value is expected be an integer.
+     */
+    public static final String AK_RX_MAX_LMDA_NM = "rxMaxLambda";
+
+    /**
+     * Annotation key for grid frequency in Hz.
      * Value is expected to be an integer.
      */
     public static final String AK_RX_GRID_HZ = "rxGrid";
 
+    /**
+     * Annotation key for grid lambda in nm.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_RX_GRID_LMDA_NM = "rxGridLambda";
+
+    /**
+     * Annotation key for indicating frequency must be used instead of
+     * wavelength for port tuning.
+     * Value is expected to be "enabled" or "disabled"
+     */
+    public static final String AK_USE_FREQ_FEATURE = "useFreqFeature";
+
+    /**
+     * Annotation key for minimum transmit power in dBm*10.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_TX_PWR_MIN = "txPowerMin";
+
+    /**
+     * Annotation key for maximum transmit power in dBm*10.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_TX_PWR_MAX = "txPowerMax";
+
+
+
+    // Port Stats annotations
+
+    /**
+     * Annotation key for transmit frequency in Hz.
+     * Value is expected be an integer.
+     */
+    public static final String AK_TX_FREQ_HZ = "txFrequency";
+
+    /**
+     * Annotation key for transmit lambda in nm.
+     * Value is expected be an integer.
+     */
+    public static final String AK_TX_LMDA_NM = "txLambda";
+
+    /**
+     * Annotation key for transmit offset frequency in Hz.
+     * Value is expected be an integer.
+     */
+    public static final String AK_TX_OFFSET_HZ = "txOffset";
+
+    /**
+     * Annotation key for transmit offset in nm.
+     * Value is expected be an integer.
+     */
+    public static final String AK_TX_OFFSET_LMDA_NM = "txOffsetLambda";
+
+    /**
+     * Annotation key for transmit grid spacing frequency in Hz.
+     * Value is expected be an integer.
+     */
+    public static final String AK_TX_GRID_SPAN_HZ = "txGridSpan";
+
+    /**
+     * Annotation key for transmit grid spacing lambda in nm.
+     * Value is expected be an integer.
+     */
+    public static final String AK_TX_GRID_SPAN_LMDA_NM = "txGridSpanLambda";
+
+    /**
+     * Annotation key for receive frequency in Hz.
+     * Value is expected be an integer.
+     */
+    public static final String AK_RX_FREQ_HZ = "rxFrequency";
+
+    /**
+     * Annotation key for receive lambda in nm.
+     * Value is expected be an integer.
+     */
+    public static final String AK_RX_LMDA_NM = "rxLambda";
+
+    /**
+     * Annotation key for receive offset frequency in Hz.
+     * Value is expected be an integer.
+     */
+    public static final String AK_RX_OFFSET_HZ = "rxOffset";
+
+    /**
+     * Annotation key for receive offset lambda in nm.
+     * Value is expected be an integer.
+     */
+    public static final String AK_RX_OFFSET_LMDA_NM = "rxOffsetLambda";
+
+    /**
+     * Annotation key for receive grid spacing frequency in Hz.
+     * Value is expected be an integer.
+     */
+    public static final String AK_RX_GRID_SPAN_HZ = "rxGridSpan";
+
+    /**
+     * Annotation key for receive grid spacing lambda in nm.
+     * Value is expected be an integer.
+     */
+    public static final String AK_RX_GRID_SPAN_LMDA_NM = "rxGridSpanLambda";
+
+   /**
+     * Annotation key for transmit power in dBm*10.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_TX_PWR = "txPower";
+
+    /**
+     * Annotation key for receive power feature.
+     * Value is expected to be "enabled" or "disabled"
+     */
+    public static final String AK_RX_PWR_FEATURE = "rxPwrFeature";
+
+   /**
+     * Annotation key for receive power in dBm*10.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_RX_PWR = "rxPower";
+
+   /**
+     * Annotation key for transmit bias feature.
+     * Value is expected to be "enabled" or "disabled"
+     */
+    public static final String AK_TX_BIAS_FEATURE = "txBiasFeature";
+
+   /**
+     * Annotation key for transmit bias current in mA*10.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_BIAS_CURRENT = "biasCurrent";
+
+   /**
+     * Annotation key for transmit temperature feature.
+     * Value is expected to be "enabled" or "disabled"
+     */
+    public static final String AK_TX_TEMP_FEATURE = "txTempFeature";
+
+   /**
+     * Annotation key for transmit laser temperature in C*10.
+     * Value is expected to be an integer.
+     */
+    public static final String AK_TEMPERATURE = "temperature";
+
+
+    // Common feature annotations
+
+    /**
+     * Annotation key for transmit tune feature.
+     * Value is expected to be "enabled" or "disabled"
+     */
+    public static final String AK_TX_TUNE_FEATURE = "txTuneFeature";
+
+    /**
+     * Annotation key for receive tune feature.
+     * Value is expected to be "enabled" or "disabled"
+     */
+    public static final String AK_RX_TUNE_FEATURE = "rxTuneFeature";
+
+    /**
+     * Annotation key for transmit power feature.
+     * Value is expected to be "enabled" or "disabled"
+     */
+    public static final String AK_TX_PWR_FEATURE = "txPwrFeature";
+
+
     //TODO consider renaming KBPS and MBPS (as they are used to convert by division)
     private static final long KBPS = 1_000;
-    private static final long MBPS = 1_000 * 1_000;
+    private static final long MBPS = 1_000L * 1_000L;
     private static final Frequency FREQ50 = Frequency.ofGHz(50);
     private static final Frequency FREQ191_7 = Frequency.ofGHz(191_700);
     private static final Frequency FREQ4_4 = Frequency.ofGHz(4_400);
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    private static final long C = 299792458; // speed of light in m/s
+    public static final String SCHEME = "of";
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceProviderRegistry providerRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected DeviceService deviceService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected OpenFlowController controller;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ComponentConfigService cfgService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DriverService driverService;
 
     private DeviceProviderService providerService;
 
     private final InternalDeviceProvider listener = new InternalDeviceProvider();
 
-    private static final String POLL_PROP_NAME = "portStatsPollFrequency";
-    private static final int POLL_INTERVAL = 5;
-    @Property(name = POLL_PROP_NAME, intValue = POLL_INTERVAL,
-    label = "Frequency (in seconds) for polling switch Port statistics")
-    private int portStatsPollFrequency = POLL_INTERVAL;
+    /** Frequency (in seconds) for polling switch Port statistics. */
+    private int portStatsPollFrequency = POLL_FREQ_DEFAULT;
+
+    /** It indicates frequency must be used instead of wavelength for port tuning. */
+    private static boolean propertyFrequency = PROP_FREQ_DEFAULT;
 
     private final Timer timer = new Timer("onos-openflow-portstats-collector");
 
-    private HashMap<Dpid, PortStatsCollector> collectors = Maps.newHashMap();
+    private Map<Dpid, PortStatsCollector> collectors = Maps.newConcurrentMap();
 
     /**
      * Creates an OpenFlow device provider.
      */
     public OpenFlowDeviceProvider() {
-        super(new ProviderId("of", "org.onosproject.provider.openflow"));
+        super(new ProviderId(SCHEME, "org.onosproject.provider.openflow"));
     }
 
     @Activate
@@ -271,7 +500,7 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
         Dictionary<?, ?> properties = context != null ? context.getProperties() : new Properties();
         int newPortStatsPollFrequency;
         try {
-            String s = get(properties, POLL_PROP_NAME);
+            String s = get(properties, POLL_FREQ);
             newPortStatsPollFrequency = isNullOrEmpty(s) ? portStatsPollFrequency : Integer.parseInt(s.trim());
 
         } catch (NumberFormatException | ClassCastException e) {
@@ -384,6 +613,18 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
         sw.sendMsg(Collections.singletonList(pmb.build()));
     }
 
+    @Override
+    public void triggerDisconnect(DeviceId deviceId) {
+        Dpid dpid = dpid(deviceId.uri());
+        OpenFlowSwitch sw = controller.getSwitch(dpid);
+        if (sw != null) {
+            LOG.debug("Forcing disconnect for device {}", deviceId);
+            // TODO: Further consolidate clean-up on device disconnect
+            listener.switchRemoved(dpid);
+            sw.disconnectSwitch();
+        }
+    }
+
     private void pushPortMetrics(Dpid dpid, List<OFPortStatsEntry> portStatsEntries) {
         DeviceId deviceId = DeviceId.deviceId(Dpid.uri(dpid));
         Collection<PortStatistics> stats =
@@ -391,18 +632,125 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
         providerService.updatePortStatistics(deviceId, stats);
     }
 
+    private static String lambdaToAnnotationHz(long lambda) {
+        // ref. OF1.5: wavelength (lambda) as nm * 100
+
+        // f = c / λ
+        // (m/s) * (nm/m) / (nm * 100) * 100
+        // annotations is in Hz
+        return Long.toString(lambda == 0 ? lambda : (C * 1_000_000_000 / lambda * 100));
+    }
+
+    private static String mhzToAnnotationNm(long freqMhz) {
+        // λ = c / f
+        // (m/s) * (nm/m) / (1000000 * 1/s)
+        // annotations is in nm
+        return Long.toString(freqMhz == 0 ? freqMhz : (C * 1_000_000_000 / Frequency.ofMHz(freqMhz).asHz()));
+    }
+
+
+    private static String mhzToAnnotation(long freqMhz) {
+        return Long.toString(Frequency.ofMHz(freqMhz).asHz());
+    }
+
+    private static String freqLmdaToAnnotation(long freqLmda, boolean useFreq) {
+        if (useFreq) {
+            if (propertyFrequency) {
+                mhzToAnnotation(freqLmda);
+            } else {
+                mhzToAnnotationNm(freqLmda);
+            }
+        } else if (propertyFrequency) {
+            lambdaToAnnotationHz(freqLmda);
+        }
+        return Double.toString(freqLmda / 100.0);
+    }
+
     private Collection<PortStatistics> buildPortStatistics(DeviceId deviceId,
                                                            List<OFPortStatsEntry> entries) {
         HashSet<PortStatistics> stats = Sets.newHashSet();
+        final Dpid dpid = dpid(deviceId.uri());
+        OpenFlowSwitch sw = controller.getSwitch(dpid);
 
         for (OFPortStatsEntry entry : entries) {
             try {
                 if (entry == null || entry.getPortNo() == null || entry.getPortNo().getPortNumber() < 0) {
                     continue;
                 }
+                DefaultAnnotations.Builder annotations = DefaultAnnotations.builder();
+                boolean propSupported = entry.getVersion().getWireVersion() >= OFVersion.OF_14.getWireVersion();
+                Optional<OFPortStatsPropOptical> optical = propSupported ?
+                    entry.getProperties().stream()
+                    .filter(OFPortStatsPropOptical.class::isInstance)
+                    .map(OFPortStatsPropOptical.class::cast)
+                    .findAny() : Optional.empty();
+                if (optical.isPresent()) {
+                    long flags = optical.get().getFlags();
+
+                    boolean useFreq = false;
+                    for (OFPortDesc pd : sw.getPorts()) {
+                        if (pd.getPortNo().equals(entry.getPortNo())) {
+                            for (OFPortDescProp prop : pd.getProperties()) {
+                                if (prop instanceof OFPortDescPropOptical) {
+                                    OFPortDescPropOptical oprop = (OFPortDescPropOptical) prop;
+                                    long supported = oprop.getSupported();
+                                    int useFreqVal = OFOpticalPortFeaturesSerializerVer14.USE_FREQ_VAL;
+                                    if ((supported & useFreqVal) != 0) {
+                                        useFreq = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    int txTune = OFPortStatsOpticalFlagsSerializerVer14.TX_TUNE_VAL;
+                    long txFreq = optical.get().getTxFreqLmda();
+                    long txOffset = optical.get().getTxOffset();
+                    long txGridSpan = optical.get().getTxGridSpan();
+                    annotations.set(AK_TX_TUNE_FEATURE, ((flags & txTune) != 0) ? "enabled" : "disabled");
+                    annotations.set(propertyFrequency ? AK_TX_FREQ_HZ : AK_TX_LMDA_NM,
+                                    freqLmdaToAnnotation(txFreq, useFreq));
+                    annotations.set(propertyFrequency ? AK_TX_OFFSET_HZ : AK_TX_OFFSET_LMDA_NM,
+                                    freqLmdaToAnnotation(txOffset, useFreq));
+                    annotations.set(propertyFrequency ? AK_TX_GRID_SPAN_HZ : AK_TX_GRID_SPAN_LMDA_NM,
+                                    freqLmdaToAnnotation(txGridSpan, useFreq));
+
+                    int rxTune = OFPortStatsOpticalFlagsSerializerVer14.RX_TUNE_VAL;
+                    long rxFreq = optical.get().getRxFreqLmda();
+                    long rxOffset = optical.get().getRxOffset();
+                    long rxGridSpan = optical.get().getRxGridSpan();
+                    annotations.set(AK_RX_TUNE_FEATURE, ((flags & rxTune) != 0) ? "enabled" : "disabled");
+                    annotations.set(propertyFrequency ? AK_RX_FREQ_HZ : AK_RX_LMDA_NM,
+                                    freqLmdaToAnnotation(rxFreq, useFreq));
+                    annotations.set(propertyFrequency ? AK_RX_OFFSET_HZ : AK_RX_OFFSET_LMDA_NM,
+                                    freqLmdaToAnnotation(rxOffset, useFreq));
+                    annotations.set(propertyFrequency ? AK_RX_GRID_SPAN_HZ : AK_RX_GRID_SPAN_LMDA_NM,
+                                    freqLmdaToAnnotation(rxGridSpan, useFreq));
+
+                    int txPwrVal = OFPortStatsOpticalFlagsSerializerVer14.TX_PWR_VAL;
+                    int txPwr = optical.get().getTxPwr();
+                    annotations.set(AK_TX_PWR_FEATURE, ((flags & txPwrVal) != 0) ? "enabled" : "disabled");
+                    annotations.set(AK_TX_PWR, Integer.toString(txPwr));
+
+                    int rxPwrVal = OFPortStatsOpticalFlagsSerializerVer14.RX_PWR_VAL;
+                    int rxPwr = optical.get().getRxPwr();
+                    annotations.set(AK_RX_PWR_FEATURE, ((flags & rxPwrVal) != 0) ? "enabled" : "disabled");
+                    annotations.set(AK_RX_PWR, Integer.toString(rxPwr));
+
+                    int txBias = OFPortStatsOpticalFlagsSerializerVer14.TX_BIAS_VAL;
+                    int biasCurrent = optical.get().getBiasCurrent();
+                    annotations.set(AK_TX_BIAS_FEATURE, ((flags & txBias) != 0) ? "enabled" : "disabled");
+                    annotations.set(AK_BIAS_CURRENT, Integer.toString(biasCurrent));
+
+                    int txTemp = OFPortStatsOpticalFlagsSerializerVer14.TX_TEMP_VAL;
+                    int temperature = optical.get().getTemperature();
+                    annotations.set(AK_TX_TEMP_FEATURE, ((flags & txTemp) != 0) ? "enabled" : "disabled");
+                    annotations.set(AK_TEMPERATURE, Integer.toString(temperature));
+                }
                 DefaultPortStatistics.Builder builder = DefaultPortStatistics.builder();
                 DefaultPortStatistics stat = builder.setDeviceId(deviceId)
-                        .setPort(entry.getPortNo().getPortNumber())
+                        .setPort(PortNumber.portNumber(entry.getPortNo().getPortNumber()))
                         .setPacketsReceived(entry.getRxPackets().getValue())
                         .setPacketsSent(entry.getTxPackets().getValue())
                         .setBytesReceived(entry.getRxBytes().getValue())
@@ -413,6 +761,7 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                         .setPacketsTxErrors(entry.getTxErrors().getValue())
                         .setDurationSec(entry.getVersion() == OFVersion.OF_10 ? 0 : entry.getDurationSec())
                         .setDurationNano(entry.getVersion() == OFVersion.OF_10 ? 0 : entry.getDurationNsec())
+                        .setAnnotations(annotations.build())
                         .build();
 
                 stats.add(stat);
@@ -468,15 +817,33 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                                                  cId, annotations);
             providerService.deviceConnected(did, description);
             providerService.updatePorts(did, buildPortDescriptions(sw));
+            //sends port description stats request again if OF version supports
+            if (sw.features().getVersion().compareTo(OFVersion.OF_13) >= 0) {
+                sendPortDescStatsRequest(sw);
+            }
 
-            PortStatsCollector psc = new PortStatsCollector(timer, sw, portStatsPollFrequency);
-            stopCollectorIfNeeded(collectors.put(dpid, psc));
-            psc.start();
+            if (sw.features().getCapabilities().contains(OFCapabilities.PORT_STATS)) {
+                PortStatsCollector psc = new PortStatsCollector(timer, sw, portStatsPollFrequency);
+                stopCollectorIfNeeded(collectors.put(dpid, psc));
+                psc.start();
+            }
 
             //figure out race condition for collectors.remove() and collectors.put()
             if (controller.getSwitch(dpid) == null) {
                 switchRemoved(dpid);
             }
+        }
+
+        /**
+         * Sends port description statistic request to switch if supported.
+         */
+        private void sendPortDescStatsRequest(OpenFlowSwitch sw) {
+            if (sw == null) {
+                return;
+            }
+            OFPortDescStatsRequest descStatsRequest = sw.factory().buildPortDescStatsRequest()
+                    .build();
+            sw.sendMsg(descStatsRequest);
         }
 
         private void stopCollectorIfNeeded(PortStatsCollector collector) {
@@ -556,12 +923,13 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
          * @return list of portdescriptions
          */
         private List<PortDescription> buildPortDescriptions(OpenFlowSwitch sw) {
-            final List<PortDescription> portDescs = new ArrayList<>(sw.getPorts().size());
+            List<OFPortDesc> ofPorts = sw.getPorts();
+            final List<PortDescription> portDescs = new ArrayList<>(ofPorts.size());
             if (!((Device.Type.ROADM.equals(sw.deviceType())) ||
                     (Device.Type.OTN.equals(sw.deviceType())) ||
                     (Device.Type.OPTICAL_AMPLIFIER.equals(sw.deviceType())))) {
                 // build regular (=non-optical) Device ports
-                sw.getPorts().forEach(port -> portDescs.add(buildPortDescription(port)));
+                ofPorts.forEach(port -> portDescs.add(buildPortDescription(port)));
             }
 
             // TODO handle Optical Device, but plain OF devices(1.4 and later)
@@ -669,7 +1037,7 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                     sigType = CltSignalType.CLT_100GBE;
                     break;
                 default:
-                    throw new RuntimeException("Un recognize OduClt speed: " + portSpeedInMbps.toString());
+                    throw new IllegalArgumentException("Un recognize OduClt speed: " + portSpeedInMbps.toString());
             }
 
             SparseAnnotations annotations = buildOduCltAnnotation(port);
@@ -811,21 +1179,6 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
             return builder;
         }
 
-        private String mhzToAnnotation(long freqMhz) {
-            // annotations is in Hz
-            return Long.toString(freqMhz * 1_000_000);
-        }
-
-        private String lambdaToAnnotationHz(long lambda) {
-            // ref. OF1.5: wavelength (lambda) as nm * 100
-
-            long c = 299792458; // speed of light in m/s
-            // f = c / λ
-            // (m/s) * (nm/m) / (nm * 100) * 100
-            // annotations is in Hz
-            return Long.toString(c * 1_000_000_000 / lambda * 100);
-        }
-
         private PortDescription buildPortDescription14(OFPortDesc port) {
             PortNumber portNo = PortNumber.portNumber(port.getPortNo().getPortNumber());
             boolean enabled =
@@ -843,11 +1196,13 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
             if (ether.isPresent()) {
                 // ethernet port
                 // TODO parse other part of OFPortDescPropEthernet if necessary
-                return new DefaultPortDescription(portNo,
-                                                  enabled,
-                                                  COPPER,
-                                                  portSpeed(port),
-                                                  annotations.build());
+                return DefaultPortDescription.builder()
+                        .withPortNumber(portNo)
+                        .isEnabled(enabled)
+                        .type(COPPER)
+                        .portSpeed(portSpeed(port))
+                        .annotations(annotations.build())
+                        .build();
             }
 
             Optional<OFPortDescPropOptical> optical = port.getProperties().stream()
@@ -860,76 +1215,80 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                 // FIXME is there a OF version neutral way to access
                 // OFOpticalPortFeaturesSerializerVer14
 
+                long supported = optical.get().getSupported();
+                long rxMin = optical.get().getRxMinFreqLmda();
+                long rxMax = optical.get().getRxMaxFreqLmda();
+                long rxGrid = optical.get().getRxGridFreqLmda();
+                long txMin = optical.get().getTxMinFreqLmda();
+                long txMax = optical.get().getTxMaxFreqLmda();
+                long txGrid = optical.get().getTxGridFreqLmda();
+
+                int txTune = OFOpticalPortFeaturesSerializerVer14.TX_TUNE_VAL;
+                int rxTune = OFOpticalPortFeaturesSerializerVer14.RX_TUNE_VAL;
+                annotations.set(AK_TX_TUNE_FEATURE,
+                        ((supported & txTune) != 0) ? "enabled" : "disabled");
+                annotations.set(AK_RX_TUNE_FEATURE,
+                        ((supported & rxTune) != 0) ? "enabled" : "disabled");
+
                 // wire value for OFOpticalPortFeatures.USE_FREQ
-                long useFreq = OFOpticalPortFeaturesSerializerVer14.USE_FREQ_VAL;
-                if ((optical.get().getSupported() & useFreq) != 0) {
-                    // unit is in Frequency Mhz
-                    long rxMinFreq = optical.get().getRxMinFreqLmda();
-                    long rxMaxFreq = optical.get().getRxMaxFreqLmda();
-                    long txMinFreq = optical.get().getTxMinFreqLmda();
-                    long txMaxFreq = optical.get().getTxMaxFreqLmda();
+                boolean useFreq = (supported & OFOpticalPortFeaturesSerializerVer14.USE_FREQ_VAL) != 0;
+                annotations.set(AK_USE_FREQ_FEATURE, useFreq ? "enabled" : "disabled");
 
-                    annotations.set(AK_RX_MIN_FREQ_HZ, mhzToAnnotation(rxMinFreq));
-                    annotations.set(AK_RX_MAX_FREQ_HZ, mhzToAnnotation(rxMaxFreq));
+                annotations.set(propertyFrequency ? AK_RX_MIN_FREQ_HZ : AK_RX_MIN_LMDA_NM,
+                                freqLmdaToAnnotation(rxMin, useFreq));
+                annotations.set(propertyFrequency ? AK_RX_MAX_FREQ_HZ : AK_RX_MAX_LMDA_NM,
+                                freqLmdaToAnnotation(rxMax, useFreq));
+                annotations.set(propertyFrequency ? AK_RX_GRID_HZ : AK_RX_GRID_LMDA_NM,
+                                freqLmdaToAnnotation(rxGrid, useFreq));
 
-                    annotations.set(AK_TX_MIN_FREQ_HZ, mhzToAnnotation(txMinFreq));
-                    annotations.set(AK_TX_MAX_FREQ_HZ, mhzToAnnotation(txMaxFreq));
+                annotations.set(propertyFrequency ? AK_TX_MIN_FREQ_HZ : AK_TX_MIN_LMDA_NM,
+                                freqLmdaToAnnotation(txMin, useFreq));
+                annotations.set(propertyFrequency ? AK_TX_MAX_FREQ_HZ : AK_TX_MAX_LMDA_NM,
+                                freqLmdaToAnnotation(txMax, useFreq));
+                annotations.set(propertyFrequency ? AK_TX_GRID_HZ : AK_TX_GRID_LMDA_NM,
+                                freqLmdaToAnnotation(txGrid, useFreq));
 
-                    // FIXME pretty confident this is not going to happen
-                    // unless Device models Tx/Rx ports as separate port
-                    if (rxMinFreq == txMinFreq) {
-                        annotations.set(AK_MIN_FREQ_HZ,
-                                        mhzToAnnotation(rxMinFreq));
-                    }
-                    if (rxMaxFreq == txMaxFreq) {
-                        annotations.set(AK_MAX_FREQ_HZ,
-                                        mhzToAnnotation(rxMaxFreq));
-                    }
-
-                } else {
-                    // unit is in Lambda nm * 100
-                    long rxMin = optical.get().getRxMinFreqLmda();
-                    long rxMax = optical.get().getRxMaxFreqLmda();
-                    long txMin = optical.get().getTxMinFreqLmda();
-                    long txMax = optical.get().getTxMaxFreqLmda();
-
-                    annotations.set(AK_RX_MIN_FREQ_HZ, lambdaToAnnotationHz(rxMin));
-                    annotations.set(AK_RX_MAX_FREQ_HZ, lambdaToAnnotationHz(rxMax));
-
-                    annotations.set(AK_TX_MIN_FREQ_HZ, lambdaToAnnotationHz(txMin));
-                    annotations.set(AK_TX_MAX_FREQ_HZ, lambdaToAnnotationHz(txMax));
-
-                    // FIXME pretty confident this is not going to happen
-                    // unless Device models Tx/Rx ports as separate port
-                    if (rxMin == txMin) {
-                        annotations.set(AK_MIN_FREQ_HZ,
-                                        lambdaToAnnotationHz(rxMin));
-                    }
-                    if (rxMax == txMax) {
-                        annotations.set(AK_MAX_FREQ_HZ,
-                                        lambdaToAnnotationHz(rxMax));
-                    }
-
+                // FIXME pretty confident this is not going to happen
+                // unless Device models Tx/Rx ports as separate port
+                if (rxMin == txMin) {
+                    annotations.set(propertyFrequency ? AK_MIN_FREQ_HZ : AK_MIN_LMDA_NM,
+                                    freqLmdaToAnnotation(rxMin, useFreq));
                 }
-                // TODO parse other part of OFPortDescPropOptical
-                // Tx/Rx tunable, ...
-                // Power is configurable or now
+                if (rxMax == txMax) {
+                    annotations.set(propertyFrequency ? AK_MAX_FREQ_HZ : AK_MAX_LMDA_NM,
+                                    freqLmdaToAnnotation(rxMax, useFreq));
+                }
+                if (rxGrid == txGrid) {
+                    annotations.set(propertyFrequency ? AK_GRID_HZ : AK_GRID_LMDA_NM,
+                                    freqLmdaToAnnotation(rxGrid, useFreq));
+                }
+
+                int txPwr = OFOpticalPortFeaturesSerializerVer14.TX_PWR_VAL;
+                long txPwrMin = optical.get().getTxPwrMin();
+                long txPwrMax = optical.get().getTxPwrMax();
+                annotations.set(AK_TX_PWR_FEATURE, ((supported & txPwr) != 0) ? "enabled" : "disabled");
+                annotations.set(AK_TX_PWR_MIN, Long.toString(txPwrMin));
+                annotations.set(AK_TX_PWR_MAX, Long.toString(txPwrMax));
 
                 // TODO How to determine appropriate port type?
 
-                return new DefaultPortDescription(portNo,
-                                                  enabled,
-                                                  FIBER,
-                                                  portSpeed(port),
-                                                  annotations.build());
+                return DefaultPortDescription.builder()
+                        .withPortNumber(portNo)
+                        .isEnabled(enabled)
+                        .type(FIBER)
+                        .portSpeed(portSpeed(port))
+                        .annotations(annotations.build())
+                        .build();
             }
 
             // fall back default
-            return new DefaultPortDescription(portNo,
-                                              enabled,
-                                              COPPER,
-                                              portSpeed(port),
-                                              annotations.build());
+            return DefaultPortDescription.builder()
+                    .withPortNumber(portNo)
+                    .isEnabled(enabled)
+                    .type(COPPER)
+                    .portSpeed(portSpeed(port))
+                    .annotations(annotations.build())
+                    .build();
 
         }
 
@@ -952,8 +1311,13 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
             SparseAnnotations annotations = makePortAnnotation(port.getName(),
                                                                port.getHwAddr().toString(),
                                                                adminDown).build();
-            return new DefaultPortDescription(portNo, enabled, type,
-                                              portSpeed(port), annotations);
+            return DefaultPortDescription.builder()
+                    .withPortNumber(portNo)
+                    .isEnabled(enabled)
+                    .type(type)
+                    .portSpeed(portSpeed(port))
+                    .annotations(annotations)
+                    .build();
         }
 
         /**
@@ -1029,7 +1393,13 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                     break;
             }
 
-            return new DefaultPortDescription(portNo, enabled, FIBER, 0, annotations);
+            return DefaultPortDescription.builder()
+                    .withPortNumber(portNo)
+                    .isEnabled(enabled)
+                    .type(FIBER)
+                    .portSpeed(0)
+                    .annotations(annotations)
+                    .build();
         }
 
         /**
@@ -1151,6 +1521,7 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
                         if (((OFErrorMsg) msg).getErrType() == OFErrorType.PORT_MOD_FAILED) {
                             LOG.error("port mod failed");
                         }
+                        break;
                     default:
                         break;
                 }
@@ -1164,6 +1535,5 @@ public class OpenFlowDeviceProvider extends AbstractProvider implements DevicePr
             isDisabled = true;
         }
     }
-
 
 }

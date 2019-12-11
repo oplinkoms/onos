@@ -125,9 +125,38 @@ public class DocumentPath implements Comparable<DocumentPath> {
      * @return {@code DocumentPath} instance
      */
     public static DocumentPath from(List<String> elements, String child) {
-        elements = new ArrayList<>(elements);
-        elements.add(child);
-        return from(elements);
+        List<String> concat = new ArrayList<>(elements.size() + 1);
+        concat.addAll(elements);
+        concat.add(child);
+        return from(concat);
+    }
+
+    /**
+     * Creates a new {@code DocumentPath} from a list of path elements.
+     *
+     * @param elements path elements
+     * @param childElms child element
+     * @return {@code DocumentPath} instance
+     */
+    public static DocumentPath from(List<String> elements, String... childElms) {
+        List<String> concat = new ArrayList<>(elements.size() + childElms.length);
+        concat.addAll(elements);
+        concat.addAll(Arrays.asList(childElms));
+        return from(concat);
+    }
+
+    /**
+     * Creates a new DocumentPath element appending {@code childElm} to
+     * this path.
+     *
+     * @param childElms to append
+     * @return this + childElm
+     */
+    public DocumentPath append(List<String> childElms) {
+        List<String> concat = new ArrayList<>(pathElements.size() + childElms.size());
+        concat.addAll(pathElements);
+        concat.addAll(childElms);
+        return from(concat);
     }
 
     /**
@@ -172,7 +201,8 @@ public class DocumentPath implements Comparable<DocumentPath> {
      * @return {@code true} is yes; {@code false} otherwise.
      */
     public boolean isAncestorOf(DocumentPath other) {
-        return this.pathElements.size() < other.pathElements.size() &&
+        return other != null &&
+               this.pathElements.size() < other.pathElements.size() &&
                this.pathElements.equals(other.pathElements.subList(0, this.pathElements.size()));
     }
 
@@ -186,7 +216,8 @@ public class DocumentPath implements Comparable<DocumentPath> {
      * @return {@code true} is yes; {@code false} otherwise.
      */
     public boolean isDescendentOf(DocumentPath other) {
-        return other.equals(this) || other.isAncestorOf(this);
+        return other != null &&
+               (other.equals(this) || other.isAncestorOf(this));
     }
 
     /**

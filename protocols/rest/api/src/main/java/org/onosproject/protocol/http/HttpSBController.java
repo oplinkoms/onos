@@ -18,8 +18,10 @@ package org.onosproject.protocol.http;
 
 import java.io.InputStream;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.sse.InboundSseEvent;
 
 import org.onlab.packet.IpAddress;
 import org.onosproject.net.DeviceId;
@@ -68,89 +70,6 @@ public interface HttpSBController {
      * @param deviceId to be removed
      */
     void removeDevice(DeviceId deviceId);
-
-    /**
-     * Does a HTTP POST request with specified parameters to the device.
-     *
-     * @param device device to make the request to
-     * @param request url of the request
-     * @param payload payload of the request as an InputStream
-     * @param mediaType type of content in the payload i.e. application/json
-     * @return true if operation returned 200, 201, 202, false otherwise
-     *
-     * @deprecated in Kingfisher (1.10.0)
-     */
-    @Deprecated
-    boolean post(DeviceId device, String request, InputStream payload, String mediaType);
-
-    /**
-     * Does a HTTP POST request with specified parameters to the device.
-     *
-     * @param <T> post return type
-     * @param device device to make the request to
-     * @param request url of the request
-     * @param payload payload of the request as an InputStream
-     * @param mediaType type of content in the payload i.e. application/json
-     * @param responseClass the type of response object we are interested in,
-     *            such as String, InputStream.
-     * @return Object of type requested via responseClass.
-     */
-    @Deprecated
-    <T> T post(DeviceId device, String request, InputStream payload, String mediaType, Class<T> responseClass);
-
-    /**
-     * Does a HTTP PUT request with specified parameters to the device.
-     *
-     * @param device device to make the request to
-     * @param request resource path of the request
-     * @param payload payload of the request as an InputStream
-     * @param mediaType type of content in the payload i.e. application/json
-     * @return true if operation returned 200, 201, 202, false otherwise
-     *
-     * @deprecated in Kingfisher (1.10.0)
-     */
-    @Deprecated
-    boolean put(DeviceId device, String request, InputStream payload, String mediaType);
-
-    /**
-     *
-     * Does a HTTP GET request with specified parameters to the device.
-     *
-     * @param device device to make the request to
-     * @param request url of the request
-     * @param mediaType format to retrieve the content in
-     * @return an inputstream of data from the reply.
-     */
-    @Deprecated
-    InputStream get(DeviceId device, String request, String mediaType);
-
-    /**
-     * Does a HTTP PATCH request with specified parameters to the device.
-     *
-     * @param device device to make the request to
-     * @param request url of the request
-     * @param payload payload of the request as an InputStream
-     * @param mediaType format to retrieve the content in
-     * @return true if operation returned 200, 201, 202, false otherwise
-     *
-     * @deprecated in Kingfisher (1.10.0)
-     */
-    @Deprecated
-    boolean patch(DeviceId device, String request, InputStream payload, String mediaType);
-
-    /**
-     * Does a HTTP DELETE request with specified parameters to the device.
-     *
-     * @param device device to make the request to
-     * @param request url of the request
-     * @param payload payload of the request as an InputStream
-     * @param mediaType type of content in the payload i.e. application/json
-     * @return true if operation returned 200 false otherwise
-     *
-     * @deprecated in Kingfisher (1.10.0)
-     */
-    @Deprecated
-    boolean delete(DeviceId device, String request, InputStream payload, String mediaType);
 
     /**
      * Does a HTTP POST request with specified parameters to the device.
@@ -208,7 +127,8 @@ public interface HttpSBController {
     InputStream get(DeviceId device, String request, MediaType mediaType);
 
     /**
-     * Does a HTTP POST request with specified parameters to the device.
+     * Does a HTTP POST request with specified parameters to the device and
+     * extracts an object of type T from the response entity field.
      *
      * @param <T> post return type
      * @param device device to make the request to
@@ -221,5 +141,27 @@ public interface HttpSBController {
      */
      <T> T post(DeviceId device, String request, InputStream payload, MediaType mediaType, Class<T> responseClass);
 
+    /**
+     * Does a HTTP GET against a Server Sent Events (SSE_INBOUND) resource on the device.
+     *
+     * This is a low level function that can take callbacks.
+     * For a higher level function that emits events based on this callback
+     * see startServerSentEvents() in the RestSBController
+     *
+     * @param deviceId device to make the request to
+     * @param request url of the request
+     * @param onEvent A consumer of inbound SSE_INBOUND events
+     * @param onError A consumer of inbound SSE_INBOUND errors
+     * @return status Commonly used status codes defined by HTTP
+     */
+     int getServerSentEvents(DeviceId deviceId, String request,
+                             Consumer<InboundSseEvent> onEvent, Consumer<Throwable> onError);
 
+    /**
+     * Cancels a Server Sent Events listener to a device.
+     *
+     * @param deviceId device to cancel the listener for
+     * @return status Commonly used status codes defined by HTTP
+     */
+    int cancelServerSentEvents(DeviceId deviceId);
 }

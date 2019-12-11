@@ -45,6 +45,7 @@ public final class OvsdbConstant {
     // other configs
     public static final String DATAPATH_ID = "datapath-id";
     public static final String DISABLE_INBAND = "disable-in-band";
+    public static final String PROTOCOLS = "protocols";
 
     /** Port table. */
     public static final String PORT = "Port";
@@ -109,4 +110,21 @@ public final class OvsdbConstant {
 
     /** Openflow port Error. */
     public static final int OFPORT_ERROR = -1;
+
+    public static final boolean SERVER_MODE = true;
+
+    /** Ovsdb database Switch_Inventory. */
+    public static final String SWINVENTORY_DBNAME = "Switch_Inventory";
+
+    /** Cpu_Memory_Data table. */
+    public static final String CPU_MEMORY_DATA = "Cpu_Memory_Data";
+
+    /** Cpu column of Cpu_Memory_Data table. */
+    public static final String DEVICE_CPU = "cpu";
+
+    /** Memory column of Cpu_Memory_Data table. */
+    public static final String DEVICE_MEMORY = "memory";
+
+    public static final boolean OVSDB_TLS_FLAG = false;
+
 }

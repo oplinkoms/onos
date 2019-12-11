@@ -17,11 +17,11 @@
 package org.onosproject.netconf.client.impl;
 
 import com.google.common.annotations.Beta;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.onosproject.config.DynamicConfigEvent;
 import org.onosproject.config.DynamicConfigListener;
 import org.onosproject.config.DynamicConfigService;
@@ -63,16 +63,16 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public class NetconfActiveComponent implements DynamicConfigListener {
 
     private static final Logger log = LoggerFactory.getLogger(NetconfActiveComponent.class);
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DynamicConfigService cfgService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected NetconfTranslator netconfTranslator;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected MastershipService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected NetconfController controller;
 
     private final Accumulator<DynamicConfigEvent> accumulator = new InternalEventAccummulator();
@@ -194,7 +194,7 @@ public class NetconfActiveComponent implements DynamicConfigListener {
             return netconfTranslator.editDeviceConfig(
                     deviceId, builder.build(), operationType);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.debug("parseAndEdit()", e);
             return false;
         }
     }
@@ -212,7 +212,7 @@ public class NetconfActiveComponent implements DynamicConfigListener {
         if (node.type() == DataNode.Type.SINGLE_INSTANCE_LEAF_VALUE_NODE) {
             temp = ((LeafNode) node).asString().split("\\:");
             if (temp.length != 3) {
-                throw new RuntimeException(new NetconfException("Invalid device id form, cannot apply"));
+                throw new IllegalStateException(new NetconfException("Invalid device id form, cannot apply"));
             }
             ip = temp[1];
             port = temp[2];
@@ -220,12 +220,12 @@ public class NetconfActiveComponent implements DynamicConfigListener {
             ListKey key = (ListKey) node.key();
             temp = key.keyLeafs().get(0).leafValAsString().split("\\:");
             if (temp.length != 3) {
-                throw new RuntimeException(new NetconfException("Invalid device id form, cannot apply"));
+                throw new IllegalStateException(new NetconfException("Invalid device id form, cannot apply"));
             }
             ip = temp[1];
             port = temp[2];
         } else {
-            throw new RuntimeException(new NetconfException("Invalid device id type, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid device id type, cannot apply"));
         }
         try {
             return DeviceId.deviceId(new URI("netconf", ip + ":" + port, (String) null));
@@ -246,7 +246,7 @@ public class NetconfActiveComponent implements DynamicConfigListener {
                 this.controller.connectDevice(deviceId);
                 //}
             } catch (Exception ex) {
-                throw new RuntimeException(new NetconfException("Unable to connect to NETCONF device on " +
+                throw new IllegalStateException(new NetconfException("Unable to connect to NETCONF device on " +
                         deviceId, ex));
             }
         }
@@ -263,21 +263,21 @@ public class NetconfActiveComponent implements DynamicConfigListener {
         String resId = ResourceIdParser.parseResId(path);
         String[] el = resId.split(ResourceIdParser.EL_CHK);
         if (el.length < 3) {
-            throw new RuntimeException(new NetconfException("Invalid resource id, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid resource id, cannot apply"));
         }
         if (!el[2].contains((ResourceIdParser.KEY_SEP))) {
-            throw new RuntimeException(new NetconfException("Invalid device id key, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid device id key, cannot apply"));
         }
         String[] keys = el[2].split(ResourceIdParser.KEY_CHK);
         if (keys.length < 2) {
-            throw new RuntimeException(new NetconfException("Invalid device id key, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid device id key, cannot apply"));
         }
         String[] parts = keys[1].split(ResourceIdParser.NM_CHK);
         if (parts.length < 3) {
-            throw new RuntimeException(new NetconfException("Invalid device id key, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid device id key, cannot apply"));
         }
         if (parts[2].split("\\:").length != 3) {
-            throw new RuntimeException(new NetconfException("Invalid device id form, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid device id form, cannot apply"));
         }
         return (new ResourceId.Builder()
                 .addBranchPointSchema(el[1].split(ResourceIdParser.NM_CHK)[0],
@@ -299,23 +299,23 @@ public class NetconfActiveComponent implements DynamicConfigListener {
         String resId = ResourceIdParser.parseResId(path);
         String[] el = resId.split(ResourceIdParser.EL_CHK);
         if (el.length < 3) {
-            throw new RuntimeException(new NetconfException("Invalid resource id, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid resource id, cannot apply"));
         }
         if (!el[2].contains((ResourceIdParser.KEY_SEP))) {
-            throw new RuntimeException(new NetconfException("Invalid device id key, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid device id key, cannot apply"));
         }
         String[] keys = el[2].split(ResourceIdParser.KEY_CHK);
         if (keys.length < 2) {
-            throw new RuntimeException(new NetconfException("Invalid device id key, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid device id key, cannot apply"));
         }
         String[] parts = keys[1].split(ResourceIdParser.NM_CHK);
         if (parts.length < 3) {
-            throw new RuntimeException(new NetconfException("Invalid device id key, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid device id key, cannot apply"));
         }
         String[] temp = parts[2].split("\\:");
         String ip, port;
         if (temp.length != 3) {
-            throw new RuntimeException(new NetconfException("Invalid device id form, cannot apply"));
+            throw new IllegalStateException(new NetconfException("Invalid device id form, cannot apply"));
         }
         ip = temp[1];
         port = temp[2];

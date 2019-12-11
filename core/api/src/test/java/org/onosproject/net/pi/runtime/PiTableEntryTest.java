@@ -81,16 +81,6 @@ public class PiTableEntryTest {
     }
 
     /**
-     * Tests equality of the empty table entry.
-     */
-    @Test
-    public void testEmptyEquals() {
-        new EqualsTester()
-                .addEqualityGroup(PiTableEntry.EMTPY, PiTableEntry.EMTPY)
-                .testEquals();
-    }
-
-    /**
      * Tests creation of a DefaultFlowRule using a FlowRule constructor.
      */
     @Test
@@ -120,7 +110,7 @@ public class PiTableEntryTest {
         assertThat(piTableEntry.cookie(), is(cookie));
         assertThat("Priority must be set", piTableEntry.priority().isPresent());
         assertThat("Timeout must be set", piTableEntry.timeout().isPresent());
-        assertThat(piTableEntry.priority().get(), is(priority));
+        assertThat(piTableEntry.priority().getAsInt(), is(priority));
         assertThat(piTableEntry.timeout().get(), is(timeout));
         assertThat("Incorrect match param value",
                    CollectionUtils.isEqualCollection(piTableEntry.matchKey().fieldMatches(), fieldMatches.values()));

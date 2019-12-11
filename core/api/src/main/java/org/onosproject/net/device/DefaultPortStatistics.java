@@ -15,13 +15,15 @@
  */
 package org.onosproject.net.device;
 
+import org.onosproject.net.AbstractAnnotated;
+import org.onosproject.net.Annotations;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
 
 /**
  * Default implementation of immutable port statistics.
  */
-public final class DefaultPortStatistics implements PortStatistics {
+public final class DefaultPortStatistics extends AbstractAnnotated implements PortStatistics {
 
     private final DeviceId deviceId;
     private final PortNumber portNumber;
@@ -47,7 +49,9 @@ public final class DefaultPortStatistics implements PortStatistics {
                                   long packetsRxErrors,
                                   long packetsTxErrors,
                                   long durationSec,
-                                  long durationNano) {
+                                  long durationNano,
+                                  Annotations annotations) {
+        super(annotations);
         this.deviceId = deviceId;
         this.portNumber = portNumber;
         this.packetsReceived = packetsReceived;
@@ -85,11 +89,6 @@ public final class DefaultPortStatistics implements PortStatistics {
      */
     public static DefaultPortStatistics.Builder builder() {
         return new Builder();
-    }
-
-    @Override
-    public int port() {
-        return (int) this.portNumber.toLong();
     }
 
     @Override
@@ -168,7 +167,8 @@ public final class DefaultPortStatistics implements PortStatistics {
                 "pktRxErr: " + this.packetsRxErrors + ", " +
                 "pktTxErr: " + this.packetsTxErrors + ", " +
                 "pktRxDrp: " + this.packetsRxDropped + ", " +
-                "pktTxDrp: " + this.packetsTxDropped;
+                "pktTxDrp: " + this.packetsTxDropped + ", " +
+                "annotations: " + annotations();
     }
 
     public static final class Builder {
@@ -185,23 +185,10 @@ public final class DefaultPortStatistics implements PortStatistics {
         long packetsTxErrors;
         long durationSec;
         long durationNano;
+        Annotations annotations;
 
         private Builder() {
 
-        }
-
-        /**
-         * Sets port number.
-         *
-         * @param port port number
-         * @return builder object
-         * @deprecated ONOS 1.12 Magpie
-         */
-        @Deprecated
-        public Builder setPort(int port) {
-            this.portNumber = PortNumber.portNumber(port);
-
-            return this;
         }
 
         /**
@@ -349,6 +336,18 @@ public final class DefaultPortStatistics implements PortStatistics {
         }
 
         /**
+         * Sets the annotations.
+         *
+         * @param anns annotations
+         * @return builder object
+         */
+        public Builder setAnnotations(Annotations anns) {
+            annotations = anns;
+
+            return this;
+        }
+
+        /**
          * Creates a PortStatistics object.
          *
          * @return DefaultPortStatistics object
@@ -366,7 +365,8 @@ public final class DefaultPortStatistics implements PortStatistics {
                     packetsRxErrors,
                     packetsTxErrors,
                     durationSec,
-                    durationNano);
+                    durationNano,
+                    annotations);
         }
 
     }

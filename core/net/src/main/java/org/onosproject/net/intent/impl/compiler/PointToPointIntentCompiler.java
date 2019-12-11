@@ -16,11 +16,8 @@
 package org.onosproject.net.intent.impl.compiler;
 
 import com.google.common.collect.ImmutableSet;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.commons.lang3.tuple.Pair;
+import org.onlab.graph.ScalarWeight;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DefaultPath;
 import org.onosproject.net.DeviceId;
@@ -30,7 +27,6 @@ import org.onosproject.net.Link;
 import org.onosproject.net.Path;
 import org.onosproject.net.Port;
 import org.onosproject.net.PortNumber;
-import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
@@ -60,6 +56,11 @@ import org.onosproject.net.intent.constraint.ProtectionConstraint;
 import org.onosproject.net.intent.impl.PathNotFoundException;
 import org.onosproject.net.link.LinkService;
 import org.onosproject.net.provider.ProviderId;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
@@ -74,6 +75,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
@@ -102,14 +104,11 @@ public class PointToPointIntentCompiler
     protected boolean erasePrimary = false;
     protected boolean eraseBackup = false;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected GroupService groupService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected LinkService linkService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected DeviceService deviceService;
 
     @Activate
     public void activate() {
@@ -126,6 +125,18 @@ public class PointToPointIntentCompiler
         log.trace("compiling {} {}", intent, installable);
         ConnectPoint ingressPoint = intent.filteredIngressPoint().connectPoint();
         ConnectPoint egressPoint = intent.filteredEgressPoint().connectPoint();
+
+        //TODO: handle protected path case with suggested path!!
+        //Idea: use suggested path as primary and another path from path service as protection
+        if (intent.suggestedPath() != null && intent.suggestedPath().size() > 0) {
+            Path path = new DefaultPath(PID, intent.suggestedPath(), new ScalarWeight(1));
+            //Check intent constraints against suggested path and suggested path availability
+            if (checkPath(path, intent.constraints()) && pathAvailable(intent)) {
+                allocateIntentBandwidth(intent, path);
+                return asList(createLinkCollectionIntent(ImmutableSet.copyOf(intent.suggestedPath()),
+                                                         DEFAULT_COST, intent));
+            }
+        }
 
         if (ingressPoint.deviceId().equals(egressPoint.deviceId())) {
             return createZeroHopLinkCollectionIntent(intent);
@@ -146,11 +157,26 @@ public class PointToPointIntentCompiler
         }
     }
 
+    private void allocateIntentBandwidth(PointToPointIntent intent, Path path) {
+        ConnectPoint ingressCP = intent.filteredIngressPoint().connectPoint();
+        ConnectPoint egressCP = intent.filteredEgressPoint().connectPoint();
+
+        List<ConnectPoint> pathCPs =
+                path.links().stream()
+                        .flatMap(l -> Stream.of(l.src(), l.dst()))
+                        .collect(Collectors.toList());
+
+        pathCPs.add(ingressCP);
+        pathCPs.add(egressCP);
+
+        allocateBandwidth(intent, pathCPs);
+    }
+
     private List<Intent> createZeroHopIntent(ConnectPoint ingressPoint,
                                              ConnectPoint egressPoint,
                                              PointToPointIntent intent) {
         List<Link> links = asList(createEdgeLink(ingressPoint, true), createEdgeLink(egressPoint, false));
-        return asList(createPathIntent(new DefaultPath(PID, links, DEFAULT_COST),
+        return asList(createPathIntent(new DefaultPath(PID, links, ScalarWeight.toWeight(DEFAULT_COST)),
                                        intent, PathIntent.ProtectionType.PRIMARY));
     }
 
@@ -159,48 +185,12 @@ public class PointToPointIntentCompiler
                                        intent));
     }
 
-    /**
-     * Creates an unprotected intent.
-     * @param ingressPoint the ingress connect point
-     * @param egressPoint the egress connect point
-     * @param intent the original intent
-     * @return the compilation result
-     * @deprecated 1.10.0
-     */
-    @Deprecated
-    private List<Intent> createUnprotectedIntent(ConnectPoint ingressPoint,
-                                                 ConnectPoint egressPoint,
-                                                 PointToPointIntent intent) {
-        List<Link> links = new ArrayList<>();
-        Path path = getPathOrException(intent, ingressPoint.deviceId(),
-                                       egressPoint.deviceId());
-
-        links.add(createEdgeLink(ingressPoint, true));
-        links.addAll(path.links());
-        links.add(createEdgeLink(egressPoint, false));
-
-        return asList(createPathIntent(new DefaultPath(PID, links, path.cost(),
-                                                       path.annotations()), intent,
-                                       PathIntent.ProtectionType.PRIMARY));
-    }
-
     private List<Intent> createUnprotectedLinkCollectionIntent(PointToPointIntent intent) {
         Path path = getPathOrException(intent, intent.filteredIngressPoint().connectPoint().deviceId(),
                                        intent.filteredEgressPoint().connectPoint().deviceId());
 
         // Allocate bandwidth if a bandwidth constraint is set
-        ConnectPoint ingressCP = intent.filteredIngressPoint().connectPoint();
-        ConnectPoint egressCP = intent.filteredEgressPoint().connectPoint();
-
-        List<ConnectPoint> pathCPs =
-                path.links().stream()
-                            .flatMap(l -> Stream.of(l.src(), l.dst()))
-                            .collect(Collectors.toList());
-
-        pathCPs.add(ingressCP);
-        pathCPs.add(egressCP);
-
-        allocateBandwidth(intent, pathCPs);
+        allocateIntentBandwidth(intent, path);
 
         return asList(createLinkCollectionIntent(ImmutableSet.copyOf(path.links()),
                                                  path.cost(),
@@ -253,23 +243,24 @@ public class PointToPointIntentCompiler
             PortNumber primaryPort = getPrimaryPort(intent);
             if (primaryPort != null && !links.get(0).src().port().equals(primaryPort)) {
                 reusableIntents.add(createPathIntent(new DefaultPath(PID, links,
-                                                                     path.cost(), path.annotations()),
+                                                     path.weight(), path.annotations()),
                                                      intent, PathIntent.ProtectionType.BACKUP));
                 updateFailoverGroup(intent, links);
                 return reusableIntents;
 
             } else {
-                reusableIntents.add(createPathIntent(new DefaultPath(PID, backupLinks, path.backup().cost(),
-                                     path.backup().annotations()), intent, PathIntent.ProtectionType.BACKUP));
+                reusableIntents.add(createPathIntent(new DefaultPath(PID, backupLinks,
+                        path.backup().weight(),
+                        path.backup().annotations()), intent, PathIntent.ProtectionType.BACKUP));
                 updateFailoverGroup(intent, backupLinks);
                 return reusableIntents;
             }
         }
 
-        intentList.add(createPathIntent(new DefaultPath(PID, links, path.cost(),
+        intentList.add(createPathIntent(new DefaultPath(PID, links, path.weight(),
                                                         path.annotations()),
                                         intent, PathIntent.ProtectionType.PRIMARY));
-        intentList.add(createPathIntent(new DefaultPath(PID, backupLinks, path.backup().cost(),
+        intentList.add(createPathIntent(new DefaultPath(PID, backupLinks, path.backup().weight(),
                                                         path.backup().annotations()),
                                         intent, PathIntent.ProtectionType.BACKUP));
 
@@ -318,24 +309,12 @@ public class PointToPointIntentCompiler
             return reusableIntents;
         } else {
             // Allocate bandwidth if a bandwidth constraint is set
-            ConnectPoint ingressCP = intent.filteredIngressPoint().connectPoint();
-            ConnectPoint egressCP = intent.filteredEgressPoint().connectPoint();
-
-            List<ConnectPoint> pathCPs =
-                    onlyPath.links().stream()
-                            .flatMap(l -> Stream.of(l.src(), l.dst()))
-                            .collect(Collectors.toList());
-
-            pathCPs.add(ingressCP);
-            pathCPs.add(egressCP);
-
-            // Allocate bandwidth if a bandwidth constraint is set
-            allocateBandwidth(intent, pathCPs);
+            allocateIntentBandwidth(intent, onlyPath);
 
             links.add(createEdgeLink(ingressPoint, true));
             links.addAll(onlyPath.links());
             links.add(createEdgeLink(egressPoint, false));
-            return asList(createPathIntent(new DefaultPath(PID, links, onlyPath.cost(),
+            return asList(createPathIntent(new DefaultPath(PID, links, onlyPath.weight(),
                                                            onlyPath.annotations()),
                                            intent, PathIntent.ProtectionType.PRIMARY));
         }
@@ -484,7 +463,7 @@ public class PointToPointIntentCompiler
     private List<FlowRule> createFailoverFlowRules(PointToPointIntent intent) {
         List<FlowRule> flowRules = new ArrayList<>();
 
-        ConnectPoint ingress = intent.ingressPoint();
+        ConnectPoint ingress = intent.filteredIngressPoint().connectPoint();
         DeviceId deviceId = ingress.deviceId();
 
         // flow rule with failover traffic treatment
@@ -589,36 +568,34 @@ public class PointToPointIntentCompiler
                                                  PointToPointIntent pointIntent) {
         List<Intent> intentList = new ArrayList<>();
         intentList.addAll(oldInstallables);
-        erasePrimary = false;
-        eraseBackup = false;
-        if (intentList != null) {
-            Iterator<Intent> iterator = intentList.iterator();
-            while (iterator.hasNext() && !(erasePrimary && eraseBackup)) {
-                Intent intent = iterator.next();
-                intent.resources().forEach(resource -> {
-                    if (resource instanceof Link) {
-                        Link link = (Link) resource;
-                        if (link.state() == Link.State.INACTIVE) {
+
+        Iterator<Intent> iterator = intentList.iterator();
+        while (iterator.hasNext()) {
+            Intent intent = iterator.next();
+            intent.resources().forEach(resource -> {
+                if (resource instanceof Link) {
+                    Link link = (Link) resource;
+                    if (link.state() == Link.State.INACTIVE) {
+                        setPathsToRemove(intent);
+                    } else if (link instanceof EdgeLink) {
+                        ConnectPoint connectPoint = (link.src().elementId() instanceof DeviceId)
+                                ? link.src() : link.dst();
+                        Port port = deviceService.getPort(connectPoint.deviceId(), connectPoint.port());
+                        if (port == null || !port.isEnabled()) {
                             setPathsToRemove(intent);
-                        } else if (link instanceof EdgeLink) {
-                            ConnectPoint connectPoint = (link.src().elementId() instanceof DeviceId)
-                                    ? link.src() : link.dst();
-                            Port port = deviceService.getPort(connectPoint.deviceId(), connectPoint.port());
-                            if (port == null || !port.isEnabled()) {
-                                setPathsToRemove(intent);
-                            }
-                        } else {
-                            Port port1 = deviceService.getPort(link.src().deviceId(), link.src().port());
-                            Port port2 = deviceService.getPort(link.dst().deviceId(), link.dst().port());
-                            if (port1 == null || !port1.isEnabled() || port2 == null || !port2.isEnabled()) {
-                                setPathsToRemove(intent);
-                            }
+                        }
+                    } else {
+                        Port port1 = deviceService.getPort(link.src().deviceId(), link.src().port());
+                        Port port2 = deviceService.getPort(link.dst().deviceId(), link.dst().port());
+                        if (port1 == null || !port1.isEnabled() || port2 == null || !port2.isEnabled()) {
+                            setPathsToRemove(intent);
                         }
                     }
-                });
-            }
-            removeAndUpdateIntents(intentList, pointIntent);
+                }
+            });
         }
+        removeAndUpdateIntents(intentList, pointIntent);
+
         return intentList;
     }
 
@@ -722,5 +699,48 @@ public class PointToPointIntentCompiler
         GroupBuckets addBuckets = new GroupBuckets(Collections.singletonList(bucket));
 
         groupService.addBucketsToGroup(src.deviceId(), groupKey, addBuckets, groupKey, intent.appId());
+    }
+
+    /**
+     * Checks suggested path availability.
+     * It checks:
+     * - single links availability;
+     * - that first and last device of the path are coherent with ingress and egress devices;
+     * - links contiguity.
+     *
+     * @param intent    Intent with suggested path to check
+     * @return true if the suggested path is available
+     */
+    private boolean pathAvailable(PointToPointIntent intent) {
+        // Check links availability
+        List<Link> suggestedPath = intent.suggestedPath();
+        for (Link link : suggestedPath) {
+            if (!(link instanceof EdgeLink) && !linkService.getLinks(link.src()).contains(link)) {
+                return false;
+            }
+        }
+
+        //Check that first and last device of the path are intent ingress and egress devices
+        if (!suggestedPath.get(0).src()
+                .deviceId().equals(intent.filteredIngressPoint().connectPoint().deviceId())) {
+            return false;
+        }
+        if (!suggestedPath.get(suggestedPath.size() - 1).dst()
+                .deviceId().equals(intent.filteredEgressPoint().connectPoint().deviceId())) {
+            return false;
+        }
+
+        // Check contiguity
+        List<Pair<Link, Link>> linkPairs = IntStream.
+            range(0, suggestedPath.size() - 1)
+            .mapToObj(i -> Pair.of(suggestedPath.get(i), suggestedPath.get(i + 1)))
+            .collect(Collectors.toList());
+
+        for (Pair<Link, Link> linkPair : linkPairs) {
+            if (!linkPair.getKey().dst().deviceId().equals(linkPair.getValue().src().deviceId())) {
+                return false;
+            }
+        }
+        return true;
     }
 }

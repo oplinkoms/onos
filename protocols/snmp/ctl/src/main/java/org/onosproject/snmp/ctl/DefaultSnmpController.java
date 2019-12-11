@@ -23,20 +23,21 @@ import com.btisystems.pronx.ems.core.snmp.ISnmpSessionFactory;
 import com.btisystems.pronx.ems.core.snmp.SnmpSessionFactory;
 import com.btisystems.pronx.ems.core.snmp.V2cSnmpConfiguration;
 import com.google.common.base.Preconditions;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Service;
-import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
-import org.onosproject.incubator.net.faultmanagement.alarm.DefaultAlarm;
+import org.onosproject.alarm.Alarm;
+import org.onosproject.alarm.AlarmId;
+import org.onosproject.alarm.DefaultAlarm;
 import org.onosproject.net.DeviceId;
 import org.onosproject.snmp.SnmpController;
 import org.onosproject.snmp.SnmpDevice;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -45,8 +46,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Default implementation of the SNMP sub-controller.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = SnmpController.class)
 public class DefaultSnmpController implements SnmpController {
 
     private final Logger log = LoggerFactory
@@ -72,6 +72,7 @@ public class DefaultSnmpController implements SnmpController {
     }
 
     @Override
+    @Deprecated
     public ISnmpSession getSession(DeviceId deviceId) throws IOException {
         if (!sessionMap.containsKey(deviceId)) {
             SnmpDevice device = snmpDeviceMap.get(deviceId);
@@ -111,20 +112,31 @@ public class DefaultSnmpController implements SnmpController {
     }
 
     @Override
+    public SnmpDevice getDevice(URI uri) {
+            //this assumes that only one device is associated with one deviceId
+            return snmpDeviceMap.entrySet()
+                    .stream().filter(p -> p.getValue()
+                    .getSnmpHost().equals(uri.toString()))
+                    .map(Map.Entry::getValue).findFirst().orElse(null);
+    }
+
+    @Override
     public void removeDevice(DeviceId did) {
         snmpDeviceMap.remove(did);
     }
 
     @Override
-    public void addDevice(DeviceId did, SnmpDevice device) {
-        snmpDeviceMap.put(did, device);
+    public void addDevice(SnmpDevice device) {
+        log.info("Adding device {}", device.deviceId());
+        snmpDeviceMap.put(device.deviceId(), device);
     }
 
     @Override
     public DefaultAlarm buildWalkFailedAlarm(DeviceId deviceId) {
+        long timeRaised = System.currentTimeMillis();
         return new DefaultAlarm.Builder(
+                AlarmId.alarmId(deviceId, Long.toString(timeRaised)),
                 deviceId, "SNMP alarm retrieval failed",
-                Alarm.SeverityLevel.CRITICAL,
-                System.currentTimeMillis()).build();
+                Alarm.SeverityLevel.CRITICAL, timeRaised).build();
     }
 }

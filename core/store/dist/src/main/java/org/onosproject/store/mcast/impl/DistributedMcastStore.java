@@ -18,14 +18,7 @@ package org.onosproject.store.mcast.impl;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Sets;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.KryoNamespace;
-
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.mcast.McastEvent;
 import org.onosproject.net.mcast.McastRoute;
@@ -39,6 +32,11 @@ import org.onosproject.store.service.MapEventListener;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.Versioned;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.Map;
@@ -55,8 +53,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * A distributed mcast store implementation. Routes are stored consistently
  * across the cluster.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = McastStore.class)
 public class DistributedMcastStore
     extends AbstractStore<McastEvent, McastStoreDelegate>
     implements McastStore {
@@ -64,7 +61,7 @@ public class DistributedMcastStore
     private static final String MCASTRIB = "onos-mcast-rib-table";
     private Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected StorageService storageService;
 
     private Map<McastRoute, MulticastData> mcastRoutes;
@@ -134,11 +131,28 @@ public class DistributedMcastStore
                     checkNotNull(newData);
                     checkNotNull(oldData);
 
+                    // They are not equal
                     if (!Objects.equal(oldData.source(), newData.source())) {
-                        notifyDelegate(new McastEvent(McastEvent.Type.SOURCE_ADDED,
-                                                      mcastRouteInfo(route,
-                                                                     newData.sinks(),
-                                                                     newData.source())));
+                        // Both not null, it is an update event
+                        if (oldData.source() != null && newData.source() != null) {
+                            // Broadcast old and new data
+                            notifyDelegate(new McastEvent(McastEvent.Type.SOURCE_UPDATED,
+                                                          mcastRouteInfo(route,
+                                                                         newData.sinks(),
+                                                                         newData.source()),
+                                                          mcastRouteInfo(route,
+                                                                         oldData.sinks(),
+                                                                         oldData.source())));
+                        } else if (oldData.source() == null && newData.source() != null) {
+                            // It is a source added event, broadcast new data
+                            notifyDelegate(new McastEvent(McastEvent.Type.SOURCE_ADDED,
+                                                          mcastRouteInfo(route,
+                                                                         newData.sinks(),
+                                                                         newData.source())));
+                        } else {
+                            // Scenario not managed for now
+                            log.warn("Unhandled scenario {} - new {} - old {}", event.type());
+                        }
                     } else {
                         Sets.difference(newData.sinks(), oldData.sinks()).forEach(sink ->
                             notifyDelegate(new McastEvent(McastEvent.Type.SINK_ADDED,
@@ -156,8 +170,15 @@ public class DistributedMcastStore
                     }
                     break;
                 case REMOVE:
+                    // Verify old data is not null
+                    checkNotNull(oldData);
+                    // Create a route removed event with just the route
+                    // and the source connect point
                     notifyDelegate(new McastEvent(McastEvent.Type.ROUTE_REMOVED,
-                                                      mcastRouteInfo(route)));
+                                                      mcastRouteInfo(route,
+                                                                     oldData.sinks(),
+                                                                     oldData.source()
+                                                                     )));
                     break;
                 default:
                     log.warn("Unknown mcast operation type: {}", event.type());

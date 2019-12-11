@@ -18,11 +18,11 @@ package org.onosproject.ui.impl.topo.util;
 
 import org.onlab.osgi.ServiceDirectory;
 import org.onosproject.cluster.ClusterService;
-import org.onosproject.incubator.net.PortStatisticsService;
-import org.onosproject.incubator.net.tunnel.TunnelService;
+import org.onosproject.net.statistic.PortStatisticsService;
 import org.onosproject.mastership.MastershipAdminService;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.flow.FlowRuleService;
 import org.onosproject.net.host.HostService;
 import org.onosproject.net.intent.IntentService;
@@ -41,9 +41,9 @@ public class ServicesBundle {
 
     private TopologyService topologyService;
     private DeviceService deviceService;
+    private DriverService driverService;
     private HostService hostService;
     private LinkService linkService;
-    private TunnelService tunnelService;
 
     private MastershipService mastershipService;
     private MastershipAdminService mastershipAdminService;
@@ -65,9 +65,9 @@ public class ServicesBundle {
 
         topologyService = directory.get(TopologyService.class);
         deviceService = directory.get(DeviceService.class);
+        driverService = directory.get(DriverService.class);
         hostService = directory.get(HostService.class);
         linkService = directory.get(LinkService.class);
-        tunnelService = directory.get(TunnelService.class);
 
         mastershipService = directory.get(MastershipService.class);
         mastershipAdminService = directory.get(MastershipAdminService.class);
@@ -105,6 +105,15 @@ public class ServicesBundle {
     }
 
     /**
+     * Returns a reference to the driver service.
+     *
+     * @return driver service reference
+     */
+    public DriverService driver() {
+        return driverService;
+    }
+
+    /**
      * Returns a reference to the host service.
      *
      * @return host service reference
@@ -120,15 +129,6 @@ public class ServicesBundle {
      */
     public LinkService link() {
         return linkService;
-    }
-
-    /**
-     * Returns a reference to the tunnel service.
-     *
-     * @return tunnel service reference
-     */
-    public TunnelService tunnel() {
-        return tunnelService;
     }
 
     /**

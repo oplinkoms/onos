@@ -125,16 +125,13 @@ public class PortViewMessageHandler extends UiMessageHandler {
                         ds.getPortDeltaStatistics(deviceId) :
                         ds.getPortStatistics(deviceId);
                 for (PortStatistics stat : stats) {
-                    if (nz && stat.isZero()) {
-                        continue;
-                    }
                     populateRow(tm.addRow(), stat);
                 }
             }
         }
 
         private void populateRow(TableModel.Row row, PortStatistics stat) {
-            row.cell(ID, stat.port())
+            row.cell(ID, stat.portNumber().toLong())
                 .cell(PKT_RX, stat.packetsReceived())
                 .cell(PKT_TX, stat.packetsSent())
                 .cell(BYTES_RX, stat.bytesReceived())

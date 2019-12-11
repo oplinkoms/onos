@@ -24,6 +24,7 @@ import org.onosproject.core.GroupId;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
+import org.onosproject.net.driver.DriverServiceAdapter;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.group.DefaultGroupBucket;
@@ -39,6 +40,7 @@ import org.onosproject.net.group.GroupProviderService;
 import org.onosproject.net.provider.AbstractProviderService;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.openflow.controller.Dpid;
+import org.onosproject.openflow.controller.OpenFlowClassifierListener;
 import org.onosproject.openflow.controller.OpenFlowController;
 import org.onosproject.openflow.controller.OpenFlowEventListener;
 import org.onosproject.openflow.controller.OpenFlowMessageListener;
@@ -82,6 +84,7 @@ public class OpenFlowGroupProviderTest {
         provider.controller = controller;
         provider.providerRegistry = providerRegistry;
         provider.cfgService = new ComponentConfigAdapter();
+        provider.driverService = new DriverServiceAdapter();
         provider.activate(null);
     }
 
@@ -173,7 +176,6 @@ public class OpenFlowGroupProviderTest {
         controller.processPacket(dpid1, rep2.build());
         assertNotNull("group entries should be set", testProviderService.getGroupEntries());
     }
-
 
 
     @After
@@ -310,6 +312,14 @@ public class OpenFlowGroupProviderTest {
         @Override
         public OpenFlowSwitch getEqualSwitch(Dpid dpid) {
             return null;
+        }
+
+        @Override
+        public void removeClassifierListener(OpenFlowClassifierListener listener) {
+        }
+
+        @Override
+        public void addClassifierListener(OpenFlowClassifierListener listener) {
         }
     }
 

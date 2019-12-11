@@ -36,8 +36,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
-
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.Device;
 import org.onosproject.net.device.DefaultPortDescription;
@@ -183,9 +181,7 @@ public class OplinkSwitchHandshaker extends AbstractOpenFlowSwitch implements Op
      */
     @Override
     public List<OFPortDesc> getPorts() {
-        return ImmutableList.copyOf(
-                ports.stream().flatMap(p -> p.getEntries().stream())
-                .collect(Collectors.toList()));
+        return super.getPorts();
     }
 
     @Override
@@ -249,8 +245,13 @@ public class OplinkSwitchHandshaker extends AbstractOpenFlowSwitch implements Op
             } else {
                 builder.set(OUTPUT_PORT_STATUS, STATUS_OUT_SERVICE);
             }
-            portDescs.add(new DefaultPortDescription(port.number(), port.isEnabled(),
-                    port.type(), port.portSpeed(), builder.build()));
+            portDescs.add(DefaultPortDescription.builder()
+                    .withPortNumber(port.number())
+                    .isEnabled(port.isEnabled())
+                    .type(port.type())
+                    .portSpeed(port.portSpeed())
+                    .annotations(builder.build())
+                    .build());
         }
         return portDescs;
     }

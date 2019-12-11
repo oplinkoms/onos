@@ -17,17 +17,16 @@
 package org.onosproject.provider.netconf.alarm;
 
 import com.google.common.collect.ImmutableSet;
-import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmTranslator;
-import org.onosproject.incubator.net.faultmanagement.alarm.DefaultAlarm;
+import org.onosproject.alarm.Alarm;
+import org.onosproject.alarm.AlarmId;
+import org.onosproject.alarm.AlarmTranslator;
+import org.onosproject.alarm.DefaultAlarm;
+import org.onosproject.alarm.XmlEventParser;
 import org.onosproject.net.DeviceId;
 import org.slf4j.Logger;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
-import org.xml.sax.InputSource;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
@@ -38,8 +37,6 @@ import javax.xml.transform.stream.StreamResult;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
-import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 
@@ -59,19 +56,14 @@ public class NetconfAlarmTranslator implements AlarmTranslator {
     public Collection<Alarm> translateToAlarm(DeviceId deviceId, InputStream message) {
         try {
             Collection<Alarm> alarms = new ArrayList<>();
-            Document doc = createDocFromMessage(message);
-
-            // parse date element value into long
-            Node eventTime = doc.getElementsByTagName(EVENTTIME_TAGNAME).item(0);
-            String date = eventTime.getTextContent();
-            long timeStamp = parseDate(date);
-
-            // event-specific tag names as alarm descriptions
-            Node descriptionNode = eventTime.getNextSibling();
+            Document doc = XmlEventParser.createDocFromMessage(message);
+            long timeStamp = XmlEventParser.getEventTime(doc);
+            Node descriptionNode = XmlEventParser.getDescriptionNode(doc);
             while (descriptionNode != null) {
                 if (descriptionNode.getNodeType() == Node.ELEMENT_NODE) {
                     String description = nodeToString(descriptionNode);
-                    alarms.add(new DefaultAlarm.Builder(deviceId, description,
+                    alarms.add(new DefaultAlarm.Builder(AlarmId.alarmId(deviceId, Long.toString(timeStamp)),
+                                                        deviceId, description,
                                                         Alarm.SeverityLevel.WARNING,
                                                         timeStamp).build());
                     descriptionNode = null;
@@ -86,18 +78,6 @@ public class NetconfAlarmTranslator implements AlarmTranslator {
             log.error("Exception thrown translating message from {}.", deviceId, e);
             return ImmutableSet.of();
         }
-    }
-
-    private Document createDocFromMessage(InputStream message)
-            throws SAXException, IOException, ParserConfigurationException {
-        DocumentBuilderFactory dbfactory = DocumentBuilderFactory.newInstance();
-        DocumentBuilder builder = dbfactory.newDocumentBuilder();
-        return builder.parse(new InputSource(message));
-    }
-
-    private long parseDate(String timeStr)
-            throws UnsupportedOperationException, IllegalArgumentException {
-        return DateTimeFormatter.ISO_DATE_TIME.parse(timeStr, Instant::from).getEpochSecond();
     }
 
     private static String nodeToString(Node rootNode) throws TransformerException {

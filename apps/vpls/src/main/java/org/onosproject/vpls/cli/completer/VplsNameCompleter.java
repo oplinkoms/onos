@@ -15,6 +15,7 @@
  */
 package org.onosproject.vpls.cli.completer;
 
+import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onosproject.cli.AbstractChoicesCompleter;
 import org.onosproject.vpls.api.Vpls;
 import org.onosproject.vpls.api.VplsData;
@@ -28,9 +29,10 @@ import static org.onosproject.cli.AbstractShellCommand.get;
 /**
  * VPLS name completer.
  */
+@Service
 public class VplsNameCompleter extends AbstractChoicesCompleter {
 
-    protected static Vpls vpls;
+    protected Vpls vpls;
 
     @Override
     public List<String> choices() {

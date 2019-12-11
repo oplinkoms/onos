@@ -16,16 +16,11 @@
 
 package org.onosproject.yang.impl;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onosproject.core.CoreService;
 import org.onosproject.yang.YangClassLoaderRegistry;
 import org.onosproject.yang.model.ModelConverter;
 import org.onosproject.yang.model.ModelObjectData;
+import org.onosproject.yang.model.ModelObjectId;
 import org.onosproject.yang.model.NodeKey;
 import org.onosproject.yang.model.ResourceData;
 import org.onosproject.yang.model.ResourceId;
@@ -50,6 +45,11 @@ import org.onosproject.yang.runtime.impl.DefaultYangRuntimeHandler;
 import org.onosproject.yang.runtime.impl.DefaultYangSerializerRegistry;
 import org.onosproject.yang.serializers.json.JsonSerializer;
 import org.onosproject.yang.serializers.xml.XmlSerializer;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,8 +62,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 /**
  * Represents implementation of YANG runtime manager.
  */
-@Service
-@Component(immediate = true)
+@Component(immediate = true, service = { YangModelRegistry.class,
+        YangSerializerRegistry.class, YangRuntimeService.class, ModelConverter.class,
+        SchemaContextProvider.class, YangClassLoaderRegistry.class })
 public class YangRuntimeManager implements YangModelRegistry,
         YangSerializerRegistry, YangRuntimeService, ModelConverter,
         SchemaContextProvider, YangClassLoaderRegistry {
@@ -71,7 +72,7 @@ public class YangRuntimeManager implements YangModelRegistry,
     private static final String APP_ID = "org.onosproject.yang";
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
 
     private DefaultYangModelRegistry modelRegistry;
@@ -163,7 +164,8 @@ public class YangRuntimeManager implements YangModelRegistry,
     }
 
     @Override
-    public void registerAnydataSchema(Class id, Class id1) {
+    public void registerAnydataSchema(ModelObjectId arg0, ModelObjectId arg1)
+            throws IllegalArgumentException {
         throw new UnsupportedOperationException("registerAnydataSchema() needs to be implemented");
     }
 

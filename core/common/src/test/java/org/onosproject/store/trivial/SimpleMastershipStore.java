@@ -15,9 +15,34 @@
  */
 package org.onosproject.store.trivial;
 
-import static org.onosproject.mastership.MastershipEvent.Type.BACKUPS_CHANGED;
-import static org.onosproject.mastership.MastershipEvent.Type.MASTER_CHANGED;
-import static org.slf4j.LoggerFactory.getLogger;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import org.onlab.packet.IpAddress;
+import org.onosproject.cluster.ClusterEventListener;
+import org.onosproject.cluster.ClusterService;
+import org.onosproject.cluster.ControllerNode;
+import org.onosproject.cluster.ControllerNode.State;
+import org.onosproject.cluster.DefaultControllerNode;
+import org.onosproject.cluster.Node;
+import org.onosproject.cluster.NodeId;
+import org.onosproject.cluster.RoleInfo;
+import org.onosproject.core.Version;
+import org.onosproject.core.VersionService;
+import org.onosproject.mastership.MastershipEvent;
+import org.onosproject.mastership.MastershipInfo;
+import org.onosproject.mastership.MastershipStore;
+import org.onosproject.mastership.MastershipStoreDelegate;
+import org.onosproject.mastership.MastershipTerm;
+import org.onosproject.net.DeviceId;
+import org.onosproject.net.MastershipRole;
+import org.onosproject.store.AbstractStore;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.slf4j.Logger;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -27,44 +52,20 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
-import org.onlab.packet.IpAddress;
-import org.onosproject.cluster.ClusterEventListener;
-import org.onosproject.cluster.ClusterService;
-import org.onosproject.cluster.ControllerNode;
-import org.onosproject.cluster.ControllerNode.State;
-import org.onosproject.cluster.DefaultControllerNode;
-import org.onosproject.cluster.NodeId;
-import org.onosproject.cluster.RoleInfo;
-import org.onosproject.core.Version;
-import org.onosproject.core.VersionService;
-import org.onosproject.mastership.MastershipEvent;
-import org.onosproject.mastership.MastershipStore;
-import org.onosproject.mastership.MastershipStoreDelegate;
-import org.onosproject.mastership.MastershipTerm;
-import org.onosproject.net.DeviceId;
-import org.onosproject.net.MastershipRole;
-import org.onosproject.store.AbstractStore;
-import org.slf4j.Logger;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
+import static org.onosproject.mastership.MastershipEvent.Type.BACKUPS_CHANGED;
+import static org.onosproject.mastership.MastershipEvent.Type.MASTER_CHANGED;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Manages inventory of controller mastership over devices using
  * trivial, non-distributed in-memory structures implementation.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = MastershipStore.class)
 public class SimpleMastershipStore
         extends AbstractStore<MastershipEvent, MastershipStoreDelegate>
         implements MastershipStore {
@@ -74,10 +75,10 @@ public class SimpleMastershipStore
     private static final int NOTHING = 0;
     private static final int INIT = 1;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ClusterService clusterService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected VersionService versionService;
 
     //devices mapped to their masters, to emulate multiple nodes
@@ -107,6 +108,11 @@ public class SimpleMastershipStore
                 @Override
                 public Set<ControllerNode> getNodes() {
                     return ImmutableSet.of(instance);
+                }
+
+                @Override
+                public Set<Node> getConsensusNodes() {
+                    return ImmutableSet.of();
                 }
 
                 @Override
@@ -177,7 +183,7 @@ public class SimpleMastershipStore
         }
 
         return CompletableFuture.completedFuture(
-                new MastershipEvent(MASTER_CHANGED, deviceId, getNodes(deviceId)));
+                new MastershipEvent(MASTER_CHANGED, deviceId, getMastership(deviceId)));
     }
 
     @Override
@@ -219,8 +225,7 @@ public class SimpleMastershipStore
                     incrementTerm(deviceId);
                     // remove from backup list
                     removeFromBackups(deviceId, node);
-                    notifyDelegate(new MastershipEvent(MASTER_CHANGED, deviceId,
-                                                       getNodes(deviceId)));
+                    notifyDelegate(new MastershipEvent(MASTER_CHANGED, deviceId, getMastership(deviceId)));
                     return CompletableFuture.completedFuture(MastershipRole.MASTER);
                 }
                 return CompletableFuture.completedFuture(MastershipRole.STANDBY);
@@ -229,14 +234,12 @@ public class SimpleMastershipStore
                     // no master => become master
                     masterMap.put(deviceId, node);
                     incrementTerm(deviceId);
-                    notifyDelegate(new MastershipEvent(MASTER_CHANGED, deviceId,
-                                                       getNodes(deviceId)));
+                    notifyDelegate(new MastershipEvent(MASTER_CHANGED, deviceId, getMastership(deviceId)));
                     return CompletableFuture.completedFuture(MastershipRole.MASTER);
                 }
                 // add to backup list
                 if (addToBackup(deviceId, node)) {
-                    notifyDelegate(new MastershipEvent(BACKUPS_CHANGED, deviceId,
-                                                       getNodes(deviceId)));
+                    notifyDelegate(new MastershipEvent(BACKUPS_CHANGED, deviceId, getMastership(deviceId)));
                 }
                 return CompletableFuture.completedFuture(MastershipRole.STANDBY);
             default:
@@ -299,6 +302,21 @@ public class SimpleMastershipStore
     }
 
     @Override
+    public MastershipInfo getMastership(DeviceId deviceId) {
+        ImmutableMap.Builder<NodeId, MastershipRole> roleBuilder = ImmutableMap.builder();
+        NodeId master = masterMap.get(deviceId);
+        if (master != null) {
+            roleBuilder.put(master, MastershipRole.MASTER);
+        }
+        backups.getOrDefault(deviceId, Collections.emptyList())
+            .forEach(nodeId -> roleBuilder.put(nodeId, MastershipRole.STANDBY));
+        return new MastershipInfo(
+            termMap.getOrDefault(deviceId, new AtomicInteger(NOTHING)).get(),
+            Optional.ofNullable(master),
+            roleBuilder.build());
+    }
+
+    @Override
     public synchronized CompletableFuture<MastershipEvent> setStandby(NodeId nodeId, DeviceId deviceId) {
         MastershipRole role = getRole(nodeId, deviceId);
         switch (role) {
@@ -309,13 +327,13 @@ public class SimpleMastershipStore
                 masterMap.remove(deviceId);
                 // TODO: Should there be new event type for no MASTER?
                 return CompletableFuture.completedFuture(
-                        new MastershipEvent(MASTER_CHANGED, deviceId, getNodes(deviceId)));
+                        new MastershipEvent(MASTER_CHANGED, deviceId, getMastership(deviceId)));
             } else {
                 NodeId prevMaster = masterMap.put(deviceId, backup);
                 incrementTerm(deviceId);
                 addToBackup(deviceId, prevMaster);
                 return CompletableFuture.completedFuture(
-                        new MastershipEvent(MASTER_CHANGED, deviceId, getNodes(deviceId)));
+                        new MastershipEvent(MASTER_CHANGED, deviceId, getMastership(deviceId)));
             }
 
         case STANDBY:
@@ -323,7 +341,7 @@ public class SimpleMastershipStore
             boolean modified = addToBackup(deviceId, nodeId);
             if (modified) {
                 return CompletableFuture.completedFuture(
-                        new MastershipEvent(BACKUPS_CHANGED, deviceId, getNodes(deviceId)));
+                        new MastershipEvent(BACKUPS_CHANGED, deviceId, getMastership(deviceId)));
             }
             break;
 
@@ -357,12 +375,12 @@ public class SimpleMastershipStore
             masterMap.put(deviceId, backup);
             incrementTerm(deviceId);
             return CompletableFuture.completedFuture(
-                    new MastershipEvent(MASTER_CHANGED, deviceId, getNodes(deviceId)));
+                    new MastershipEvent(MASTER_CHANGED, deviceId, getMastership(deviceId)));
 
         case STANDBY:
             if (removeFromBackups(deviceId, nodeId)) {
                 return CompletableFuture.completedFuture(
-                    new MastershipEvent(BACKUPS_CHANGED, deviceId, getNodes(deviceId)));
+                    new MastershipEvent(BACKUPS_CHANGED, deviceId, getMastership(deviceId)));
             }
             break;
 

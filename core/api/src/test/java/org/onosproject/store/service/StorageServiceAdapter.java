@@ -60,7 +60,22 @@ public class StorageServiceAdapter implements StorageService {
     }
 
     @Override
+    public DistributedLockBuilder lockBuilder() {
+        return null;
+    }
+
+    @Override
     public LeaderElectorBuilder leaderElectorBuilder() {
+        return null;
+    }
+
+    @Override
+    public <T> TopicBuilder<T> topicBuilder() {
+        return null;
+    }
+
+    @Override
+    public <E> WorkQueueBuilder<E> workQueueBuilder() {
         return null;
     }
 

@@ -17,6 +17,7 @@ package org.onosproject.rest.resources;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.onosproject.app.ApplicationAdminService;
+import org.onosproject.app.ApplicationException;
 import org.onosproject.core.Application;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
@@ -39,6 +40,7 @@ import java.net.URL;
 import java.util.Set;
 
 import static org.onlab.util.Tools.nullIsNotFound;
+import static org.onlab.util.Tools.readTreeFromStream;
 
 /**
  * Manage inventory of applications.
@@ -96,7 +98,7 @@ public class ApplicationsWebResource extends AbstractWebResource {
     public Response installApp(InputStream raw) {
         Application app;
         try {
-            ObjectNode jsonTree = (ObjectNode) mapper().readTree(raw);
+            ObjectNode jsonTree = readTreeFromStream(mapper(), raw);
             URL url = new URL(jsonTree.get(URL).asText());
             boolean activate = false;
             if (jsonTree.has(ACTIVATE)) {
@@ -130,11 +132,15 @@ public class ApplicationsWebResource extends AbstractWebResource {
                                @DefaultValue("false") boolean activate,
                                InputStream stream) {
         ApplicationAdminService service = get(ApplicationAdminService.class);
-        Application app = service.install(stream);
-        if (activate) {
-            service.activate(app.id());
+        try {
+            Application app = service.install(stream);
+            if (activate) {
+                service.activate(app.id());
+            }
+            return ok(codec(Application.class).encode(app, this)).build();
+        } catch (ApplicationException appEx) {
+            throw new IllegalArgumentException(appEx);
         }
-        return ok(codec(Application.class).encode(app, this)).build();
     }
 
     /**

@@ -22,38 +22,50 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import org.apache.karaf.shell.console.completer.ArgumentCompleter.ArgumentList;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onosproject.cli.AbstractChoicesCompleter;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceService;
 
 /**
- * PortNumber completer.
+ * PortNumber completer, which returns candidates in {@link PortNumber#toString()} form.
  *
  * Assumes argument right before the one being completed is DeviceId.
  */
+@Service
 public class PortNumberCompleter extends AbstractChoicesCompleter {
 
-    @Override
-    protected List<String> choices() {
-        ArgumentList args = getArgumentList();
+    /**
+     * Look for valid DeviceId in arguments passed so far.
+     *
+     * @return DeviceId found or null if not found
+     */
+    protected DeviceId lookForDeviceId() {
         //parse argument list for deviceId
         DeviceService deviceService = getService(DeviceService.class);
         Device dev = null;
-        for (String str : args.getArguments()) {
+        for (String str : commandLine.getArguments()) {
             if (str.contains(":")) {
                 dev = deviceService.getDevice(DeviceId.deviceId(str));
                 if (dev != null) {
-                    break;
+                    return dev.id();
                 }
             }
         }
-        if (dev == null) {
-            return Collections.singletonList("Missing device");
-        }
-        DeviceId deviceId = dev.id();
+        return null;
+    }
 
+    @Override
+    protected List<String> choices() {
+        DeviceId deviceId = lookForDeviceId();
+
+        if (deviceId == null) {
+            return Collections.emptyList();
+        }
+
+        DeviceService deviceService = getService(DeviceService.class);
         return StreamSupport.stream(deviceService.getPorts(deviceId).spliterator(), false)
             .map(port -> port.number().toString())
             .collect(Collectors.toList());

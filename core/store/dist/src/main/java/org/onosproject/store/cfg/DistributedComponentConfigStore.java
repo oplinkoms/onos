@@ -15,12 +15,7 @@
  */
 package org.onosproject.store.cfg;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
+import com.google.common.collect.ImmutableSet;
 import org.onosproject.cfg.ComponentConfigEvent;
 import org.onosproject.cfg.ComponentConfigStore;
 import org.onosproject.cfg.ComponentConfigStoreDelegate;
@@ -31,7 +26,16 @@ import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.MapEventListener;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
+import org.onosproject.store.service.Versioned;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
+
+import java.util.Objects;
+import java.util.Set;
 
 import static org.onosproject.cfg.ComponentConfigEvent.Type.PROPERTY_SET;
 import static org.onosproject.cfg.ComponentConfigEvent.Type.PROPERTY_UNSET;
@@ -44,8 +48,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * Manages inventory of component configurations in a distributed data store
  * that provides strong sequential consistency guarantees.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = ComponentConfigStore.class)
 public class DistributedComponentConfigStore
         extends AbstractStore<ComponentConfigEvent, ComponentConfigStoreDelegate>
         implements ComponentConfigStore {
@@ -56,10 +59,10 @@ public class DistributedComponentConfigStore
 
     private ConsistentMap<String, String> properties;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected StorageService storageService;
 
-    InternalPropertiesListener propertiesListener = new InternalPropertiesListener();
+    private InternalPropertiesListener propertiesListener = new InternalPropertiesListener();
 
     @Activate
     public void activate() {
@@ -81,13 +84,33 @@ public class DistributedComponentConfigStore
 
     @Override
     public void setProperty(String componentName, String name, String value) {
-        properties.put(key(componentName, name), value);
+        setProperty(componentName, name, value, true);
+    }
 
+    @Override
+    public void setProperty(String componentName, String name, String value, boolean override) {
+        properties.compute(key(componentName, name), (k, v) -> (override || v == null) ? value : v);
     }
 
     @Override
     public void unsetProperty(String componentName, String name) {
         properties.remove(key(componentName, name));
+    }
+
+    @Override
+    public Set<String> getProperties(String componentName) {
+        ImmutableSet.Builder<String> names = ImmutableSet.builder();
+        properties.keySet().stream()
+                .filter((String k) -> Objects.equals(componentName, k.substring(0, k.indexOf(SEP))))
+                .map((String k) -> k.substring(k.indexOf(SEP) + 1))
+                .forEach(names::add);
+        return names.build();
+    }
+
+    @Override
+    public String getProperty(String componentName, String name) {
+        Versioned<String> v = properties.get(key(componentName, name));
+        return v != null ? v.value() : null;
     }
 
     /**

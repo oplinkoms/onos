@@ -16,27 +16,20 @@
 
 package org.onosproject.drivers.arista;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.onosproject.net.DeviceId;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Optional;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.ImmutableList;
+import org.onlab.packet.IpAddress;
 import org.onosproject.net.behaviour.ControllerConfig;
 import org.onosproject.net.behaviour.ControllerInfo;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
-import org.onosproject.net.driver.DriverHandler;
-import org.onosproject.protocol.rest.RestSBController;
 import org.slf4j.Logger;
+import com.fasterxml.jackson.databind.JsonNode;
 
-import javax.ws.rs.core.MediaType;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-
-import static com.google.common.base.Preconditions.checkNotNull;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -44,92 +37,86 @@ import static org.slf4j.LoggerFactory.getLogger;
  */
 public class ControllerConfigAristaImpl extends AbstractHandlerBehaviour implements ControllerConfig {
 
+    private static final String SHOW_CONTROLLER_CMD = "show openflow";
     private static final String CONFIGURE_TERMINAL = "configure";
     private static final String OPENFLOW_CMD = "openflow";
+    private static final String SET_CONTROLLER_CMD = "controller tcp:%s:%d";
+    private static final String NO_SHUTDOWN_CMD = "no shutdown";
+    private static final String SHUTDOWN_CMD = "shutdown";
     private static final String REMOVE_CONTROLLER_CMD = "no controller tcp:%s:%d";
-    private static final String API_ENDPOINT = "/command-api/";
-    private static final String JSON = "json";
-    private static final String JSONRPC = "jsonrpc";
-    private static final String METHOD = "method";
-    private static final String RUN_CMDS = "runCmds";
-    private static final String VERSION = "version";
-    private static final String ID = "id";
-    private static final String PARAMS = "params";
-    private static final String FORMAT = "format";
-    private static final String TIMESTAMPS = "timestamps";
-    private static final String CMDS = "cmds";
-    private static final String TWO_POINT_ZERO = "2.0";
-    private static final String REMOVE_CONTROLLERS = "removeControllers";
-    private static final String ENABLE = "enable";
+    private static final String COPY_RUNNING_CONFIG = "copy running-config startup-config";
+    private static final String CONTROLLER_INFO = "controllersInfo";
+    private static final String CONTROLLER_ADDR = "controllerAddr";
+    private static final String CONTROLLER_IP = "ip";
+    private static final String CONTROLLER_PORT = "port";
+    private static final String PROTOCOL_TCP = "tcp";
+
+
     private static final int MAX_CONTROLLERS = 8;
-    private static final Boolean FALSE = false;
-    private static final int VERSION_1 = 1;
 
     private final Logger log = getLogger(getClass());
 
     @Override
     public List<ControllerInfo> getControllers() {
-        throw new UnsupportedOperationException("get controllers configuration is not supported");
+        log.debug("Arista get Controllers");
+
+        List<ControllerInfo> controllers = new ArrayList<>();
+        Optional<JsonNode> res = AristaUtils.retrieveCommandResult(handler(), SHOW_CONTROLLER_CMD);
+        if (res == null) {
+            log.warn("There is no connected controller.");
+            return controllers;
+        }
+
+        JsonNode controllerInfo = res.get().findValue(CONTROLLER_INFO);
+        Iterator<JsonNode> controlleriter = controllerInfo.iterator();
+        while (controlleriter.hasNext()) {
+            JsonNode temp1 = controlleriter.next();
+            if (temp1.has(CONTROLLER_ADDR)) {
+                JsonNode controllerAddr = temp1.get(CONTROLLER_ADDR);
+                if (controllerAddr.has(CONTROLLER_IP) && controllerAddr.has(CONTROLLER_PORT)) {
+                    String ip = controllerAddr.get(CONTROLLER_IP).asText();
+                    int port = controllerAddr.get(CONTROLLER_PORT).asInt();
+                    ControllerInfo info = new ControllerInfo(IpAddress.valueOf(ip), port, PROTOCOL_TCP);
+                    controllers.add(info);
+                    log.debug("Controller Information {}", info.target());
+                }
+            }
+        }
+
+        return ImmutableList.copyOf(controllers);
     }
 
     @Override
     public void setControllers(List<ControllerInfo> controllers) {
-        throw new UnsupportedOperationException("set controllers configuration is not supported");
+        log.debug("Arista set Controllers");
+
+        List<String> cmds = new ArrayList<>();
+        cmds.add(CONFIGURE_TERMINAL);
+        cmds.add(OPENFLOW_CMD);
+        //The Arista switch supports up to 8 multi-controllers.
+        controllers.stream().limit(MAX_CONTROLLERS).forEach(c -> cmds
+                .add(String.format(SET_CONTROLLER_CMD, c.ip().toString(), c.port())));
+        if (controllers.size() > MAX_CONTROLLERS) {
+            log.warn(" {} Arista Switch maximun 8 controllers, not adding {} excessive ones",
+                    handler().data().deviceId(), controllers.size() - MAX_CONTROLLERS);
+        }
+        cmds.add(NO_SHUTDOWN_CMD);
+        cmds.add(COPY_RUNNING_CONFIG);
+
+        AristaUtils.retrieveCommandResult(handler(), cmds);
     }
+
 
     @Override
     public void removeControllers(List<ControllerInfo> controllers) {
-        DriverHandler handler = handler();
-        RestSBController controller = checkNotNull(handler.get(RestSBController.class));
-        DeviceId deviceId = handler.data().deviceId();
+        log.debug("Arista remove Controllers");
 
-        List<String> cmds = new ArrayList<>();
+        List<String> cmds = Lists.newArrayList();
         cmds.add(CONFIGURE_TERMINAL);
         cmds.add(OPENFLOW_CMD);
         controllers.stream().limit(MAX_CONTROLLERS).forEach(c -> cmds
                 .add(String.format(REMOVE_CONTROLLER_CMD, c.ip().toString(), c.port())));
 
-        String request = generate(cmds);
-        log.info("request :{}", request);
-
-        InputStream stream = new ByteArrayInputStream(request.getBytes(StandardCharsets.UTF_8));
-        String response = controller.post(deviceId, API_ENDPOINT, stream,
-                MediaType.APPLICATION_JSON_TYPE, String.class);
-        log.info("response :{}", response);
-
-        try {
-            JsonNode json = new ObjectMapper().readTree(response);
-        } catch (IOException e) {
-            log.error("Cannot communicate with device {} , exception {}", deviceId, e);
-        }
-    }
-
-    /**
-     * Generates a ObjectNode from a list of commands in String format.
-     *
-     * @param commands a list of commands
-     * @return an ObjectNode generated from a list of commands in String format
-     */
-    private static String generate(List<String> commands) {
-        ObjectMapper om = new ObjectMapper();
-
-        ArrayNode cmds = om.createArrayNode();
-        cmds.add(ENABLE);
-        commands.stream().forEach(cmds::add); //commands here
-
-        ObjectNode parm = om.createObjectNode();
-        parm.put(FORMAT, JSON);
-        parm.put(TIMESTAMPS, FALSE);
-        parm.put(CMDS, cmds);
-        parm.put(VERSION, VERSION_1);
-
-        ObjectNode node = om.createObjectNode();
-        node.put(JSONRPC, TWO_POINT_ZERO);
-        node.put(METHOD, RUN_CMDS);
-
-        node.put(PARAMS, parm);
-        node.put(ID, REMOVE_CONTROLLERS);
-
-        return node.toString();
+        AristaUtils.retrieveCommandResult(handler(), cmds);
     }
 }

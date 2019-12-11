@@ -67,8 +67,18 @@ public class ConnectPointTest {
 
         expectDeviceParseException("");
         expectDeviceParseException("1/");
-        expectDeviceParseException("1/1/1");
         expectDeviceParseException("of:0011223344556677/word");
+    }
+
+    @Test
+    public void testParseFromString() {
+        String cp = "netconf:127.0.0.1/[TYPE](1)";
+
+        ConnectPoint connectPoint = ConnectPoint.fromString(cp);
+        assertEquals("netconf:127.0.0.1", connectPoint.deviceId().toString());
+        assertEquals("[TYPE](1)", connectPoint.port().toString());
+        assertEquals(connectPoint, ConnectPoint.fromString(connectPoint.toString()));
+
     }
 
     /**
@@ -79,7 +89,7 @@ public class ConnectPointTest {
     private static void expectDeviceParseException(String string) {
         try {
             ConnectPoint.deviceConnectPoint(string);
-            fail("Expected exception was not thrown");
+            fail(String.format("Expected exception was not thrown for '%s'", string));
         } catch (Exception e) {
             assertTrue(true);
         }

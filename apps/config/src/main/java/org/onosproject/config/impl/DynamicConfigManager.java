@@ -15,18 +15,10 @@
  */
 package org.onosproject.config.impl;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
-import org.onosproject.config.ResourceIdParser;
-import org.onosproject.config.RpcExecutor;
-import org.onosproject.config.RpcMessageId;
-import org.onosproject.d.config.DeviceResourceIds;
-import org.onosproject.d.config.ResourceIds;
-import org.onosproject.event.AbstractListenerManager;
+import org.onosproject.cluster.ClusterService;
+import org.onosproject.cluster.Leadership;
+import org.onosproject.cluster.LeadershipService;
+import org.onosproject.cluster.NodeId;
 import org.onosproject.config.DynamicConfigEvent;
 import org.onosproject.config.DynamicConfigListener;
 import org.onosproject.config.DynamicConfigService;
@@ -34,23 +26,35 @@ import org.onosproject.config.DynamicConfigStore;
 import org.onosproject.config.DynamicConfigStoreDelegate;
 import org.onosproject.config.FailedException;
 import org.onosproject.config.Filter;
-import org.onosproject.yang.model.RpcInput;
-import org.onosproject.yang.model.RpcOutput;
+import org.onosproject.config.RpcExecutor;
+import org.onosproject.config.RpcMessageId;
+import org.onosproject.d.config.DeviceResourceIds;
+import org.onosproject.d.config.ResourceIds;
+import org.onosproject.event.AbstractListenerManager;
 import org.onosproject.yang.model.DataNode;
 import org.onosproject.yang.model.DataNode.Type;
 import org.onosproject.yang.model.InnerNode;
 import org.onosproject.yang.model.ResourceId;
+import org.onosproject.yang.model.RpcContext;
+import org.onosproject.yang.model.RpcInput;
+import org.onosproject.yang.model.RpcOutput;
 import org.onosproject.yang.model.RpcRegistry;
 import org.onosproject.yang.model.RpcService;
+import org.onosproject.yang.model.SchemaContextProvider;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.slf4j.Logger;
+
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
 
-import org.slf4j.Logger;
-
+import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.d.config.DeviceResourceIds.DCS_NAMESPACE;
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -58,22 +62,39 @@ import static org.slf4j.LoggerFactory.getLogger;
  * Implementation of the Dynamic Config Service.
  *
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = { DynamicConfigService.class, RpcRegistry.class })
 public class DynamicConfigManager
         extends AbstractListenerManager<DynamicConfigEvent, DynamicConfigListener>
         implements DynamicConfigService, RpcRegistry {
 
+    protected static final String DCS_STORE_INIT = "dcs-store-init";
     private final Logger log = getLogger(getClass());
     private final DynamicConfigStoreDelegate storeDelegate = new InternalStoreDelegate();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DynamicConfigStore store;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected SchemaContextProvider contextProvider;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected LeadershipService leadershipService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected ClusterService clusterService;
+
+
+
+    // FIXME is it OK this is not using the Store?
     private ConcurrentHashMap<String, RpcService> handlerRegistry = new ConcurrentHashMap<>();
 
     @Activate
     public void activate() {
-        initStore();
+        NodeId localnodeId = clusterService.getLocalNode().id();
+        Leadership leadership = leadershipService.runForLeadership(DCS_STORE_INIT);
+        if (leadership.leaderNodeId().equals(localnodeId)) {
+            initStore();
+        }
         store.setDelegate(storeDelegate);
         eventDispatcher.addSink(DynamicConfigEvent.class, listenerRegistry);
         log.info("Started");
@@ -83,16 +104,6 @@ public class DynamicConfigManager
      * Ensure built-in tree nodes exists.
      */
     private void initStore() {
-        store.nodeExist(ResourceIds.ROOT_ID)
-            .thenAccept(exists -> {
-                if (!exists) {
-                    log.info("Root node does not exist!, creating...");
-                    store.addNode(null,
-                                  InnerNode.builder(DeviceResourceIds.ROOT_NAME, DCS_NAMESPACE)
-                                  .type(Type.SINGLE_INSTANCE_NODE).build());
-                }
-            }).join();
-
         store.nodeExist(DeviceResourceIds.DEVICES_ID)
             .thenAccept(exists -> {
                 if (!exists) {
@@ -153,14 +164,14 @@ public class DynamicConfigManager
 
     @Override
     public RpcService getRpcService(Class<? extends RpcService> intfc) {
-        return handlerRegistry.get(intfc.getSimpleName());
+        return handlerRegistry.get(intfc.getName());
     }
 
     @Override
     public void registerRpcService(RpcService handler) {
         for (Class<?> intfc : handler.getClass().getInterfaces()) {
             if (RpcService.class.isAssignableFrom(intfc)) {
-                handlerRegistry.put(intfc.getSimpleName(), handler);
+                handlerRegistry.put(intfc.getName(), handler);
             }
         }
     }
@@ -169,7 +180,7 @@ public class DynamicConfigManager
     public void unregisterRpcService(RpcService handler) {
         for (Class<?> intfc : handler.getClass().getInterfaces()) {
             if (RpcService.class.isAssignableFrom(intfc)) {
-                String key = intfc.getSimpleName();
+                String key = intfc.getName();
                 if (handlerRegistry.get(key) == null) {
                     throw new FailedException("No registered handler found, cannot unregister");
                 }
@@ -181,7 +192,7 @@ public class DynamicConfigManager
     private int getSvcId(RpcService handler, String srvc) {
         Class<?>[] intfcs = handler.getClass().getInterfaces();
         for (int i = 0; i < intfcs.length; i++) {
-            if (intfcs[i].getSimpleName().compareTo(srvc) == 0) {
+            if (intfcs[i].getName().compareTo(srvc) == 0) {
                 return i;
             }
         }
@@ -189,15 +200,18 @@ public class DynamicConfigManager
     }
 
     @Override
-    public CompletableFuture<RpcOutput> invokeRpc(ResourceId id, RpcInput input) {
-        String[] ctxt = ResourceIdParser.getService(id);
-        RpcService handler = handlerRegistry.get(ctxt[0]);
+    public CompletableFuture<RpcOutput> invokeRpc(RpcInput input) {
+        checkNotNull(input);
+        checkNotNull(input.id());
+        RpcContext context = contextProvider.getRpcContext(input.id());
+        String srvcIntf = context.serviceIntf().getName();
+        RpcService handler = handlerRegistry.get(srvcIntf);
         if (handler == null) {
             throw new FailedException("No registered handler found, cannot invoke");
         }
         return CompletableFuture.supplyAsync(
-                new RpcExecutor(handler, getSvcId(handler, ctxt[0]), ctxt[1], RpcMessageId.generate(), input),
-                Executors.newSingleThreadExecutor());
+            new RpcExecutor(handler, getSvcId(handler, srvcIntf),
+                context.rpcName(), RpcMessageId.generate(), input));
     }
 
     /**

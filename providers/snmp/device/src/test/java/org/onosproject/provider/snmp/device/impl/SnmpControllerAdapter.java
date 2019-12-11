@@ -17,12 +17,13 @@
 package org.onosproject.provider.snmp.device.impl;
 
 import com.btisystems.pronx.ems.core.snmp.ISnmpSession;
-import org.onosproject.incubator.net.faultmanagement.alarm.DefaultAlarm;
+import org.onosproject.alarm.DefaultAlarm;
 import org.onosproject.net.DeviceId;
 import org.onosproject.snmp.SnmpController;
 import org.onosproject.snmp.SnmpDevice;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,13 +45,18 @@ public class SnmpControllerAdapter implements SnmpController {
     }
 
     @Override
+    public SnmpDevice getDevice(URI uri) {
+        return null;
+    }
+
+    @Override
     public void removeDevice(DeviceId deviceId) {
         devices.remove(deviceId);
     }
 
     @Override
-    public void addDevice(DeviceId deviceId, SnmpDevice snmpDevice) {
-        devices.put(deviceId, snmpDevice);
+    public void addDevice(SnmpDevice device) {
+        devices.put(device.deviceId(), device);
     }
 
     @Override

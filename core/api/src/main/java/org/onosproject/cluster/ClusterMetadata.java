@@ -17,22 +17,20 @@ package org.onosproject.cluster;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
-
-import org.onosproject.net.Provided;
-import org.onosproject.net.provider.ProviderId;
-
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Verify.verify;
-import static com.google.common.base.Charsets.UTF_8;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Funnel;
 import com.google.common.hash.PrimitiveSink;
+import org.onosproject.net.Provided;
+import org.onosproject.net.provider.ProviderId;
+
+import static com.google.common.base.Charsets.UTF_8;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Cluster metadata.
@@ -43,10 +41,17 @@ import com.google.common.hash.PrimitiveSink;
  */
 public final class ClusterMetadata implements Provided {
 
+    private static final ProviderId NONE_PROVIDER_ID = new ProviderId("none", "none");
+    private static final String DEFAULT_CLUSTER_SECRET = "INSECURE!";
+
     private final ProviderId providerId;
     private final String name;
-    private final Set<ControllerNode> nodes;
-    private final Set<Partition> partitions;
+    private final ControllerNode localNode;
+    private final Set<ControllerNode> controllerNodes;
+    private final String storageDnsService;
+    private final Set<Node> storageNodes;
+    private final String clusterSecret;
+
 
     public static final Funnel<ClusterMetadata> HASH_FUNNEL = new Funnel<ClusterMetadata>() {
         @Override
@@ -59,31 +64,83 @@ public final class ClusterMetadata implements Provided {
     private ClusterMetadata() {
         providerId = null;
         name = null;
-        nodes = null;
-        partitions = null;
+        localNode = null;
+        controllerNodes = null;
+        storageDnsService = null;
+        storageNodes = null;
+        clusterSecret = null;
     }
 
-    public ClusterMetadata(ProviderId providerId,
+    /**
+     * @deprecated since 1.15.
+     * @param providerId the provider Id
+     * @param name The cluster Name
+     * @param localNode The local node
+     * @param controllerNodes Set of nodes in cluster
+     * @param storageDnsService The storage DNS service name
+     * @param storageNodes Set of storage nodes
+     */
+    @Deprecated
+    public ClusterMetadata(
+            ProviderId providerId,
             String name,
-            Set<ControllerNode> nodes,
-            Set<Partition> partitions) {
+            ControllerNode localNode,
+            Set<ControllerNode> controllerNodes,
+            String storageDnsService,
+            Set<Node> storageNodes) {
+        this(providerId, name, localNode, controllerNodes, storageDnsService, storageNodes, DEFAULT_CLUSTER_SECRET);
+    }
+
+    public ClusterMetadata(
+            ProviderId providerId,
+            String name,
+            ControllerNode localNode,
+            Set<ControllerNode> controllerNodes,
+            Set<Node> storageNodes,
+            String clusterSecret) {
+        this(providerId, name, localNode, controllerNodes, null, storageNodes, clusterSecret);
+    }
+
+    public ClusterMetadata(
+        ProviderId providerId,
+        String name,
+        ControllerNode localNode,
+        Set<ControllerNode> controllerNodes,
+        String storageDnsService,
+        Set<Node> storageNodes,
+        String clusterSecret) {
         this.providerId = checkNotNull(providerId);
         this.name = checkNotNull(name);
-        this.nodes = ImmutableSet.copyOf(checkNotNull(nodes));
-        // verify that partitions are constituted from valid cluster nodes.
-        boolean validPartitions = Collections2.transform(nodes, ControllerNode::id)
-                .containsAll(partitions
-                        .stream()
-                        .flatMap(r -> r.getMembers().stream())
-                        .collect(Collectors.toSet()));
-        verify(validPartitions, "Partition locations must be valid cluster nodes");
-        this.partitions = ImmutableSet.copyOf(checkNotNull(partitions));
+        this.localNode = localNode;
+        this.controllerNodes = ImmutableSet.copyOf(checkNotNull(controllerNodes));
+        this.storageDnsService = storageDnsService;
+        this.storageNodes = ImmutableSet.copyOf(checkNotNull(storageNodes));
+        this.clusterSecret = clusterSecret;
     }
 
-    public ClusterMetadata(String name,
-            Set<ControllerNode> nodes,
-            Set<Partition> partitions) {
-        this(new ProviderId("none", "none"), name, nodes, partitions);
+    /**
+     * @deprecated since 1.15.
+     * @param name The cluster Name
+     * @param localNode The local node
+     * @param controllerNodes Set of nodes in cluster
+     * @param storageNodes Set of storage nodes
+     */
+    @Deprecated
+    public ClusterMetadata(
+            String name,
+            ControllerNode localNode,
+            Set<ControllerNode> controllerNodes,
+            Set<Node> storageNodes) {
+        this(NONE_PROVIDER_ID, name, localNode, controllerNodes, null, storageNodes, DEFAULT_CLUSTER_SECRET);
+    }
+
+    public ClusterMetadata(
+            String name,
+            ControllerNode localNode,
+            Set<ControllerNode> controllerNodes,
+            Set<Node> storageNodes,
+            String clusterSecret) {
+        this(NONE_PROVIDER_ID, name, localNode, controllerNodes, null, storageNodes, clusterSecret);
     }
 
     @Override
@@ -101,20 +158,65 @@ public final class ClusterMetadata implements Provided {
     }
 
     /**
+     * Returns the DNS service through which to locate storage nodes.
+     *
+     * @return the DNS service through which to locate storage nodes
+     */
+    public String getStorageDnsService() {
+        return storageDnsService;
+    }
+
+    /**
+     * Returns the local controller node.
+     * @return the local controller node
+     */
+    public ControllerNode getLocalNode() {
+        return localNode;
+    }
+
+    /**
      * Returns the collection of {@link org.onosproject.cluster.ControllerNode nodes} that make up the cluster.
      * @return cluster nodes
      */
+    @Deprecated
     public Collection<ControllerNode> getNodes() {
-        return this.nodes;
+        return getControllerNodes();
+    }
+
+    /**
+     * Returns the collection of {@link org.onosproject.cluster.ControllerNode nodes} that make up the cluster.
+     * @return controller nodes
+     */
+    public Collection<ControllerNode> getControllerNodes() {
+        return controllerNodes;
+    }
+
+    /**
+     * Returns the collection of storage nodes.
+     *
+     * @return the collection of storage nodes
+     */
+    public Collection<Node> getStorageNodes() {
+        return storageNodes;
     }
 
     /**
      * Returns the collection of {@link org.onosproject.cluster.Partition partitions} that make
      * up the cluster.
      * @return collection of partitions.
+     * @deprecated since 1.14
      */
+    @Deprecated
     public Collection<Partition> getPartitions() {
-        return this.partitions;
+        return Collections.emptySet();
+    }
+
+    /**
+     * Returns the cluster's shared secret.
+     * @return key.
+     */
+    public String getClusterSecret() {
+        return clusterSecret;
     }
 
     @Override
@@ -122,14 +224,14 @@ public final class ClusterMetadata implements Provided {
         return MoreObjects.toStringHelper(ClusterMetadata.class)
                 .add("providerId", providerId)
                 .add("name", name)
-                .add("nodes", nodes)
-                .add("partitions", partitions)
+                .add("controllerNodes", controllerNodes)
+                .add("storageNodes", storageNodes)
                 .toString();
     }
 
     @Override
     public int hashCode() {
-        return Arrays.deepHashCode(new Object[] {providerId, name, nodes, partitions});
+        return Arrays.deepHashCode(new Object[] {providerId, name, controllerNodes, storageNodes});
     }
 
     /*
@@ -139,18 +241,20 @@ public final class ClusterMetadata implements Provided {
      */
     @Override
     public boolean equals(Object object) {
+        if (object == null) {
+            return false;
+        }
 
         if (!ClusterMetadata.class.isInstance(object)) {
             return false;
         }
         ClusterMetadata that = (ClusterMetadata) object;
 
-        if (!this.name.equals(that.name) || this.nodes.size() != that.nodes.size()
-                || this.partitions.size() != that.partitions.size()) {
-            return false;
-        }
-
-        return Sets.symmetricDifference(this.nodes, that.nodes).isEmpty()
-                && Sets.symmetricDifference(this.partitions, that.partitions).isEmpty();
+        return Objects.equals(this.name, that.name) &&
+                this.localNode.equals(that.localNode) &&
+                Objects.equals(this.controllerNodes.size(), that.controllerNodes.size()) &&
+                Sets.symmetricDifference(this.controllerNodes, that.controllerNodes).isEmpty() &&
+                Objects.equals(this.storageNodes.size(), that.storageNodes.size()) &&
+                Sets.symmetricDifference(this.storageNodes, that.storageNodes).isEmpty();
     }
 }

@@ -18,16 +18,12 @@ package org.onosproject.restconf.restconfmanager;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.glassfish.jersey.server.ChunkedOutput;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.config.FailedException;
 import org.onosproject.config.Filter;
+import org.onosproject.d.config.ResourceIds;
+import org.onosproject.restconf.api.RestconfError;
 import org.onosproject.restconf.api.RestconfException;
 import org.onosproject.restconf.api.RestconfRpcOutput;
 import org.onosproject.restconf.api.RestconfService;
@@ -43,20 +39,29 @@ import org.onosproject.yang.model.ResourceId;
 import org.onosproject.yang.model.RpcInput;
 import org.onosproject.yang.model.RpcOutput;
 import org.onosproject.yang.model.SchemaId;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.core.Response;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static javax.ws.rs.core.Response.Status.CONFLICT;
 import static javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
+import static org.onosproject.d.config.ResourceIds.parentOf;
 import static org.onosproject.restconf.utils.RestconfUtils.convertDataNodeToJson;
 import static org.onosproject.restconf.utils.RestconfUtils.convertJsonToDataNode;
-import static org.onosproject.restconf.utils.RestconfUtils.convertUriToRid;
 import static org.onosproject.restconf.utils.RestconfUtils.rmLastPathSegment;
 import static org.onosproject.yang.model.DataNode.Type.MULTI_INSTANCE_NODE;
 import static org.onosproject.yang.model.DataNode.Type.SINGLE_INSTANCE_LEAF_VALUE_NODE;
@@ -73,8 +78,7 @@ import static org.onosproject.yang.model.DataNode.Type.SINGLE_INSTANCE_NODE;
  *    on the YANG data objects (i.e., resource id, yang data node).
  */
 
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = RestconfService.class)
 public class RestconfManager implements RestconfService {
 
     private static final String RESTCONF_ROOT = "/onos/restconf";
@@ -83,7 +87,7 @@ public class RestconfManager implements RestconfService {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DynamicConfigService dynamicConfigService;
 
     private ExecutorService workerThreadPool;
@@ -107,31 +111,37 @@ public class RestconfManager implements RestconfService {
     @Override
     public ObjectNode runGetOperationOnDataResource(URI uri)
             throws RestconfException {
-        ResourceId rid = convertUriToRid(uri);
+        DataResourceLocator rl = DataResourceLocator.newInstance(uri);
         // TODO: define Filter (if there is any requirement).
         Filter filter = Filter.builder().build();
         DataNode dataNode;
 
         try {
-            if (!dynamicConfigService.nodeExist(rid)) {
+            if (!dynamicConfigService.nodeExist(rl.ridForDynConfig())) {
                 return null;
             }
-            dataNode = dynamicConfigService.readNode(rid, filter);
+            dataNode = dynamicConfigService.readNode(rl.ridForDynConfig(), filter);
         } catch (FailedException e) {
             log.error("ERROR: DynamicConfigService: ", e);
-            throw new RestconfException("ERROR: DynamicConfigService",
-                                        INTERNAL_SERVER_ERROR);
+            throw new RestconfException("ERROR: DynamicConfigService", e,
+                    RestconfError.ErrorTag.OPERATION_FAILED, INTERNAL_SERVER_ERROR,
+                    Optional.of(uri.getPath()));
         }
-        ObjectNode rootNode = convertDataNodeToJson(rid, dataNode);
+        ObjectNode rootNode = convertDataNodeToJson(rl.ridForYangRuntime(), dataNode);
         return rootNode;
     }
 
     @Override
     public void runPostOperationOnDataResource(URI uri, ObjectNode rootNode)
             throws RestconfException {
-        ResourceData receivedData = convertJsonToDataNode(uri, rootNode);
+        DataResourceLocator rl = DataResourceLocator.newInstance(uri);
+        ResourceData receivedData = convertJsonToDataNode(rl.uriForYangRuntime(), rootNode);
         ResourceId rid = receivedData.resourceId();
         List<DataNode> dataNodeList = receivedData.dataNodes();
+        if (dataNodeList == null || dataNodeList.isEmpty()) {
+            log.warn("There is no one Data Node can be proceed.");
+            return;
+        }
         if (dataNodeList.size() > 1) {
             log.warn("There are more than one Data Node can be proceed: {}", dataNodeList.size());
         }
@@ -143,21 +153,34 @@ public class RestconfManager implements RestconfService {
         }
 
         try {
-            dynamicConfigService.createNode(rid, dataNode);
-        } catch (FailedException e) {
-            log.error("ERROR: DynamicConfigService: ", e);
-            throw new RestconfException("ERROR: DynamicConfigService",
-                                        INTERNAL_SERVER_ERROR);
+            dynamicConfigService.createNode(rl.ridForDynConfig(), dataNode);
+        } catch (Exception e) {
+            if (e.getMessage().startsWith("Requested node already present")) {
+                throw new RestconfException("Already exists", e,
+                        RestconfError.ErrorTag.DATA_EXISTS, CONFLICT,
+                        Optional.of(uri.getPath()));
+            } else {
+                log.error("ERROR: DynamicConfigService: creating {} with {}",
+                          ResourceIds.toInstanceIdentifier(rl.ridForDynConfig()),
+                          dataNode,
+                          e);
+                throw new RestconfException("ERROR: DynamicConfigService", e,
+                    RestconfError.ErrorTag.OPERATION_FAILED, INTERNAL_SERVER_ERROR,
+                    Optional.of(uri.getPath()));
+            }
         }
     }
 
     @Override
     public void runPutOperationOnDataResource(URI uri, ObjectNode rootNode)
             throws RestconfException {
-        ResourceId rid = convertUriToRid(uri);
-        ResourceData receivedData = convertJsonToDataNode(rmLastPathSegment(uri), rootNode);
-        ResourceId parentRid = receivedData.resourceId();
+        DataResourceLocator rl = DataResourceLocator.newInstance(uri);
+        ResourceData receivedData = convertJsonToDataNode(rmLastPathSegment(rl.uriForYangRuntime()), rootNode);
         List<DataNode> dataNodeList = receivedData.dataNodes();
+        if (dataNodeList == null || dataNodeList.isEmpty()) {
+            log.warn("There is no one Data Node can be proceed.");
+            return;
+        }
         if (dataNodeList.size() > 1) {
             log.warn("There are more than one Data Node can be proceed: {}", dataNodeList.size());
         }
@@ -168,40 +191,47 @@ public class RestconfManager implements RestconfService {
              * If the data node already exists, then replace it.
              * Otherwise, create it.
              */
-            if (dynamicConfigService.nodeExist(rid)) {
-                dynamicConfigService.replaceNode(parentRid, dataNode);
+            if (dynamicConfigService.nodeExist(rl.ridForDynConfig())) {
+                dynamicConfigService.replaceNode(parentOf(rl.ridForDynConfig()), dataNode);
             } else {
-                dynamicConfigService.createNode(parentRid, dataNode);
+                dynamicConfigService.createNode(parentOf(rl.ridForDynConfig()), dataNode);
             }
 
         } catch (FailedException e) {
             log.error("ERROR: DynamicConfigService: ", e);
-            throw new RestconfException("ERROR: DynamicConfigService",
-                                        INTERNAL_SERVER_ERROR);
+            throw new RestconfException("ERROR: DynamicConfigService", e,
+                RestconfError.ErrorTag.OPERATION_FAILED, INTERNAL_SERVER_ERROR,
+                Optional.of(uri.getPath()));
         }
     }
 
     @Override
     public void runDeleteOperationOnDataResource(URI uri)
             throws RestconfException {
-        ResourceId rid = convertUriToRid(uri);
+        DataResourceLocator rl = DataResourceLocator.newInstance(uri);
         try {
-            if (dynamicConfigService.nodeExist(rid)) {
-                dynamicConfigService.deleteNode(rid);
+            if (dynamicConfigService.nodeExist(rl.ridForDynConfig())) {
+                dynamicConfigService.deleteNode(rl.ridForDynConfig());
             }
         } catch (FailedException e) {
             log.error("ERROR: DynamicConfigService: ", e);
-            throw new RestconfException("ERROR: DynamicConfigService",
-                                        INTERNAL_SERVER_ERROR);
+            throw new RestconfException("ERROR: DynamicConfigService", e,
+                RestconfError.ErrorTag.OPERATION_FAILED, INTERNAL_SERVER_ERROR,
+                Optional.of(uri.getPath()));
         }
     }
 
     @Override
     public void runPatchOperationOnDataResource(URI uri, ObjectNode rootNode)
             throws RestconfException {
-        ResourceData receivedData = convertJsonToDataNode(rmLastPathSegment(uri), rootNode);
+        DataResourceLocator rl = DataResourceLocator.newInstance(uri);
+        ResourceData receivedData = convertJsonToDataNode(rmLastPathSegment(rl.uriForYangRuntime()), rootNode);
         ResourceId rid = receivedData.resourceId();
         List<DataNode> dataNodeList = receivedData.dataNodes();
+        if (dataNodeList == null || dataNodeList.isEmpty()) {
+            log.warn("There is no one Data Node can be proceed.");
+            return;
+        }
         if (dataNodeList.size() > 1) {
             log.warn("There are more than one Data Node can be proceed: {}", dataNodeList.size());
         }
@@ -213,11 +243,12 @@ public class RestconfManager implements RestconfService {
         }
 
         try {
-            dynamicConfigService.updateNode(rid, dataNode);
+            dynamicConfigService.updateNode(parentOf(rl.ridForDynConfig()), dataNode);
         } catch (FailedException e) {
             log.error("ERROR: DynamicConfigService: ", e);
-            throw new RestconfException("ERROR: DynamicConfigService",
-                                        INTERNAL_SERVER_ERROR);
+            throw new RestconfException("ERROR: DynamicConfigService", e,
+                RestconfError.ErrorTag.OPERATION_FAILED, INTERNAL_SERVER_ERROR,
+                Optional.of(uri.getPath()));
         }
     }
 
@@ -239,6 +270,10 @@ public class RestconfManager implements RestconfService {
                                      ChunkedOutput<String> output)
             throws RestconfException {
         //TODO: to be completed
+        throw new RestconfException("Not implemented",
+                RestconfError.ErrorTag.OPERATION_NOT_SUPPORTED,
+                Response.Status.NOT_IMPLEMENTED,
+                Optional.empty(), Optional.of("subscribeEventStream not yet implemented"));
     }
 
     @Override
@@ -255,23 +290,37 @@ public class RestconfManager implements RestconfService {
         ResourceId resourceId = rpcInputNode.resourceId();
         List<DataNode> inputDataNodeList = rpcInputNode.dataNodes();
         DataNode inputDataNode = inputDataNodeList.get(0);
-        RpcInput rpcInput = new RpcInput(inputDataNode);
+        RpcInput rpcInput = new RpcInput(resourceId, inputDataNode);
 
         RestconfRpcOutput restconfOutput = null;
         try {
             CompletableFuture<RpcOutput> rpcFuture =
-                    dynamicConfigService.invokeRpc(resourceId, rpcInput);
+                    dynamicConfigService.invokeRpc(rpcInput);
             RpcOutput rpcOutput = rpcFuture.get();
             restconfOutput = RestconfUtils.convertRpcOutput(resourceId, rpcOutput);
         } catch (InterruptedException e) {
             log.error("ERROR: computeResultQ.take() has been interrupted.");
             log.debug("executeRpc Exception:", e);
-            restconfOutput = new RestconfRpcOutput(INTERNAL_SERVER_ERROR, null);
+            RestconfError error =
+                    RestconfError.builder(RestconfError.ErrorType.RPC,
+                    RestconfError.ErrorTag.OPERATION_FAILED)
+                        .errorMessage("RPC execution has been interrupted")
+                        .errorPath(uri.getPath())
+                        .build();
+            restconfOutput = new RestconfRpcOutput(INTERNAL_SERVER_ERROR,
+                    RestconfError.wrapErrorAsJson(Arrays.asList(error)));
             restconfOutput.reason("RPC execution has been interrupted");
         } catch (Exception e) {
             log.error("ERROR: executeRpc: {}", e.getMessage());
             log.debug("executeRpc Exception:", e);
-            restconfOutput = new RestconfRpcOutput(INTERNAL_SERVER_ERROR, null);
+            RestconfError error =
+                    RestconfError.builder(RestconfError.ErrorType.RPC,
+                            RestconfError.ErrorTag.OPERATION_FAILED)
+                            .errorMessage(e.getMessage())
+                            .errorPath(uri.getPath())
+                            .build();
+            restconfOutput = new RestconfRpcOutput(INTERNAL_SERVER_ERROR,
+                    RestconfError.wrapErrorAsJson(Arrays.asList(error)));
             restconfOutput.reason(e.getMessage());
         }
 
@@ -311,7 +360,8 @@ public class RestconfManager implements RestconfService {
             }
             parentId = rid.copyBuilder().removeLastKey().build();
         } catch (CloneNotSupportedException e) {
-            e.printStackTrace();
+            log.error("getDataForStore()", e);
+            return null;
         }
         ResourceData.Builder resData = DefaultResourceData.builder();
         resData.addDataNode(dbr.build());

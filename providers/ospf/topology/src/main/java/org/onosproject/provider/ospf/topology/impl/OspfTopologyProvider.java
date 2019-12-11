@@ -15,11 +15,11 @@
  */
 package org.onosproject.provider.ospf.topology.impl;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.onlab.packet.ChassisId;
 import org.onlab.packet.Ip4Address;
 import org.onosproject.net.AnnotationKeys;
@@ -69,13 +69,13 @@ public class OspfTopologyProvider extends AbstractProvider implements DeviceProv
     // Default values for tunable parameters
     private static final String UNKNOWN = "unknown";
     final InternalTopologyProvider listener = new InternalTopologyProvider();
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceProviderRegistry deviceProviderRegistry;
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected LinkProviderRegistry linkProviderRegistry;
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected LinkService linkService;
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected OspfController controller;
     //This Interface that defines how this provider can interact with the core.
     private LinkProviderService linkProviderService;
@@ -211,11 +211,13 @@ public class OspfTopologyProvider extends AbstractProvider implements DeviceProv
             }
             //Updating ports of the link
             List<PortDescription> srcPortDescriptions = new LinkedList<>();
-            srcPortDescriptions.add(new DefaultPortDescription(linkDes.src().port(), true));
+            srcPortDescriptions.add(DefaultPortDescription.builder()
+                    .withPortNumber(linkDes.src().port()).isEnabled(true).build());
             deviceProviderService.updatePorts(linkDes.src().deviceId(), srcPortDescriptions);
 
             List<PortDescription> dstPortDescriptions = new LinkedList<>();
-            dstPortDescriptions.add(new DefaultPortDescription(linkDes.dst().port(), true));
+            dstPortDescriptions.add(DefaultPortDescription.builder()
+                    .withPortNumber(linkDes.dst().port()).isEnabled(true).build());
             deviceProviderService.updatePorts(linkDes.dst().deviceId(), dstPortDescriptions);
             linkProviderService.linkDetected(linkDes);
         }
@@ -229,11 +231,13 @@ public class OspfTopologyProvider extends AbstractProvider implements DeviceProv
             LinkDescription linkDes = buildLinkDes(ospfRouter, ospfLinkTed);
             //Updating ports of the link
             List<PortDescription> srcPortDescriptions = new LinkedList<>();
-            srcPortDescriptions.add(new DefaultPortDescription(linkDes.src().port(), true));
+            srcPortDescriptions.add(DefaultPortDescription.builder()
+                    .withPortNumber(linkDes.src().port()).isEnabled(true).build());
             deviceProviderService.updatePorts(linkDes.src().deviceId(), srcPortDescriptions);
 
             List<PortDescription> dstPortDescriptions = new LinkedList<>();
-            dstPortDescriptions.add(new DefaultPortDescription(linkDes.dst().port(), true));
+            dstPortDescriptions.add(DefaultPortDescription.builder()
+                    .withPortNumber(linkDes.dst().port()).isEnabled(true).build());
             deviceProviderService.updatePorts(linkDes.dst().deviceId(), dstPortDescriptions);
             linkProviderService.linkVanished(linkDes);
         }

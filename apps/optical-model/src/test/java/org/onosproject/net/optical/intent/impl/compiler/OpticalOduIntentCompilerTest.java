@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import org.junit.Before;
 import org.junit.Test;
+import org.onlab.graph.ScalarWeight;
 import org.onlab.packet.ChassisId;
 import org.onosproject.TestApplicationId;
 import org.onosproject.core.ApplicationId;
@@ -65,7 +66,7 @@ import org.onosproject.net.optical.impl.DefaultOduCltPort;
 import org.onosproject.net.optical.impl.DefaultOtuPort;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.net.resource.MockResourceService;
-import org.onosproject.net.topology.LinkWeight;
+import org.onosproject.net.topology.LinkWeigher;
 import org.onosproject.net.topology.Topology;
 import org.onosproject.net.topology.TopologyServiceAdapter;
 
@@ -161,7 +162,7 @@ public class OpticalOduIntentCompilerTest extends AbstractIntentTest {
             DefaultLink.builder().providerId(PID).src(d1p2).dst(d2p1).type(OPTICAL).build(),
             DefaultLink.builder().providerId(PID).src(d2p2).dst(d3p1).type(OPTICAL).build()
     );
-    private final Path path = new DefaultPath(PID, links, 3);
+    private final Path path = new DefaultPath(PID, links, ScalarWeight.toWeight(3));
 
     private OpticalOduIntent intent;
 
@@ -172,13 +173,13 @@ public class OpticalOduIntentCompilerTest extends AbstractIntentTest {
         Set<Path> paths = Sets.newHashSet(path);
 
         @Override
-        public Topology currentTopology() {
-            return null;
+        public Set<Path> getPaths(Topology topology, DeviceId src, DeviceId dst, LinkWeigher weight) {
+            return paths;
         }
 
         @Override
-        public Set<Path> getPaths(Topology topology, DeviceId src, DeviceId dst, LinkWeight weight) {
-            return paths;
+        public Topology currentTopology() {
+            return null;
         }
     }
 

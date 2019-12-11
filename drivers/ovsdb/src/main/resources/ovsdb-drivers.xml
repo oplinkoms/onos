@@ -16,7 +16,7 @@
   -->
 <drivers>
     <driver name="default"
-            manufacturer="ON.Lab" hwVersion="0.0.1" swVersion="0.0.1">
+            manufacturer="Open Networking Foundation" hwVersion="0.0.1" swVersion="0.0.1">
         <behaviour api="org.onosproject.net.behaviour.BridgeConfig"
                    impl="org.onosproject.drivers.ovsdb.OvsdbBridgeConfig"/>
         <behaviour api="org.onosproject.net.behaviour.InterfaceConfig"
@@ -35,5 +35,14 @@
         <behaviour api="org.onosproject.net.behaviour.QueueConfigBehaviour"
                    impl="org.onosproject.drivers.ovsdb.OvsdbQueueConfig"/>
     </driver>
+    <driver name="liquidio" extends="ovs"
+            manufacturer="Cavium, Inc\." hwVersion="LiquidIO-II 210 SVN" swVersion="2\..*">
+    </driver>
+    <driver name="pica8-ovsdb" extends="default"
+            manufacturer="Pica8" hwVersion="*" swVersion="*">
+        <behaviour api="org.onosproject.net.behaviour.DeviceSystemStatisticsQuery"
+                   impl="org.onosproject.drivers.ovsdb.PicaOvsdbSystemStatsQuery"/>
+    </driver>
+
 </drivers>
 

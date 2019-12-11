@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  * HexDump class an utility to dump buffer in hex format.
  */
 public final class HexDump {
-    protected static final Logger log = LoggerFactory.getLogger(HexDump.class);
+    private static final Logger log = LoggerFactory.getLogger(HexDump.class);
 
     private HexDump() {
     }
@@ -40,7 +40,7 @@ public final class HexDump {
                 StringBuilder sb = new StringBuilder();
                 for (int k = 0; (k < 16) && (buff.readableBytes() != 0); ++k) {
                     if (0 == k % 4) {
-                        sb.append(String.format(" ")); // blank after 4 bytes
+                        sb.append(" "); // blank after 4 bytes
                     }
                     sb.append(String.format("%02X ", buff.readByte()));
                 }

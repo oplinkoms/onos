@@ -60,6 +60,9 @@ public class DocumentPathTest {
         assertTrue(path3.isDescendentOf(path3));
         assertTrue(path3.isDescendentOf(path1));
         assertFalse(path3.isDescendentOf(path2));
+
+        assertFalse(path.isDescendentOf(null));
+        assertFalse(path.isAncestorOf(null));
     }
 
     @Rule
@@ -73,6 +76,7 @@ public class DocumentPathTest {
         DocumentPath path1 = exceptions("node|name", parentPath);
     }
 
+    @SuppressWarnings("SelfComparison")
     @Test
     public void comparePaths() {
         DocumentPath one = path("root");

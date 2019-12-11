@@ -34,6 +34,7 @@ import org.onosproject.mastership.MastershipListener;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.FilteredConnectPoint;
 import org.onosproject.net.Host;
 import org.onosproject.net.HostId;
 import org.onosproject.net.HostLocation;
@@ -554,7 +555,7 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
             HostId dst = hostId(string(payload, DST));
             Host dstHost = services.host().getHost(dst);
 
-            Set<ConnectPoint> ingressPoints = getHostLocations(src);
+            Set<FilteredConnectPoint> ingressPoints = getHostLocations(src);
 
             // FIXME: clearly, this is not enough
             TrafficSelector selector = DefaultTrafficSelector.builder()
@@ -566,8 +567,8 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
                             .appId(appId)
                             .selector(selector)
                             .treatment(treatment)
-                            .ingressPoints(ingressPoints)
-                            .egressPoint(dstHost.location())
+                            .filteredIngressPoints(ingressPoints)
+                            .filteredEgressPoint(new FilteredConnectPoint(dstHost.location()))
                             .build();
 
             services.intent().submit(intent);
@@ -742,7 +743,8 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
     //=======================================================================
 
     // Converts highlights to JSON format and sends the message to the client
-    void sendHighlights(Highlights highlights) {
+    @Override
+    public void sendHighlights(Highlights highlights) {
         sendMessage(highlightsMessage(highlights));
     }
 
@@ -774,13 +776,16 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
         // Send optical first, others later for layered rendering
         for (Device device : services.device().getDevices()) {
             if ((device.type() == Device.Type.ROADM) ||
-                    (device.type() == Device.Type.OTN)) {
+                    (device.type() == Device.Type.OTN) ||
+                    (device.type() == Device.Type.OLS) ||
+                    (device.type() == Device.Type.TERMINAL_DEVICE)) {
                 sendMessage(deviceMessage(new DeviceEvent(DEVICE_ADDED, device)));
             }
         }
         for (Device device : services.device().getDevices()) {
             if ((device.type() != Device.Type.ROADM) &&
-                    (device.type() != Device.Type.OTN)) {
+                    (device.type() != Device.Type.OTN) && (device.type() != Device.Type.OLS) &&
+                    (device.type() != Device.Type.TERMINAL_DEVICE) && (device.type() != Device.Type.CONTROLLER)) {
                 sendMessage(deviceMessage(new DeviceEvent(DEVICE_ADDED, device)));
             }
         }
@@ -832,10 +837,10 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
         }
     }
 
-    private Set<ConnectPoint> getHostLocations(Set<HostId> hostIds) {
-        Set<ConnectPoint> points = new HashSet<>();
+    private Set<FilteredConnectPoint> getHostLocations(Set<HostId> hostIds) {
+        Set<FilteredConnectPoint> points = new HashSet<>();
         for (HostId hostId : hostIds) {
-            points.add(getHostLocation(hostId));
+            points.add(new FilteredConnectPoint(getHostLocation(hostId)));
         }
         return points;
     }

@@ -21,6 +21,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.onlab.packet.IpAddress;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.config.Config;
+import org.onosproject.protocol.rest.RestSBDevice.AuthenticationScheme;
 
 /**
  * Configuration to push devices to the REST provider.
@@ -38,11 +39,15 @@ public class RestDeviceConfig extends Config<DeviceId> {
     private static final String MANUFACTURER = "manufacturer";
     private static final String HWVERSION = "hwVersion";
     private static final String SWVERSION = "swVersion";
+    private static final String PROXY = "isProxy";
+    private static final String AUTHENTICATION_SCHEME = "authenticationScheme";
+    private static final String TOKEN = "token";
 
     @Override
     public boolean isValid() {
         return hasOnlyFields(IP, PORT, USERNAME, PASSWORD, PROTOCOL, URL,
-                             TESTURL, MANUFACTURER, HWVERSION, SWVERSION) &&
+                TESTURL, MANUFACTURER, HWVERSION, SWVERSION, PROXY,
+                AUTHENTICATION_SCHEME, TOKEN) &&
                 ip() != null;
     }
 
@@ -134,6 +139,43 @@ public class RestDeviceConfig extends Config<DeviceId> {
      */
     public String swVersion() {
         return get(SWVERSION, "");
+    }
+
+    /**
+     * Gets whether the REST device is a proxy or not.
+     *
+     * @return proxy
+     */
+    public boolean isProxy() {
+        if (!hasField(PROXY)) {
+            return false;
+        }
+        return get(PROXY, false);
+    }
+
+    /**
+     * Gets the authentication type of the REST device.
+     * Default is 'basic' if username is defined, else default is no_authentication.
+     *
+     * @return authentication
+     */
+    public AuthenticationScheme authenticationScheme() {
+        // hack for backward compatibility
+        if (!hasField(AUTHENTICATION_SCHEME)) {
+            if (hasField(USERNAME)) {
+                return AuthenticationScheme.BASIC;
+            }
+        }
+        return AuthenticationScheme.valueOf(get(AUTHENTICATION_SCHEME, "NO_AUTHENTICATION").toUpperCase());
+    }
+
+    /**
+     * Gets the token of the REST device.
+     *
+     * @return token
+     */
+    public String token() {
+        return get(TOKEN, "");
     }
 
     private Pair<String, Integer> extractIpPort() {

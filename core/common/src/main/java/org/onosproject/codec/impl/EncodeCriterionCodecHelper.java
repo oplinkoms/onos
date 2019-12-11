@@ -15,6 +15,7 @@
  */
 package org.onosproject.codec.impl;
 
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.onlab.util.HexString;
 import org.onosproject.codec.CodecContext;
@@ -42,6 +43,7 @@ import org.onosproject.net.flow.criteria.OchSignalCriterion;
 import org.onosproject.net.flow.criteria.OchSignalTypeCriterion;
 import org.onosproject.net.flow.criteria.OduSignalIdCriterion;
 import org.onosproject.net.flow.criteria.OduSignalTypeCriterion;
+import org.onosproject.net.flow.criteria.PiCriterion;
 import org.onosproject.net.flow.criteria.PortCriterion;
 import org.onosproject.net.flow.criteria.SctpPortCriterion;
 import org.onosproject.net.flow.criteria.TcpPortCriterion;
@@ -49,6 +51,12 @@ import org.onosproject.net.flow.criteria.TunnelIdCriterion;
 import org.onosproject.net.flow.criteria.UdpPortCriterion;
 import org.onosproject.net.flow.criteria.VlanIdCriterion;
 import org.onosproject.net.flow.criteria.VlanPcpCriterion;
+import org.onosproject.net.pi.model.PiMatchType;
+import org.onosproject.net.pi.runtime.PiExactFieldMatch;
+import org.onosproject.net.pi.runtime.PiFieldMatch;
+import org.onosproject.net.pi.runtime.PiLpmFieldMatch;
+import org.onosproject.net.pi.runtime.PiRangeFieldMatch;
+import org.onosproject.net.pi.runtime.PiTernaryFieldMatch;
 
 import java.util.EnumMap;
 
@@ -93,11 +101,17 @@ public final class EncodeCriterionCodecHelper {
         formatMap.put(Criterion.Type.IPV4_SRC, new FormatIp());
         formatMap.put(Criterion.Type.IPV4_DST, new FormatIp());
         formatMap.put(Criterion.Type.TCP_SRC, new FormatTcp());
+        formatMap.put(Criterion.Type.TCP_SRC_MASKED, new FormatTcpMask());
         formatMap.put(Criterion.Type.TCP_DST, new FormatTcp());
+        formatMap.put(Criterion.Type.TCP_DST_MASKED, new FormatTcpMask());
         formatMap.put(Criterion.Type.UDP_SRC, new FormatUdp());
+        formatMap.put(Criterion.Type.UDP_SRC_MASKED, new FormatUdpMask());
         formatMap.put(Criterion.Type.UDP_DST, new FormatUdp());
+        formatMap.put(Criterion.Type.UDP_DST_MASKED, new FormatUdpMask());
         formatMap.put(Criterion.Type.SCTP_SRC, new FormatSctp());
+        formatMap.put(Criterion.Type.SCTP_SRC_MASKED, new FormatSctpMask());
         formatMap.put(Criterion.Type.SCTP_DST, new FormatSctp());
+        formatMap.put(Criterion.Type.SCTP_DST_MASKED, new FormatSctpMask());
         formatMap.put(Criterion.Type.ICMPV4_TYPE, new FormatIcmpV4Type());
         formatMap.put(Criterion.Type.ICMPV4_CODE, new FormatIcmpV4Code());
         formatMap.put(Criterion.Type.IPV6_SRC, new FormatIp());
@@ -117,6 +131,7 @@ public final class EncodeCriterionCodecHelper {
         formatMap.put(Criterion.Type.DUMMY, new FormatDummyType());
         formatMap.put(Criterion.Type.ODU_SIGID, new FormatOduSignalId());
         formatMap.put(Criterion.Type.ODU_SIGTYPE, new FormatOduSignalType());
+        formatMap.put(Criterion.Type.PROTOCOL_INDEPENDENT, new FormatProtocolIndependent());
         // Currently unimplemented
         formatMap.put(Criterion.Type.ARP_OP, new FormatUnknown());
         formatMap.put(Criterion.Type.ARP_SPA, new FormatUnknown());
@@ -139,7 +154,6 @@ public final class EncodeCriterionCodecHelper {
         formatMap.put(Criterion.Type.UDP_DST_MASKED, new FormatUnknown());
         formatMap.put(Criterion.Type.SCTP_SRC_MASKED, new FormatUnknown());
         formatMap.put(Criterion.Type.SCTP_DST_MASKED, new FormatUnknown());
-        formatMap.put(Criterion.Type.PROTOCOL_INDEPENDENT, new FormatUnknown());
 
     }
 
@@ -269,6 +283,19 @@ public final class EncodeCriterionCodecHelper {
         }
     }
 
+    private static class FormatTcpMask implements CriterionTypeFormatter {
+        @Override
+        public ObjectNode encodeCriterion(ObjectNode root, Criterion criterion) {
+            final TcpPortCriterion tcpPortCriterion =
+                    (TcpPortCriterion) criterion;
+
+            root.put(CriterionCodec.TCP_PORT, tcpPortCriterion.tcpPort().toInt());
+            root.put(CriterionCodec.TCP_MASK, tcpPortCriterion.mask().toInt());
+
+            return root;
+        }
+    }
+
     private static class FormatUdp implements CriterionTypeFormatter {
         @Override
         public ObjectNode encodeCriterion(ObjectNode root, Criterion criterion) {
@@ -278,12 +305,38 @@ public final class EncodeCriterionCodecHelper {
         }
     }
 
+    private static class FormatUdpMask implements CriterionTypeFormatter {
+        @Override
+        public ObjectNode encodeCriterion(ObjectNode root, Criterion criterion) {
+            final UdpPortCriterion udpPortCriterion =
+                    (UdpPortCriterion) criterion;
+
+            root.put(CriterionCodec.UDP_PORT, udpPortCriterion.udpPort().toInt());
+            root.put(CriterionCodec.UDP_MASK, udpPortCriterion.mask().toInt());
+
+            return root;
+        }
+    }
+
     private static class FormatSctp implements CriterionTypeFormatter {
         @Override
         public ObjectNode encodeCriterion(ObjectNode root, Criterion criterion) {
             final SctpPortCriterion sctpPortCriterion =
                     (SctpPortCriterion) criterion;
             return root.put(CriterionCodec.SCTP_PORT, sctpPortCriterion.sctpPort().toInt());
+        }
+    }
+
+    private static class FormatSctpMask implements CriterionTypeFormatter {
+        @Override
+        public ObjectNode encodeCriterion(ObjectNode root, Criterion criterion) {
+            final SctpPortCriterion sctpPortCriterion =
+                    (SctpPortCriterion) criterion;
+
+            root.put(CriterionCodec.SCTP_PORT, sctpPortCriterion.sctpPort().toInt());
+            root.put(CriterionCodec.SCTP_MASK, sctpPortCriterion.mask().toInt());
+
+            return root;
         }
     }
 
@@ -431,6 +484,87 @@ public final class EncodeCriterionCodecHelper {
             final OduSignalTypeCriterion oduSignalTypeCriterion =
                     (OduSignalTypeCriterion) criterion;
             return root.put(CriterionCodec.ODU_SIGNAL_TYPE, oduSignalTypeCriterion.signalType().name());
+        }
+    }
+
+    private ObjectNode parsePiMatchExact(PiExactFieldMatch exactFieldMatch) {
+
+        ObjectNode matchExactNode = context.mapper().createObjectNode();
+        matchExactNode.put(CriterionCodec.PI_MATCH_FIELD_ID, exactFieldMatch.fieldId().id());
+        matchExactNode.put(CriterionCodec.PI_MATCH_TYPE, PiMatchType.EXACT.name().toLowerCase());
+        matchExactNode.put(CriterionCodec.PI_MATCH_VALUE,
+                           HexString.toHexString(exactFieldMatch.value().asArray(),
+                                                 null));
+        return matchExactNode;
+    }
+
+    private ObjectNode parsePiMatchLpm(PiLpmFieldMatch lpmFieldMatch) {
+
+        ObjectNode matchLpmNode = context.mapper().createObjectNode();
+        matchLpmNode.put(CriterionCodec.PI_MATCH_FIELD_ID, lpmFieldMatch.fieldId().id());
+        matchLpmNode.put(CriterionCodec.PI_MATCH_TYPE, PiMatchType.LPM.name().toLowerCase());
+        matchLpmNode.put(CriterionCodec.PI_MATCH_VALUE,
+                         HexString.toHexString(lpmFieldMatch.value().asArray(),
+                                               null));
+        matchLpmNode.put(CriterionCodec.PI_MATCH_PREFIX, lpmFieldMatch.prefixLength());
+
+        return matchLpmNode;
+    }
+
+    private ObjectNode parsePiMatchTernary(PiTernaryFieldMatch ternaryFieldMatch) {
+
+        ObjectNode matchTernaryNode = context.mapper().createObjectNode();
+        matchTernaryNode.put(CriterionCodec.PI_MATCH_FIELD_ID, ternaryFieldMatch.fieldId().id());
+        matchTernaryNode.put(CriterionCodec.PI_MATCH_TYPE, PiMatchType.TERNARY.name().toLowerCase());
+        matchTernaryNode.put(CriterionCodec.PI_MATCH_VALUE,
+                             HexString.toHexString(ternaryFieldMatch.value().asArray(),
+                                                   null));
+        matchTernaryNode.put(CriterionCodec.PI_MATCH_MASK,
+                             HexString.toHexString(ternaryFieldMatch.mask().asArray(),
+                                                   null));
+
+        return matchTernaryNode;
+    }
+
+    private ObjectNode parsePiMatchRange(PiRangeFieldMatch rangeFieldMatch) {
+
+        ObjectNode matchRangeNode = context.mapper().createObjectNode();
+        matchRangeNode.put(CriterionCodec.PI_MATCH_FIELD_ID, rangeFieldMatch.fieldId().id());
+        matchRangeNode.put(CriterionCodec.PI_MATCH_TYPE, PiMatchType.RANGE.name().toLowerCase());
+        matchRangeNode.put(CriterionCodec.PI_MATCH_HIGH_VALUE,
+                           HexString.toHexString(rangeFieldMatch.highValue().asArray(),
+                                                 null));
+        matchRangeNode.put(CriterionCodec.PI_MATCH_LOW_VALUE,
+                           HexString.toHexString(rangeFieldMatch.lowValue().asArray(),
+                                                 null));
+
+        return matchRangeNode;
+    }
+
+    private class FormatProtocolIndependent implements CriterionTypeFormatter {
+        @Override
+        public ObjectNode encodeCriterion(ObjectNode root, Criterion criterion) {
+            final PiCriterion piCriterion = (PiCriterion) criterion;
+            ArrayNode matchNodes = context.mapper().createArrayNode();
+            for (PiFieldMatch fieldMatch : piCriterion.fieldMatches()) {
+                switch (fieldMatch.type()) {
+                    case EXACT:
+                        matchNodes.add(parsePiMatchExact((PiExactFieldMatch) fieldMatch));
+                        break;
+                    case LPM:
+                        matchNodes.add(parsePiMatchLpm((PiLpmFieldMatch) fieldMatch));
+                        break;
+                    case TERNARY:
+                        matchNodes.add(parsePiMatchTernary((PiTernaryFieldMatch) fieldMatch));
+                        break;
+                    case RANGE:
+                        matchNodes.add(parsePiMatchRange((PiRangeFieldMatch) fieldMatch));
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Type " + fieldMatch.type().name() + " is unsupported");
+                }
+            }
+            return (ObjectNode) root.set(CriterionCodec.PI_MATCHES, matchNodes);
         }
     }
 

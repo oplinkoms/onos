@@ -15,10 +15,13 @@
  */
 package org.onosproject.cli.net;
 
-import org.apache.karaf.shell.commands.Argument;
-import org.apache.karaf.shell.commands.Command;
-import org.apache.karaf.shell.commands.Option;
+import org.apache.karaf.shell.api.action.Argument;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.Completion;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.api.action.Option;
 import org.onosproject.net.ConnectPoint;
+import org.onosproject.net.FilteredConnectPoint;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.intent.Constraint;
@@ -34,6 +37,7 @@ import java.util.List;
 /**
  * Installs point-to-point connectivity intents.
  */
+@Service
 @Command(scope = "onos", name = "add-point-intent",
          description = "Installs point-to-point connectivity intent")
 public class AddPointToPointIntentCommand extends ConnectivityIntentCommand {
@@ -41,23 +45,15 @@ public class AddPointToPointIntentCommand extends ConnectivityIntentCommand {
     @Argument(index = 0, name = "ingressDevice",
               description = "Ingress Device/Port Description",
               required = true, multiValued = false)
+    @Completion(ConnectPointCompleter.class)
     String ingressDeviceString = null;
 
     @Argument(index = 1, name = "egressDevice",
               description = "Egress Device/Port Description",
               required = true, multiValued = false)
+    @Completion(ConnectPointCompleter.class)
     String egressDeviceString = null;
 
-
-    /**
-     * Option to produce protected path.
-     * @deprecated in 1.9.0
-     */
-    // -p already defined in ConnectivityIntentCommand
-    @Deprecated
-    @Option(name = "-r", aliases = "--protect",
-            description = "(deprecated) Utilize path protection",
-            required = false, multiValued = false)
     private boolean backup = false;
 
     /**
@@ -68,7 +64,7 @@ public class AddPointToPointIntentCommand extends ConnectivityIntentCommand {
     private boolean useProtected = false;
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         IntentService service = get(IntentService.class);
 
         ConnectPoint ingress = ConnectPoint.deviceConnectPoint(ingressDeviceString);
@@ -92,8 +88,8 @@ public class AddPointToPointIntentCommand extends ConnectivityIntentCommand {
                 .key(key())
                 .selector(selector)
                 .treatment(treatment)
-                .ingressPoint(ingress)
-                .egressPoint(egress)
+                .filteredIngressPoint(new FilteredConnectPoint(ingress))
+                .filteredEgressPoint(new FilteredConnectPoint(egress))
                 .constraints(constraints)
                 .priority(priority())
                 .resourceGroup(resourceGroup())

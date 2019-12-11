@@ -15,21 +15,6 @@
  */
 package org.onosproject.ovsdb.providers.device;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static org.onlab.util.Tools.groupedThreads;
-import static org.slf4j.LoggerFactory.getLogger;
-
-import java.net.URI;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onlab.packet.ChassisId;
 import org.onlab.packet.IpAddress;
 import org.onosproject.mastership.MastershipService;
@@ -54,27 +39,40 @@ import org.onosproject.ovsdb.controller.OvsdbClientService;
 import org.onosproject.ovsdb.controller.OvsdbController;
 import org.onosproject.ovsdb.controller.OvsdbNodeId;
 import org.onosproject.ovsdb.controller.OvsdbNodeListener;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
+
+import java.net.URI;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import static com.google.common.base.Preconditions.checkNotNull;
+import static org.onlab.util.Tools.groupedThreads;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Provider which uses an ovsdb controller to detect device.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = DeviceProvider.class)
 public class OvsdbDeviceProvider extends AbstractProvider
         implements DeviceProvider {
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceProviderRegistry providerRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected OvsdbController controller;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected MastershipService mastershipService;
 
     private DeviceProviderService providerService;
@@ -187,27 +185,27 @@ public class OvsdbDeviceProvider extends AbstractProvider
         }
     }
 
+    @Override
+    public void triggerDisconnect(DeviceId deviceId) {
+        log.debug("Forcing disconnect for device {}", deviceId);
+        OvsdbNodeId ovsdbNodeId = changeDeviceIdToNodeId(deviceId);
+        OvsdbClientService client = controller.getOvsdbClient(ovsdbNodeId);
+        if (client != null) {
+            client.disconnect();
+        }
+    }
+
     private class InternalDeviceListener implements DeviceListener {
         @Override
         public void event(DeviceEvent event) {
-            DeviceId deviceId = event.subject().id();
-
-            if ((event.type() == DeviceEvent.Type.DEVICE_ADDED)) {
-                executor.execute(() -> discoverPorts(deviceId));
-            } else if ((event.type() == DeviceEvent.Type.DEVICE_REMOVED)) {
-                log.debug("removing device {}", event.subject().id());
-                OvsdbNodeId ovsdbNodeId = changeDeviceIdToNodeId(deviceId);
-                OvsdbClientService client = controller.getOvsdbClient(ovsdbNodeId);
-                if (client != null) {
-                    client.disconnect();
-                }
-            }
+            executor.execute(() -> discoverPorts(event.subject().id()));
         }
 
         @Override
         public boolean isRelevant(DeviceEvent event) {
             DeviceId deviceId = event.subject().id();
-            return isRelevant(deviceId) && mastershipService.isLocalMaster(deviceId);
+            return event.type() == DeviceEvent.Type.DEVICE_ADDED &&
+                    isRelevant(deviceId) && mastershipService.isLocalMaster(deviceId);
         }
 
         private boolean isRelevant(DeviceId deviceId) {
@@ -221,6 +219,7 @@ public class OvsdbDeviceProvider extends AbstractProvider
             executor.awaitTermination(5, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             log.error("Timeout while waiting for child threads to finish because: " + e.getMessage());
+            Thread.currentThread().interrupt();
         }
     }
 }

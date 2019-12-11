@@ -129,7 +129,7 @@ public class Controller {
             cg.add(serverChannel);
             log.info("Listening for Peer connection on {}", sa);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new IllegalStateException(e);
         }
     }
 
@@ -221,7 +221,7 @@ public class Controller {
      */
     public void start() {
         log.info("Started");
-        if (!PlatformDependent.isWindows() && !PlatformDependent.isRoot()) {
+        if (!PlatformDependent.isWindows() && !PlatformDependent.maybeSuperUser()) {
             portNumber = BGP_PRIVILEGED_PORT;
         } else {
             portNumber = BGP_PORT_NUM;

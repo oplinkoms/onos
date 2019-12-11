@@ -17,12 +17,14 @@ package org.onosproject.net.intent.impl.phase;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.onlab.graph.ScalarWeight;
 import org.onosproject.TestApplicationId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.IdGenerator;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DefaultLink;
 import org.onosproject.net.DefaultPath;
+import org.onosproject.net.FilteredConnectPoint;
 import org.onosproject.net.Link;
 import org.onosproject.net.Path;
 import org.onosproject.net.flow.DefaultTrafficSelector;
@@ -67,7 +69,7 @@ public class CompilingTest extends AbstractIntentTest {
 
     private final List<Link> links = Collections.singletonList(
             DefaultLink.builder().providerId(pid).src(cp2).dst(cp4).type(DIRECT).build());
-    private final Path path = new DefaultPath(pid, links, 10);
+    private final Path path = new DefaultPath(pid, links, ScalarWeight.toWeight(10));
 
     private PointToPointIntent input;
     private PathIntent compiled;
@@ -88,8 +90,8 @@ public class CompilingTest extends AbstractIntentTest {
                 .appId(appId)
                 .selector(selector)
                 .treatment(treatment)
-                .ingressPoint(cp1)
-                .egressPoint(cp3)
+                .filteredIngressPoint(new FilteredConnectPoint(cp1))
+                .filteredEgressPoint(new FilteredConnectPoint(cp3))
                 .build();
         compiled = PathIntent.builder()
                 .appId(appId)

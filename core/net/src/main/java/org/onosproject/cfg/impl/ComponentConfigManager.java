@@ -17,12 +17,6 @@ package org.onosproject.cfg.impl;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.AbstractAccumulator;
 import org.onlab.util.Accumulator;
 import org.onlab.util.SharedExecutors;
@@ -33,30 +27,35 @@ import org.onosproject.cfg.ComponentConfigStoreDelegate;
 import org.onosproject.cfg.ConfigProperty;
 import org.osgi.service.cm.Configuration;
 import org.osgi.service.cm.ConfigurationAdmin;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Dictionary;
-import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.security.AppGuard.checkPermission;
+import static org.onosproject.security.AppPermission.Type.CONFIG_READ;
+import static org.onosproject.security.AppPermission.Type.CONFIG_WRITE;
 import static org.slf4j.LoggerFactory.getLogger;
-import static org.onosproject.security.AppPermission.Type.*;
 
 
 /**
  * Implementation of the centralized component configuration service.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = ComponentConfigService.class)
 public class ComponentConfigManager implements ComponentConfigService {
 
     private static final String COMPONENT_NULL = "Component name cannot be null";
@@ -77,14 +76,14 @@ public class ComponentConfigManager implements ComponentConfigService {
     private final ComponentConfigStoreDelegate delegate = new InternalStoreDelegate();
     private final InternalAccumulator accumulator = new InternalAccumulator();
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ComponentConfigStore store;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ConfigurationAdmin cfgAdmin;
 
     // Locally maintained catalog of definitions.
-    private final Map<String, Map<String, ConfigProperty>>  properties =
+    private final Map<String, Map<String, ConfigProperty>> properties =
             Maps.newConcurrentMap();
 
 
@@ -103,7 +102,6 @@ public class ComponentConfigManager implements ComponentConfigService {
     @Override
     public Set<String> getComponentNames() {
         checkPermission(CONFIG_READ);
-
         return ImmutableSet.copyOf(properties.keySet());
     }
 
@@ -113,6 +111,10 @@ public class ComponentConfigManager implements ComponentConfigService {
 
         String componentName = componentClass.getName();
         String resourceName = componentClass.getSimpleName() + RESOURCE_EXT;
+        if (componentClass.getResource(resourceName) == null) {
+            // Try looking in my/package/name/MyClass.cfgdef
+            resourceName = componentClass.getCanonicalName().replace('.', '/') + RESOURCE_EXT;
+        }
         try (InputStream ris = componentClass.getResourceAsStream(resourceName)) {
             checkArgument(ris != null, "Property definitions not found at resource %s",
                           resourceName);
@@ -125,7 +127,7 @@ public class ComponentConfigManager implements ComponentConfigService {
             defs.forEach(p -> map.put(p.name(), p));
 
             properties.put(componentName, map);
-            loadExistingValues(componentName);
+            loadExistingValues(componentName, map);
         } catch (IOException e) {
             log.error("Unable to read property definitions from resource " + resourceName, e);
         }
@@ -174,13 +176,17 @@ public class ComponentConfigManager implements ComponentConfigService {
 
     @Override
     public void preSetProperty(String componentName, String name, String value) {
+        preSetProperty(componentName, name, value, true);
+    }
 
+    @Override
+    public void preSetProperty(String componentName, String name, String value, boolean override) {
         checkPermission(CONFIG_WRITE);
 
         checkNotNull(componentName, COMPONENT_NULL);
         checkNotNull(name, PROPERTY_NULL);
         checkValidity(componentName, name, value);
-        store.setProperty(componentName, name, value);
+        store.setProperty(componentName, name, value, override);
     }
 
     @Override
@@ -195,6 +201,19 @@ public class ComponentConfigManager implements ComponentConfigService {
         checkArgument(properties.get(componentName).containsKey(name),
                       PROPERTY_MISSING, name, componentName);
         store.unsetProperty(componentName, name);
+    }
+
+    @Override
+    public ConfigProperty getProperty(String componentName, String attribute) {
+        checkPermission(CONFIG_READ);
+
+        Map<String, ConfigProperty> map = properties.get(componentName);
+        if (map != null) {
+            return map.get(attribute);
+        } else {
+            log.error("Attribute {} not present in component {}", attribute, componentName);
+            return null;
+        }
     }
 
     private class InternalStoreDelegate implements ComponentConfigStoreDelegate {
@@ -271,12 +290,12 @@ public class ComponentConfigManager implements ComponentConfigService {
     private void preSet(String componentName, String name, String value) {
         try {
             Configuration config = cfgAdmin.getConfiguration(componentName, null);
-            Dictionary<String, Object> property = config.getProperties();
-            if (property == null) {
-                property = new Hashtable<>();
+            Dictionary<String, Object> props = config.getProperties();
+            if (props == null) {
+                props = new Hashtable<>();
             }
-            property.put(name, value);
-            config.update(property);
+            props.put(name, value);
+            config.update(props);
         } catch (IOException e) {
             log.error("Failed to preset configuration for {}", componentName);
         }
@@ -306,7 +325,7 @@ public class ComponentConfigManager implements ComponentConfigService {
                     break;
                 case BOOLEAN:
                     if (!((newValue != null) && (newValue.equalsIgnoreCase("true") ||
-                                newValue.equalsIgnoreCase("false")))) {
+                            newValue.equalsIgnoreCase("false")))) {
                         throw new IllegalArgumentException("Invalid " + type + " value");
                     }
                     break;
@@ -320,47 +339,81 @@ public class ComponentConfigManager implements ComponentConfigService {
 
             }
         } catch (NumberFormatException e) {
-                throw new NumberFormatException("Invalid " + type + " value");
+            throw new NumberFormatException("Invalid " + type + " value");
         }
     }
 
-    // Loads existing property values that may have been set.
-    private void loadExistingValues(String componentName) {
+    // Loads existing property values that may have been learned from other
+    // nodes in the cluster before the local property registration.
+    private void loadExistingValues(String componentName,
+                                    Map<String, ConfigProperty> map) {
         try {
             Configuration cfg = cfgAdmin.getConfiguration(componentName, null);
-            Map<String, ConfigProperty> map = properties.get(componentName);
-            Dictionary<String, Object> props = cfg.getProperties();
-            if (props != null) {
-                Enumeration<String> it = props.keys();
-                while (it.hasMoreElements()) {
-                    String name = it.nextElement();
-                    ConfigProperty p = map.get(name);
-                    try {
-                        if (p != null) {
-                            checkValidity(componentName, name, (String) props.get(name));
-                            map.put(name, ConfigProperty.setProperty(p, (String) props.get(name)));
+            Dictionary<String, Object> localProperties = cfg.getProperties();
+
+            // Iterate over all registered config properties...
+            for (ConfigProperty p : ImmutableSet.copyOf(map.values())) {
+                String name = p.name();
+                String globalValue = store.getProperty(componentName, name);
+                String localValue = localProperties != null ? (String) localProperties.get(name) : null;
+
+                log.debug("Processing {} property {}; global {}; local {}",
+                          componentName, name, globalValue, localValue);
+                try {
+                    // 1) If the global value is the same as default, or
+                    // 2) if it is not set explicitly, but the local value is
+                    // not the same as the default, reset local value to default.
+                    if (Objects.equals(globalValue, p.defaultValue()) ||
+                            (globalValue == null &&
+                                    !Objects.equals(localValue, p.defaultValue()))) {
+                        log.debug("Resetting {} property {}; value same as default",
+                                  componentName, name);
+                        reset(componentName, name);
+
+                    } else if (!Objects.equals(globalValue, localValue)) {
+                        // If the local value is different from global value
+                        // validate the global value and apply it locally.
+                        String newValue;
+                        if (globalValue != null) {
+                            newValue = globalValue;
+                        } else {
+                            newValue = localValue;
                         }
-                    } catch (IllegalArgumentException e) {
-                        log.warn("Default values will be applied " +
-                                "since presetted value is not a valid " + p.type());
+                        log.debug("Setting {} property {} to {}",
+                                  componentName, name, newValue);
+                        checkValidity(componentName, name, newValue);
+                        set(componentName, name, newValue);
+
+                    } else {
+                        // Otherwise, simply update the registered property
+                        // with the global value.
+                        log.debug("Syncing {} property {} to {}",
+                                  componentName, name, globalValue);
+                        map.put(name, ConfigProperty.setProperty(p, globalValue));
                     }
+                } catch (IllegalArgumentException e) {
+                    log.warn("Value {} for property {} is not a valid {}; using default",
+                             globalValue, name, p.type());
+                    reset(componentName, name);
                 }
             }
         } catch (IOException e) {
             log.error("Unable to get configuration for " + componentName, e);
         }
-
     }
 
-    // FIXME: This should be a slightly deferred execution to allow changing
-    // values just once per component when a number of updates arrive shortly
-    // after each other.
     private void triggerUpdate(String componentName) {
         try {
             Configuration cfg = cfgAdmin.getConfiguration(componentName, null);
             Map<String, ConfigProperty> map = properties.get(componentName);
+            if (map == null) {
+                //  Prevent NPE if the component isn't there
+                log.warn("Component not found for " + componentName);
+                return;
+            }
             Dictionary<String, Object> props = new Hashtable<>();
-            map.values().forEach(p -> props.put(p.name(), p.value()));
+            map.values().stream().filter(p -> p.value() != null)
+                    .forEach(p -> props.put(p.name(), p.value()));
             cfg.update(props);
         } catch (IOException e) {
             log.warn("Unable to update configuration for " + componentName, e);

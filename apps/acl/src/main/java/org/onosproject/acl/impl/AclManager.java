@@ -29,12 +29,6 @@ import org.onlab.packet.TpPort;
 import org.onosproject.acl.AclRule;
 import org.onosproject.acl.AclService;
 import org.onosproject.acl.AclStore;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onosproject.acl.RuleId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
@@ -56,6 +50,11 @@ import org.onosproject.net.flow.instructions.Instructions;
 import org.onosproject.net.host.HostEvent;
 import org.onosproject.net.host.HostListener;
 import org.onosproject.net.host.HostService;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.HashSet;
@@ -67,20 +66,19 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Implementation of the ACL service.
  */
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = AclService.class)
 public class AclManager implements AclService {
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected FlowRuleService flowRuleService;
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected HostService hostService;
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected MastershipService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected AclStore aclStore;
 
     private final Logger log = getLogger(getClass());
@@ -106,7 +104,7 @@ public class AclManager implements AclService {
     private class InternalHostListener implements HostListener {
 
         /**
-         * Generate new ACL flow rules for new host following the given ACL rule.
+         * Generate new ACL flow rules for new or updated host following the given ACL rule.
          */
         private void processHostAddedEvent(HostEvent event, AclRule rule) {
             DeviceId deviceId = event.subject().location().deviceId();
@@ -130,9 +128,9 @@ public class AclManager implements AclService {
 
         @Override
         public void event(HostEvent event) {
-            // if a new host appears and an existing rule denies
+            // if a new host appears or is updated and an existing rule denies
             // its traffic, a new ACL flow rule is generated.
-            if (event.type() == HostEvent.Type.HOST_ADDED) {
+            if (event.type() == HostEvent.Type.HOST_ADDED || event.type() == HostEvent.Type.HOST_UPDATED) {
                 DeviceId deviceId = event.subject().location().deviceId();
                 if (mastershipService.getLocalRole(deviceId) == MastershipRole.MASTER) {
                     for (AclRule rule : aclStore.getAclRules()) {
@@ -265,17 +263,41 @@ public class AclManager implements AclService {
         TrafficTreatment.Builder treatment = DefaultTrafficTreatment.builder();
         FlowEntry.Builder flowEntry = DefaultFlowEntry.builder();
 
-        selectorBuilder.matchEthType(Ethernet.TYPE_IPV4);
-        if (rule.srcIp() != null) {
-            selectorBuilder.matchIPSrc(rule.srcIp());
-            if (rule.dstIp() != null) {
+        if (rule.srcMac() != null) {
+            selectorBuilder.matchEthSrc(rule.srcMac());
+
+        }
+        if (rule.dstMac() != null) {
+            selectorBuilder.matchEthDst(rule.dstMac());
+        }
+
+        if (rule.srcIp() != null || rule.dstIp() != null) {
+            selectorBuilder.matchEthType(Ethernet.TYPE_IPV4);
+            if (rule.srcIp() != null) {
+                selectorBuilder.matchIPSrc(rule.srcIp());
+                if (rule.dstIp() != null) {
+                    selectorBuilder.matchIPDst(rule.dstIp());
+                }
+            } else {
                 selectorBuilder.matchIPDst(rule.dstIp());
             }
         } else {
-            selectorBuilder.matchIPDst(rule.dstIp());
+            selectorBuilder.matchEthType(Ethernet.TYPE_IPV6);
+            if (rule.srcIp6() != null) {
+                selectorBuilder.matchIPv6Src(rule.srcIp6());
+                if (rule.dstIp6() != null) {
+                    selectorBuilder.matchIPv6Dst(rule.dstIp6());
+                }
+            } else {
+                selectorBuilder.matchIPv6Dst(rule.dstIp6());
+            }
         }
+
         if (rule.ipProto() != 0) {
             selectorBuilder.matchIPProtocol(Integer.valueOf(rule.ipProto()).byteValue());
+        }
+        if (rule.dscp() != 0) {
+            selectorBuilder.matchIPDscp(Byte.valueOf(rule.dscp()));
         }
         if (rule.dstTpPort() != 0) {
             switch (rule.ipProto()) {
@@ -289,6 +311,20 @@ public class AclManager implements AclService {
                     break;
             }
         }
+
+        if (rule.srcTpPort() != 0) {
+            switch (rule.ipProto()) {
+                case IPv4.PROTOCOL_TCP:
+                    selectorBuilder.matchTcpSrc(TpPort.tpPort(rule.srcTpPort()));
+                    break;
+                case IPv4.PROTOCOL_UDP:
+                    selectorBuilder.matchUdpSrc(TpPort.tpPort(rule.srcTpPort()));
+                    break;
+                default:
+                    break;
+            }
+        }
+
         if (rule.action() == AclRule.Action.ALLOW) {
             treatment.add(Instructions.createOutput(PortNumber.CONTROLLER));
         }

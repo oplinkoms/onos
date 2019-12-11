@@ -139,7 +139,8 @@ public class OvsdbDeviceProviderTest {
 
     private void prepareMocks(int count) {
         for (int i = 1; i <= count; i++) {
-            deviceDescription.portDescriptions.add(new DefaultPortDescription(PortNumber.portNumber(i), true));
+            deviceDescription.portDescriptions.add(DefaultPortDescription.builder()
+                    .withPortNumber(PortNumber.portNumber(i)).isEnabled(true).build());
         }
     }
 
@@ -254,6 +255,11 @@ public class OvsdbDeviceProviderTest {
 
         @Override
         public void connect(IpAddress ip, TpPort port, Consumer<Exception> failhandler) {
+
+        }
+
+        @Override
+        public void setServerMode(boolean serverMode) {
 
         }
 

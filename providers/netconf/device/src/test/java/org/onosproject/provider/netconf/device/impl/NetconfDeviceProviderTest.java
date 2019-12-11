@@ -19,26 +19,25 @@ package org.onosproject.provider.netconf.device.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.onlab.packet.IpAddress;
 import org.onosproject.cfg.ComponentConfigAdapter;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.core.DefaultApplicationId;
-import org.onosproject.net.config.ConfigException;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.mastership.MastershipServiceAdapter;
 import org.onosproject.net.AbstractProjectableModel;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.DefaultDevice;
+import org.onosproject.net.DefaultPort;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.Port;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.config.Config;
 import org.onosproject.net.config.ConfigApplyDelegate;
@@ -78,12 +77,15 @@ import org.onosproject.netconf.config.NetconfDeviceConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Collectors;
+
 import static org.easymock.EasyMock.createMock;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.replay;
@@ -126,15 +128,10 @@ public class NetconfDeviceProviderTest {
                                    DeviceId.deviceId(NETCONF_DEVICE_ID_STRING),
                                    netconfDeviceConfig, null,
                                    NetconfDeviceConfig.class);
-
-    private final NetworkConfigEvent deviceAddedEventOld =
-            new NetworkConfigEvent(NetworkConfigEvent.Type.CONFIG_ADDED,
-                                   null, NetconfProviderConfig.class);
     private final NetworkConfigEvent deviceAddedEventTranslated =
             new NetworkConfigEvent(NetworkConfigEvent.Type.CONFIG_ADDED,
                                    DeviceId.deviceId(NETCONF_DEVICE_ID_STRING_OLD),
                                    NetconfDeviceConfig.class);
-    private final NetconfProviderConfig netconfProviderConfig = new MockNetconfProviderConfig();
     private static final String NETCONF_DEVICE_ID_STRING = "netconf:1.1.1.1:830";
     private static final String NETCONF_DEVICE_ID_STRING_OLD = "netconf:1.1.1.2:1";
     private static final String NETCONF_DEVICE_ID_STRING_IPV6 = "netconf:2001:0db8:0000:0000:0000:ff00:0042:8329:830";
@@ -214,10 +211,10 @@ public class NetconfDeviceProviderTest {
         assertTrue("Provider should be registered", deviceRegistry.getProviders().contains(provider.id()));
         assertEquals("Incorrect device service", deviceService, provider.deviceService);
         assertEquals("Incorrect provider service", providerService, provider.providerService);
-        assertTrue("Incorrect config factories", cfgFactories.containsAll(provider.factories));
+        assertTrue("Incorrect config factories", cfgFactories.contains(provider.factory));
         assertNotNull("Device listener should be added", deviceService.listener);
         assertFalse("Thread to connect device should be running",
-                    provider.executor.isShutdown() || provider.executor.isTerminated());
+                    provider.connectionExecutor.isShutdown() || provider.connectionExecutor.isTerminated());
         assertFalse("Scheduled task to update device should be running", provider.scheduledTask.isCancelled());
     }
 
@@ -225,8 +222,8 @@ public class NetconfDeviceProviderTest {
     public void deactivate() throws Exception {
         provider.deactivate();
         assertNull("Device listener should be removed", deviceService.listener);
-        assertFalse("Provider should not be registered", deviceRegistry.getProviders().contains(provider));
-        assertTrue("Thread to connect device should be shutdown", provider.executor.isShutdown());
+        assertFalse("Provider should not be registered", deviceRegistry.getProviders().contains(provider.id()));
+        assertTrue("Thread to connect device should be shutdown", provider.connectionExecutor.isShutdown());
         assertTrue("Scheduled task to update device should be shutdown", provider.scheduledTask.isCancelled());
         assertNull("Provider service should be null", provider.providerService);
         assertTrue("Network config factories not removed", cfgFactories.isEmpty());
@@ -264,56 +261,41 @@ public class NetconfDeviceProviderTest {
     }
 
     @Test
-    @Ignore("Test is brittle")
-    public void addDeviceOld() throws InterruptedException {
-        // expecting 1 device add
-        deviceAdded = new CountDownLatch(1);
-        assertNotNull(providerService);
-        assertTrue("Event should be relevant", provider.cfgListener.isRelevant(deviceAddedEvent));
-        assertTrue("Event should be relevant", provider.cfgListener.isRelevant(deviceAddedEventOld));
-        available = true;
-        provider.cfgListener.event(deviceAddedEventOld);
-
-        deviceAdded.await();
-        assertEquals("Device should be added", 1, deviceStore.getDeviceCount());
-        assertTrue("Device incorrectly added" + NETCONF_DEVICE_ID_STRING_OLD,
-                   devices.containsKey(DeviceId.deviceId(NETCONF_DEVICE_ID_STRING_OLD)));
-        devices.clear();
-    }
-
-    @Test
     public void addDeviceNew() throws InterruptedException {
         // expecting 1 device add
         deviceAdded = new CountDownLatch(1);
         assertNotNull(providerService);
         assertTrue("Event should be relevant", provider.cfgListener.isRelevant(deviceAddedEvent));
-        assertTrue("Event should be relevant", provider.cfgListener.isRelevant(deviceAddedEventOld));
         available = true;
-        provider.cfgListener.event(deviceAddedEvent);
-
-        deviceAdded.await();
-        assertEquals("Device should be added", 1, deviceStore.getDeviceCount());
-        assertTrue("Device incorrectly added" + NETCONF_DEVICE_ID_STRING,
-                   devices.containsKey(DeviceId.deviceId(NETCONF_DEVICE_ID_STRING)));
+        assertFalse("Device should not be reachable" + NETCONF_DEVICE_ID_STRING,
+                provider.isReachable(DeviceId.deviceId(NETCONF_DEVICE_ID_STRING)));
         devices.clear();
     }
 
     @Test
     public void testDiscoverPortsAfterDeviceAdded() {
-        provider.executor = MoreExecutors.newDirectExecutorService();
+        provider.connectionExecutor = MoreExecutors.newDirectExecutorService();
         prepareMocks(PORT_COUNT);
 
         deviceService.listener.event(new DeviceEvent(DeviceEvent.Type.DEVICE_ADDED, netconfDevice));
         assertEquals("Ports should be added", PORT_COUNT, providerService.ports.get(netconfDevice.id()).size());
 
-        deviceService.listener.event(new DeviceEvent(DeviceEvent.Type.DEVICE_REMOVED, netconfDevice));
+        provider.triggerDisconnect(netconfDevice.id());
         assertEquals("Ports should be removed", 0, providerService.ports.get(netconfDevice.id()).size());
     }
 
     private void prepareMocks(int count) {
         for (int i = 1; i <= count; i++) {
-            deviceDescription.portDescriptions.add(new DefaultPortDescription(PortNumber.portNumber(i), true));
+            deviceDescription.portDescriptions.add(DefaultPortDescription.builder()
+                    .withPortNumber(PortNumber.portNumber(i)).isEnabled(true).build());
         }
+    }
+
+    private List<Port> createMockPorts(Collection<PortDescription> descs, DeviceId deviceId) {
+        Device device = deviceService.getDevice(deviceId);
+        return descs.stream()
+                .map(desc -> new DefaultPort(device, desc.portNumber(), desc.isEnabled(), desc.annotations()))
+                .collect(Collectors.toList());
     }
 
     //TODO: check updates of the device description
@@ -366,6 +348,11 @@ public class NetconfDeviceProviderTest {
         DeviceListener listener = null;
 
         @Override
+        public boolean isAvailable(DeviceId deviceId) {
+            return true;
+        }
+
+        @Override
         public Device getDevice(DeviceId deviceId) {
             if (deviceId.toString().equals(NETCONF_DEVICE_ID_STRING)) {
                 return null;
@@ -375,6 +362,11 @@ public class NetconfDeviceProviderTest {
                 return notNetconfDevice;
             }
 
+        }
+
+        @Override
+        public List<Port> getPorts(DeviceId deviceId) {
+            return createMockPorts(providerService.ports.get(deviceId), deviceId);
         }
 
         @Override
@@ -475,9 +467,6 @@ public class NetconfDeviceProviderTest {
         @Override
         public <S, C extends Config<S>> C getConfig(S subject, Class<C> configClass) {
             if (available) {
-                if (configClass.equals(NetconfProviderConfig.class)) {
-                    return (C) netconfProviderConfig;
-                }
                 DeviceId did = (DeviceId) subject;
                 if (configClass.equals(NetconfDeviceConfig.class)
                         && did.equals(DeviceId.deviceId(NETCONF_DEVICE_ID_STRING))) {
@@ -524,15 +513,6 @@ public class NetconfDeviceProviderTest {
             return subjects;
         }
 
-    }
-
-    private class MockNetconfProviderConfig extends NetconfProviderConfig {
-        final NetconfDeviceAddress deviceInfo = new NetconfDeviceAddress(IP_OLD, 1, TEST, TEST);
-
-        @Override
-        public Set<NetconfProviderConfig.NetconfDeviceAddress> getDevicesAddresses() throws ConfigException {
-            return ImmutableSet.of(deviceInfo);
-        }
     }
 
     private class MockDevice extends DefaultDevice {

@@ -33,6 +33,9 @@ import org.onosproject.net.OduSignalType;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.criteria.Criteria;
 import org.onosproject.net.flow.criteria.Criterion;
+import org.onosproject.net.flow.criteria.PiCriterion;
+import org.onosproject.net.pi.model.PiMatchFieldId;
+import org.onosproject.net.pi.model.PiMatchType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -80,11 +83,17 @@ public final class DecodeCriterionCodecHelper {
         decoderMap.put(Criterion.Type.IPV4_SRC.name(), new IpV4SrcDecoder());
         decoderMap.put(Criterion.Type.IPV4_DST.name(), new IpV4DstDecoder());
         decoderMap.put(Criterion.Type.TCP_SRC.name(), new TcpSrcDecoder());
+        decoderMap.put(Criterion.Type.TCP_SRC_MASKED.name(), new TcpSrcMaskDecoder());
         decoderMap.put(Criterion.Type.TCP_DST.name(), new TcpDstDecoder());
+        decoderMap.put(Criterion.Type.TCP_DST_MASKED.name(), new TcpDstMaskDecoder());
         decoderMap.put(Criterion.Type.UDP_SRC.name(), new UdpSrcDecoder());
+        decoderMap.put(Criterion.Type.UDP_SRC_MASKED.name(), new UdpSrcMaskDecoder());
         decoderMap.put(Criterion.Type.UDP_DST.name(), new UdpDstDecoder());
+        decoderMap.put(Criterion.Type.UDP_DST_MASKED.name(), new UdpDstMaskDecoder());
         decoderMap.put(Criterion.Type.SCTP_SRC.name(), new SctpSrcDecoder());
+        decoderMap.put(Criterion.Type.SCTP_SRC_MASKED.name(), new SctpSrcMaskDecoder());
         decoderMap.put(Criterion.Type.SCTP_DST.name(), new SctpDstDecoder());
+        decoderMap.put(Criterion.Type.SCTP_DST_MASKED.name(), new SctpDstMaskDecoder());
         decoderMap.put(Criterion.Type.ICMPV4_TYPE.name(), new IcmpV4TypeDecoder());
         decoderMap.put(Criterion.Type.ICMPV4_CODE.name(), new IcmpV4CodeDecoder());
         decoderMap.put(Criterion.Type.IPV6_SRC.name(), new IpV6SrcDecoder());
@@ -103,6 +112,7 @@ public final class DecodeCriterionCodecHelper {
         decoderMap.put(Criterion.Type.TUNNEL_ID.name(), new TunnelIdDecoder());
         decoderMap.put(Criterion.Type.ODU_SIGID.name(), new OduSigIdDecoder());
         decoderMap.put(Criterion.Type.ODU_SIGTYPE.name(), new OduSigTypeDecoder());
+        decoderMap.put(Criterion.Type.PROTOCOL_INDEPENDENT.name(), new PiDecoder());
     }
 
     private class EthTypeDecoder implements CriterionDecoder {
@@ -285,12 +295,38 @@ public final class DecodeCriterionCodecHelper {
         }
     }
 
+    private class TcpSrcMaskDecoder implements CriterionDecoder {
+        @Override
+        public Criterion decodeCriterion(ObjectNode json) {
+            TpPort tcpPort = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.TCP_PORT),
+                    CriterionCodec.TCP_PORT + MISSING_MEMBER_MESSAGE).asInt());
+
+            TpPort tcpMask = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.TCP_MASK),
+                    CriterionCodec.TCP_MASK + MISSING_MEMBER_MESSAGE).asInt());
+
+            return Criteria.matchTcpSrcMasked(tcpPort, tcpMask);
+        }
+    }
+
     private class TcpDstDecoder implements CriterionDecoder {
         @Override
         public Criterion decodeCriterion(ObjectNode json) {
             TpPort tcpPort = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.TCP_PORT),
                     CriterionCodec.TCP_PORT + MISSING_MEMBER_MESSAGE).asInt());
             return Criteria.matchTcpDst(tcpPort);
+        }
+    }
+
+    private class TcpDstMaskDecoder implements CriterionDecoder {
+        @Override
+        public Criterion decodeCriterion(ObjectNode json) {
+            TpPort tcpPort = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.TCP_PORT),
+                    CriterionCodec.TCP_PORT + MISSING_MEMBER_MESSAGE).asInt());
+
+            TpPort tcpMask = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.TCP_MASK),
+                    CriterionCodec.TCP_MASK + MISSING_MEMBER_MESSAGE).asInt());
+
+            return Criteria.matchTcpDstMasked(tcpPort, tcpMask);
         }
     }
 
@@ -303,12 +339,38 @@ public final class DecodeCriterionCodecHelper {
         }
     }
 
+    private class UdpSrcMaskDecoder implements CriterionDecoder {
+        @Override
+        public Criterion decodeCriterion(ObjectNode json) {
+            TpPort udpPort = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.UDP_PORT),
+                    CriterionCodec.UDP_PORT + MISSING_MEMBER_MESSAGE).asInt());
+
+            TpPort udpMask = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.UDP_MASK),
+                    CriterionCodec.UDP_MASK + MISSING_MEMBER_MESSAGE).asInt());
+
+            return Criteria.matchUdpSrcMasked(udpPort, udpMask);
+        }
+    }
+
     private class UdpDstDecoder implements CriterionDecoder {
         @Override
         public Criterion decodeCriterion(ObjectNode json) {
             TpPort udpPort = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.UDP_PORT),
                     CriterionCodec.UDP_PORT + MISSING_MEMBER_MESSAGE).asInt());
             return Criteria.matchUdpDst(udpPort);
+        }
+    }
+
+    private class UdpDstMaskDecoder implements CriterionDecoder {
+        @Override
+        public Criterion decodeCriterion(ObjectNode json) {
+            TpPort udpPort = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.UDP_PORT),
+                    CriterionCodec.UDP_PORT + MISSING_MEMBER_MESSAGE).asInt());
+
+            TpPort udpMask = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.UDP_MASK),
+                    CriterionCodec.UDP_MASK + MISSING_MEMBER_MESSAGE).asInt());
+
+            return Criteria.matchUdpDstMasked(udpPort, udpMask);
         }
     }
 
@@ -321,12 +383,38 @@ public final class DecodeCriterionCodecHelper {
         }
     }
 
+    private class SctpSrcMaskDecoder implements CriterionDecoder {
+        @Override
+        public Criterion decodeCriterion(ObjectNode json) {
+            TpPort sctpPort = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.SCTP_PORT),
+                    CriterionCodec.SCTP_PORT + MISSING_MEMBER_MESSAGE).asInt());
+
+            TpPort sctpMask = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.SCTP_MASK),
+                    CriterionCodec.SCTP_MASK + MISSING_MEMBER_MESSAGE).asInt());
+
+            return Criteria.matchSctpSrcMasked(sctpPort, sctpMask);
+        }
+    }
+
     private class SctpDstDecoder implements CriterionDecoder {
         @Override
         public Criterion decodeCriterion(ObjectNode json) {
             TpPort sctpPort = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.SCTP_PORT),
                     CriterionCodec.SCTP_PORT + MISSING_MEMBER_MESSAGE).asInt());
             return Criteria.matchSctpDst(sctpPort);
+        }
+    }
+
+    private class SctpDstMaskDecoder implements CriterionDecoder {
+        @Override
+        public Criterion decodeCriterion(ObjectNode json) {
+            TpPort sctpPort = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.SCTP_PORT),
+                    CriterionCodec.SCTP_PORT + MISSING_MEMBER_MESSAGE).asInt());
+
+            TpPort sctpMask = TpPort.tpPort(nullIsIllegal(json.get(CriterionCodec.SCTP_MASK),
+                    CriterionCodec.SCTP_MASK + MISSING_MEMBER_MESSAGE).asInt());
+
+            return Criteria.matchSctpDstMasked(sctpPort, sctpMask);
         }
     }
 
@@ -495,6 +583,79 @@ public final class DecodeCriterionCodecHelper {
             OduSignalType oduSignalType = OduSignalType.valueOf(nullIsIllegal(json.get(CriterionCodec.ODU_SIGNAL_TYPE),
                     CriterionCodec.ODU_SIGNAL_TYPE + MISSING_MEMBER_MESSAGE).asText());
             return Criteria.matchOduSignalType(oduSignalType);
+        }
+    }
+
+    private class PiDecoder implements CriterionDecoder {
+        @Override
+        public Criterion decodeCriterion(ObjectNode json) {
+            PiCriterion.Builder builder = PiCriterion.builder();
+            JsonNode matchesNode = nullIsIllegal(json.get(CriterionCodec.PI_MATCHES),
+                                                 CriterionCodec.PI_MATCHES + MISSING_MEMBER_MESSAGE);
+            if (matchesNode.isArray()) {
+                for (JsonNode node : matchesNode) {
+                    String type = nullIsIllegal(node.get(CriterionCodec.PI_MATCH_TYPE),
+                                                CriterionCodec.PI_MATCH_TYPE + MISSING_MEMBER_MESSAGE).asText();
+                    switch (PiMatchType.valueOf(type.toUpperCase())) {
+                        case EXACT:
+                            builder.matchExact(
+                                    PiMatchFieldId.of(
+                                            nullIsIllegal(node.get(CriterionCodec.PI_MATCH_FIELD_ID),
+                                                          CriterionCodec.PI_MATCH_FIELD_ID +
+                                                                  MISSING_MEMBER_MESSAGE).asText()),
+                                    HexString.fromHexString(nullIsIllegal(node.get(CriterionCodec.PI_MATCH_VALUE),
+                                                                    CriterionCodec.PI_MATCH_VALUE +
+                                                                            MISSING_MEMBER_MESSAGE).asText(), null));
+                            break;
+                        case LPM:
+                            builder.matchLpm(
+                                    PiMatchFieldId.of(
+                                            nullIsIllegal(node.get(CriterionCodec.PI_MATCH_FIELD_ID),
+                                                          CriterionCodec.PI_MATCH_FIELD_ID +
+                                                                  MISSING_MEMBER_MESSAGE).asText()),
+                                    HexString.fromHexString(nullIsIllegal(node.get(CriterionCodec.PI_MATCH_VALUE),
+                                                                    CriterionCodec.PI_MATCH_VALUE +
+                                                                            MISSING_MEMBER_MESSAGE).asText(), null),
+                                    nullIsIllegal(node.get(CriterionCodec.PI_MATCH_PREFIX),
+                                                  CriterionCodec.PI_MATCH_PREFIX +
+                                                          MISSING_MEMBER_MESSAGE).asInt());
+                            break;
+                        case TERNARY:
+                            builder.matchTernary(
+                                    PiMatchFieldId.of(
+                                            nullIsIllegal(node.get(CriterionCodec.PI_MATCH_FIELD_ID),
+                                                          CriterionCodec.PI_MATCH_FIELD_ID +
+                                                                  MISSING_MEMBER_MESSAGE).asText()),
+                                    HexString.fromHexString(nullIsIllegal(node.get(CriterionCodec.PI_MATCH_VALUE),
+                                                                    CriterionCodec.PI_MATCH_VALUE +
+                                                                            MISSING_MEMBER_MESSAGE).asText(), null),
+                                    HexString.fromHexString(nullIsIllegal(node.get(CriterionCodec.PI_MATCH_MASK),
+                                                                    CriterionCodec.PI_MATCH_MASK +
+                                                                            MISSING_MEMBER_MESSAGE).asText(), null));
+                            break;
+                        case RANGE:
+                            builder.matchRange(
+                                    PiMatchFieldId.of(
+                                            nullIsIllegal(node.get(CriterionCodec.PI_MATCH_FIELD_ID),
+                                                          CriterionCodec.PI_MATCH_FIELD_ID +
+                                                                  MISSING_MEMBER_MESSAGE).asText()),
+                                    HexString.fromHexString(nullIsIllegal(node.get(CriterionCodec.PI_MATCH_LOW_VALUE),
+                                                                    CriterionCodec.PI_MATCH_LOW_VALUE +
+                                                                            MISSING_MEMBER_MESSAGE).asText(), null),
+                                    HexString.fromHexString(nullIsIllegal(node.get(CriterionCodec.PI_MATCH_HIGH_VALUE),
+                                                                    CriterionCodec.PI_MATCH_HIGH_VALUE +
+                                                                            MISSING_MEMBER_MESSAGE).asText(), null)
+                                    );
+                            break;
+                        default:
+                            throw new IllegalArgumentException("Type " + type + " is unsupported");
+                    }
+                }
+            } else {
+                throw new IllegalArgumentException("Protocol-independent matches must be in an array.");
+            }
+
+            return builder.build();
         }
     }
 

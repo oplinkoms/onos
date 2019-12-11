@@ -77,7 +77,9 @@ public class Controller {
     public void isisDeactivate() {
         disconnectExecutor();
         processes = null;
-        peerExecFactory.shutdown();
+        if (peerExecFactory != null) {
+            peerExecFactory.shutdown();
+        }
     }
 
     /**
@@ -94,9 +96,8 @@ public class Controller {
      * Updates the processes configuration.
      *
      * @param jsonNode json node instance
-     * @throws Exception might throws parse exception
      */
-    public void updateConfig(JsonNode jsonNode) throws Exception {
+    public void updateConfig(JsonNode jsonNode) {
         log.debug("Controller::UpdateConfig called");
         configPacket = new byte[IsisConstants.CONFIG_LENGTH];
         byte numberOfInterface = 0; // number of interfaces to configure
@@ -206,7 +207,7 @@ public class Controller {
      * @param json posted json
      * @return list of processes configured
      */
-    private List<IsisProcess> getConfig(JsonNode json) throws Exception {
+    private List<IsisProcess> getConfig(JsonNode json) {
         List<IsisProcess> isisProcessesList = new ArrayList<>();
         JsonNode jsonNodes = json;
         if (jsonNodes == null) {

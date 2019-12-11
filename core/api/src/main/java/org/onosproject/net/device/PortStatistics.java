@@ -15,21 +15,16 @@
  */
 package org.onosproject.net.device;
 
+import org.onosproject.net.Annotated;
+import org.onosproject.net.Annotations;
 import org.onosproject.net.PortNumber;
+
+import static org.onosproject.net.DefaultAnnotations.EMPTY;
 
 /**
  * Statistics of a port.
  */
-public interface PortStatistics {
-
-    /**
-     * Returns the port number.
-     *
-     * @return port number
-     * @deprecated ONOS 1.12 Magpie please use portNumber()
-     */
-    @Deprecated
-    int  port();
+public interface PortStatistics extends Annotated {
 
     /**
      * Returns the port number.
@@ -107,6 +102,11 @@ public interface PortStatistics {
      * @return the time port has been alive in nano seconds
      */
     long durationNano();
+
+    @Override
+    default Annotations annotations() {
+        return EMPTY;
+    }
 
     /**
      * Returns true if all the port stats are zero, excluding TxErrors and RxErrors.

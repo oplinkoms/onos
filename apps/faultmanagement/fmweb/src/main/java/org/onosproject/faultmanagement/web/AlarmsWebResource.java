@@ -25,8 +25,8 @@ import org.onosproject.rest.AbstractWebResource;
 
 import javax.ws.rs.core.Response;
 
-import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmId;
+import org.onosproject.alarm.Alarm;
+import org.onosproject.alarm.AlarmId;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DefaultValue;
@@ -39,10 +39,11 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 
 import org.apache.commons.lang.StringUtils;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmService;
+import org.onosproject.alarm.AlarmService;
 import org.onosproject.net.DeviceId;
 import org.slf4j.Logger;
 
+import static org.onlab.util.Tools.readTreeFromStream;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -121,7 +122,7 @@ public class AlarmsWebResource extends AbstractWebResource {
         log.debug("PUT NEW ALARM at /{}", alarmIdPath);
 
         try {
-            ObjectNode jsonTree = (ObjectNode) mapper().readTree(stream);
+            ObjectNode jsonTree = readTreeFromStream(mapper(), stream);
             log.debug("jsonTree={}", jsonTree);
 
             Alarm alarm = new AlarmCodec().decode(jsonTree, this);
@@ -134,7 +135,7 @@ public class AlarmsWebResource extends AbstractWebResource {
 
             }
             Alarm updated = service.updateBookkeepingFields(
-                    alarm.id(), alarm.acknowledged(), alarm.assignedUser()
+                    alarm.id(), alarm.cleared(), alarm.acknowledged(), alarm.assignedUser()
             );
             ObjectNode encoded = new AlarmCodec().encode(updated, this);
             return ok(encoded.toString()).build();

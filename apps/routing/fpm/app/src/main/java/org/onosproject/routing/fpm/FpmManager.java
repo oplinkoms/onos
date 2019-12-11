@@ -16,15 +16,8 @@
 
 package org.onosproject.routing.fpm;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Modified;
-import org.apache.felix.scr.annotations.Property;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.ReferencePolicy;
-import org.apache.felix.scr.annotations.Service;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import org.jboss.netty.bootstrap.ServerBootstrap;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelException;
@@ -37,22 +30,27 @@ import org.jboss.netty.channel.group.DefaultChannelGroup;
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.jboss.netty.handler.timeout.IdleStateHandler;
 import org.jboss.netty.util.HashedWheelTimer;
-import org.onlab.packet.IpAddress;
 import org.onlab.packet.Ip4Address;
 import org.onlab.packet.Ip6Address;
+import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpPrefix;
-import org.onosproject.net.intf.Interface;
-import org.onosproject.net.host.InterfaceIpAddress;
-import org.onosproject.net.intf.InterfaceService;
 import org.onlab.util.KryoNamespace;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
+import org.onosproject.cluster.ClusterEvent;
+import org.onosproject.cluster.ClusterEventListener;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.NodeId;
-import org.onosproject.core.CoreService;
 import org.onosproject.core.ApplicationId;
+import org.onosproject.core.CoreService;
+import org.onosproject.net.host.InterfaceIpAddress;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.routeservice.Route;
 import org.onosproject.routeservice.RouteAdminService;
+import org.onosproject.routing.fpm.api.FpmPrefixStore;
+import org.onosproject.routing.fpm.api.FpmPrefixStoreEvent;
+import org.onosproject.routing.fpm.api.FpmRecord;
 import org.onosproject.routing.fpm.protocol.FpmHeader;
 import org.onosproject.routing.fpm.protocol.Netlink;
 import org.onosproject.routing.fpm.protocol.NetlinkMessageType;
@@ -61,77 +59,103 @@ import org.onosproject.routing.fpm.protocol.RouteAttributeDst;
 import org.onosproject.routing.fpm.protocol.RouteAttributeGateway;
 import org.onosproject.routing.fpm.protocol.RtNetlink;
 import org.onosproject.routing.fpm.protocol.RtProtocol;
+import org.onosproject.store.StoreDelegate;
 import org.onosproject.store.serializers.KryoNamespaces;
+import org.onosproject.store.service.AsyncDistributedLock;
 import org.onosproject.store.service.ConsistentMap;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
-import org.onosproject.store.StoreDelegate;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Modified;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.osgi.service.component.annotations.ReferencePolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Dictionary;
 import java.util.HashSet;
 import java.util.LinkedList;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import static java.util.concurrent.Executors.newCachedThreadPool;
 import static org.onlab.util.Tools.groupedThreads;
-import org.onosproject.routing.fpm.api.FpmPrefixStoreEvent;
-import org.onosproject.routing.fpm.api.FpmPrefixStore;
-import org.onosproject.routing.fpm.api.FpmRecord;
+import static org.onosproject.routing.fpm.OsgiPropertyConstants.CLEAR_ROUTES;
+import static org.onosproject.routing.fpm.OsgiPropertyConstants.CLEAR_ROUTES_DEFAULT;
+import static org.onosproject.routing.fpm.OsgiPropertyConstants.PD_PUSH_ENABLED;
+import static org.onosproject.routing.fpm.OsgiPropertyConstants.PD_PUSH_ENABLED_DEFAULT;
+import static org.onosproject.routing.fpm.OsgiPropertyConstants.PD_PUSH_NEXT_HOP_IPV4;
+import static org.onosproject.routing.fpm.OsgiPropertyConstants.PD_PUSH_NEXT_HOP_IPV4_DEFAULT;
+import static org.onosproject.routing.fpm.OsgiPropertyConstants.PD_PUSH_NEXT_HOP_IPV6;
+import static org.onosproject.routing.fpm.OsgiPropertyConstants.PD_PUSH_NEXT_HOP_IPV6_DEFAULT;
 
 /**
  * Forwarding Plane Manager (FPM) route source.
  */
-@Service
-@Component(immediate = true)
+@Component(
+       immediate = true,
+       service = FpmInfoService.class,
+       property = {
+           CLEAR_ROUTES + ":Boolean=" + CLEAR_ROUTES_DEFAULT,
+           PD_PUSH_ENABLED + ":Boolean=" + PD_PUSH_ENABLED_DEFAULT,
+           PD_PUSH_NEXT_HOP_IPV4 + "=" + PD_PUSH_NEXT_HOP_IPV4_DEFAULT,
+           PD_PUSH_NEXT_HOP_IPV6 + "=" + PD_PUSH_NEXT_HOP_IPV6_DEFAULT,
+       }
+)
 public class FpmManager implements FpmInfoService {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private static final int FPM_PORT = 2620;
     private static final String APP_NAME = "org.onosproject.fpm";
     private static final int IDLE_TIMEOUT_SECS = 5;
+    private static final String LOCK_NAME = "fpm-manager-lock";
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ComponentConfigService componentConfigService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected RouteAdminService routeService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ClusterService clusterService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected StorageService storageService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected InterfaceService interfaceService;
 
-    @Reference(cardinality = ReferenceCardinality.OPTIONAL_UNARY,
+    @Reference(cardinality = ReferenceCardinality.OPTIONAL,
                bind = "bindRipStore",
                unbind = "unbindRipStore",
                policy = ReferencePolicy.DYNAMIC,
-               target = "(fpm_type=RIP)")
+               target = "(_fpm_type=RIP)")
     protected volatile FpmPrefixStore ripStore;
 
-    @Reference(cardinality = ReferenceCardinality.OPTIONAL_UNARY,
+    @Reference(cardinality = ReferenceCardinality.OPTIONAL,
                bind = "bindDhcpStore",
                unbind = "unbindDhcpStore",
                policy = ReferencePolicy.DYNAMIC,
-               target = "(fpm_type=DHCP)")
+               target = "(_fpm_type=DHCP)")
     protected volatile FpmPrefixStore dhcpStore;
 
     private final StoreDelegate<FpmPrefixStoreEvent> fpmPrefixStoreDelegate
@@ -141,26 +165,29 @@ public class FpmManager implements FpmInfoService {
     private ServerBootstrap serverBootstrap;
     private Channel serverChannel;
     private ChannelGroup allChannels = new DefaultChannelGroup();
+    private final InternalClusterListener clusterListener = new InternalClusterListener();
+    private AsyncDistributedLock asyncLock;
+
+    private ExecutorService clusterEventExecutor;
 
     private ConsistentMap<FpmPeer, Set<FpmConnectionInfo>> peers;
 
     private Map<FpmPeer, Map<IpPrefix, Route>> fpmRoutes = new ConcurrentHashMap<>();
 
-    @Property(name = "clearRoutes", boolValue = true,
-            label = "Whether to clear routes when the FPM connection goes down")
-    private boolean clearRoutes = true;
+    //Local cache for peers to be used in case of cluster partition.
+    private Map<FpmPeer, Set<FpmConnectionInfo>> localPeers = new ConcurrentHashMap<>();
 
-    @Property(name = "pdPushEnabled", boolValue = false,
-            label = "Whether to push prefixes to Quagga over fpm connection")
-    private boolean pdPushEnabled = false;
+    /** Whether to clear routes when the FPM connection goes down. */
+    private boolean clearRoutes = CLEAR_ROUTES_DEFAULT;
 
-    @Property(name = "pdPushNextHopIPv4", value = "",
-            label = "IPv4 next-hop address for PD Pushing.")
-    private Ip4Address pdPushNextHopIPv4 = null;
+    /** Whether to push prefixes to Quagga over fpm connection. */
+    private boolean pdPushEnabled = PD_PUSH_ENABLED_DEFAULT;
 
-    @Property(name = "pdPushNextHopIPv6", value = "",
-            label = "IPv6 next-hop address for PD Pushing.")
-    private Ip6Address pdPushNextHopIPv6 = null;
+    /** IPv4 next-hop address for PD Pushing. */
+    private List<Ip4Address> pdPushNextHopIPv4 = null;
+
+    /** IPv6 next-hop address for PD Pushing. */
+    private List<Ip6Address> pdPushNextHopIPv6 = null;
 
     protected void bindRipStore(FpmPrefixStore store) {
         if ((ripStore == null) && (store != null)) {
@@ -219,6 +246,11 @@ public class FpmManager implements FpmInfoService {
 
         appId = coreService.registerApplication(APP_NAME, peers::destroy);
 
+        asyncLock = storageService.lockBuilder().withName(LOCK_NAME).build();
+
+        clusterEventExecutor = Executors.newSingleThreadExecutor(groupedThreads("fpm-event-main", "%d", log));
+        clusterService.addListener(clusterListener);
+
         log.info("Started");
     }
 
@@ -231,41 +263,56 @@ public class FpmManager implements FpmInfoService {
         stopServer();
         fpmRoutes.clear();
         componentConfigService.unregisterProperties(getClass(), false);
+
+        clusterService.removeListener(clusterListener);
+        clusterEventExecutor.shutdown();
+        asyncLock.unlock();
+
         log.info("Stopped");
     }
 
     @Modified
     protected void modified(ComponentContext context) {
+        Ip4Address rurIPv4Address;
+        Ip6Address rurIPv6Address;
         Dictionary<?, ?> properties = context.getProperties();
         if (properties == null) {
             return;
         }
-        String strClearRoutes = Tools.get(properties, "clearRoutes");
+        String strClearRoutes = Tools.get(properties, CLEAR_ROUTES);
         if (strClearRoutes != null) {
             clearRoutes = Boolean.parseBoolean(strClearRoutes);
             log.info("clearRoutes is {}", clearRoutes);
         }
 
-        String strPdPushEnabled = Tools.get(properties, "pdPushEnabled");
+        String strPdPushEnabled = Tools.get(properties, PD_PUSH_ENABLED);
         if (strPdPushEnabled != null) {
             boolean oldValue = pdPushEnabled;
             pdPushEnabled = Boolean.parseBoolean(strPdPushEnabled);
             if (pdPushEnabled) {
 
-                pdPushNextHopIPv4 = null;
-                pdPushNextHopIPv6 = null;
+                pdPushNextHopIPv4 = new ArrayList<Ip4Address>();
+                pdPushNextHopIPv6 = new ArrayList<Ip6Address>();
 
-                String strPdPushNextHopIPv4 = Tools.get(properties, "pdPushNextHopIPv4");
+                String strPdPushNextHopIPv4 = Tools.get(properties, PD_PUSH_NEXT_HOP_IPV4);
                 if (strPdPushNextHopIPv4 != null) {
-                    pdPushNextHopIPv4 = Ip4Address.valueOf(strPdPushNextHopIPv4);
+                    List<String> strPdPushNextHopIPv4List = Arrays.asList(strPdPushNextHopIPv4.split(","));
+                    for (String nextHop : strPdPushNextHopIPv4List) {
+                        log.trace("IPv4 next hop added is:" + nextHop);
+                        pdPushNextHopIPv4.add(Ip4Address.valueOf(nextHop));
+                    }
                 }
-                String strPdPushNextHopIPv6 = Tools.get(properties, "pdPushNextHopIPv6");
+                String strPdPushNextHopIPv6 = Tools.get(properties, PD_PUSH_NEXT_HOP_IPV6);
                 if (strPdPushNextHopIPv6 != null) {
-                    pdPushNextHopIPv6 = Ip6Address.valueOf(strPdPushNextHopIPv6);
+                    List<String> strPdPushNextHopIPv6List = Arrays.asList(strPdPushNextHopIPv6.split(","));
+                    for (String nextHop : strPdPushNextHopIPv6List) {
+                        log.trace("IPv6 next hop added is:" + nextHop);
+                        pdPushNextHopIPv6.add(Ip6Address.valueOf(nextHop));
+                    }
                 }
 
-                if (pdPushNextHopIPv4 == null) {
-                    pdPushNextHopIPv4 = interfaceService.getInterfaces()
+                if (pdPushNextHopIPv4.size() == 0) {
+                    rurIPv4Address = interfaceService.getInterfaces()
                         .stream()
                         .filter(iface -> iface.name().contains("RUR"))
                         .map(Interface::ipAddressesList)
@@ -275,10 +322,17 @@ public class FpmManager implements FpmInfoService {
                         .map(IpAddress::getIp4Address)
                         .findFirst()
                         .orElse(null);
+                    log.debug("RUR IPv4 address extracted from netcfg is: {}", rurIPv4Address);
+                    if (rurIPv4Address != null) {
+                        pdPushNextHopIPv4.add(rurIPv4Address);
+                    } else {
+                        log.debug("Unable to extract RUR IPv4 address from netcfg");
+                    }
+
                 }
 
-                if (pdPushNextHopIPv6 == null) {
-                    pdPushNextHopIPv6 = interfaceService.getInterfaces()
+                if (pdPushNextHopIPv6 == null || pdPushNextHopIPv6.size() == 0) {
+                    rurIPv6Address = interfaceService.getInterfaces()
                         .stream()
                         .filter(iface -> iface.name().contains("RUR"))
                         .map(Interface::ipAddressesList)
@@ -288,22 +342,26 @@ public class FpmManager implements FpmInfoService {
                         .map(IpAddress::getIp6Address)
                         .findFirst()
                         .orElse(null);
+                    log.debug("RUR IPv6 address extracted from netcfg is: {}", rurIPv6Address);
+                    if (rurIPv6Address != null) {
+                        pdPushNextHopIPv6.add(rurIPv6Address);
+                    } else {
+                        log.debug("Unable to extract RUR IPv6 address from netcfg");
+                    }
                 }
 
                 log.info("PD pushing is enabled.");
-                if (pdPushNextHopIPv4 != null) {
-                    log.info("ipv4 next-hop {}", pdPushNextHopIPv4.toString());
+                if (pdPushNextHopIPv4.size() != 0) {
+                    log.info("ipv4 next-hop {} with {} items", pdPushNextHopIPv4.toString(), pdPushNextHopIPv4.size());
                 } else {
                     log.info("ipv4 next-hop is null");
                 }
-                if (pdPushNextHopIPv6 != null) {
-                    log.info("ipv6 next-hop={}", pdPushNextHopIPv6.toString());
+                if (pdPushNextHopIPv6.size() != 0) {
+                    log.info("ipv6 next-hop={} with {} items", pdPushNextHopIPv6.toString(), pdPushNextHopIPv6.size());
                 } else {
                     log.info("ipv6 next-hop is null");
                 }
-                if (!oldValue) {
-                    processStaticRoutes();
-                }
+                processStaticRoutes();
             } else {
                 log.info("PD pushing is disabled.");
             }
@@ -358,8 +416,27 @@ public class FpmManager implements FpmInfoService {
         }
 
         if (clearRoutes) {
+            log.debug("Clearing routes for the peer");
             peers.keySet().forEach(this::clearRoutes);
         }
+    }
+
+    private boolean routeInDhcpStore(IpPrefix prefix) {
+
+        if (dhcpStore != null) {
+            Collection<FpmRecord> dhcpRecords = dhcpStore.getFpmRecords();
+            return dhcpRecords.stream().anyMatch(record -> record.ipPrefix().equals(prefix));
+        }
+        return false;
+    }
+
+    private boolean routeInRipStore(IpPrefix prefix) {
+
+        if (ripStore != null) {
+            Collection<FpmRecord> ripRecords = ripStore.getFpmRecords();
+            return ripRecords.stream().anyMatch(record -> record.ipPrefix().equals(prefix));
+        }
+        return false;
     }
 
     private void fpmMessage(FpmPeer peer, FpmHeader fpmMessage) {
@@ -400,6 +477,17 @@ public class FpmManager implements FpmInfoService {
 
         IpPrefix prefix = IpPrefix.valueOf(dstAddress, rtNetlink.dstLength());
 
+        // Ignore routes that we sent.
+        if (gateway != null && (
+                (prefix.isIp4() && pdPushNextHopIPv4 != null &&
+                        pdPushNextHopIPv4.contains(gateway.getIp4Address())) ||
+                (prefix.isIp6() && pdPushNextHopIPv6 != null &&
+                        pdPushNextHopIPv6.contains(gateway.getIp6Address())))) {
+            if (routeInDhcpStore(prefix) || routeInRipStore(prefix)) {
+                return;
+            }
+        }
+
         List<Route> updates = new LinkedList<>();
         List<Route> withdraws = new LinkedList<>();
 
@@ -437,19 +525,24 @@ public class FpmManager implements FpmInfoService {
             break;
         }
 
-        routeService.withdraw(withdraws);
-        routeService.update(updates);
+        updateRouteStore(updates, withdraws);
+    }
+
+    private synchronized void updateRouteStore(Collection<Route> routesToAdd, Collection<Route> routesToRemove) {
+        routeService.withdraw(routesToRemove);
+        routeService.update(routesToAdd);
     }
 
     private void clearRoutes(FpmPeer peer) {
         log.info("Clearing all routes for peer {}", peer);
         Map<IpPrefix, Route> routes = fpmRoutes.remove(peer);
         if (routes != null) {
-            routeService.withdraw(routes.values());
+            updateRouteStore(Lists.newArrayList(), routes.values());
         }
     }
 
     public void processStaticRoutes() {
+        log.debug("processStaticRoutes function is called");
         for (Channel ch : allChannels) {
             processStaticRoutes(ch);
         }
@@ -484,103 +577,91 @@ public class FpmManager implements FpmInfoService {
         }
     }
 
-    private void sendRouteUpdateToChannel(boolean isAdd, IpPrefix prefix, Channel ch) {
+    private void updateRoute(IpAddress pdPushNextHop, boolean isAdd, IpPrefix prefix,
+                             Channel ch, int raLength, short addrFamily) {
+        try {
+            RouteAttributeDst raDst = RouteAttributeDst.builder()
+                    .length(raLength)
+                    .type(RouteAttribute.RTA_DST)
+                    .dstAddress(prefix.address())
+                    .build();
 
-        int netLinkLength;
-        short addrFamily;
-        IpAddress pdPushNextHop;
+            RouteAttributeGateway raGateway = RouteAttributeGateway.builder()
+                    .length(raLength)
+                    .type(RouteAttribute.RTA_GATEWAY)
+                    .gateway(pdPushNextHop)
+                    .build();
+
+            // Build RtNetlink.
+            RtNetlink rtNetlink = RtNetlink.builder()
+                    .addressFamily(addrFamily)
+                    .dstLength(prefix.prefixLength())
+                    .routeAttribute(raDst)
+                    .routeAttribute(raGateway)
+                    .build();
+
+            // Build Netlink.
+            int messageLength = raDst.length() + raGateway.length() +
+                    RtNetlink.RT_NETLINK_LENGTH + Netlink.NETLINK_HEADER_LENGTH;
+            Netlink netLink = Netlink.builder()
+                    .length(messageLength)
+                    .type(isAdd ? NetlinkMessageType.RTM_NEWROUTE : NetlinkMessageType.RTM_DELROUTE)
+                    .flags(Netlink.NETLINK_REQUEST | Netlink.NETLINK_CREATE)
+                    .rtNetlink(rtNetlink)
+                    .build();
+
+            // Build FpmHeader.
+            messageLength += FpmHeader.FPM_HEADER_LENGTH;
+            FpmHeader fpmMessage = FpmHeader.builder()
+                    .version(FpmHeader.FPM_VERSION_1)
+                    .type(FpmHeader.FPM_TYPE_NETLINK)
+                    .length(messageLength)
+                    .netlink(netLink)
+                    .build();
+
+            // Encode message in a channel buffer and transmit.
+            ch.write(fpmMessage.encode());
+            log.debug("Fpm Message for updated route {}", fpmMessage.toString());
+        } catch (RuntimeException e) {
+            log.info("Route not sent over fpm connection.");
+        }
+    }
+
+    private void sendRouteUpdateToChannel(boolean isAdd, IpPrefix prefix, Channel ch) {
 
         if (!pdPushEnabled) {
             return;
         }
+        int raLength;
+        short addrFamily;
 
-        try {
-            // Construct list of route attributes.
-            List<RouteAttribute> attributes = new ArrayList<>();
-            if (prefix.isIp4()) {
-                if (pdPushNextHopIPv4 == null) {
-                    log.info("Prefix not pushed because ipv4 next-hop is null.");
-                    return;
-                }
-                pdPushNextHop = pdPushNextHopIPv4;
-                netLinkLength =  Ip4Address.BYTE_LENGTH + RouteAttribute.ROUTE_ATTRIBUTE_HEADER_LENGTH;
-                addrFamily = RtNetlink.RT_ADDRESS_FAMILY_INET;
-            } else {
-                if (pdPushNextHopIPv6 == null) {
-                    log.info("Prefix not pushed because ipv6 next-hop is null.");
-                    return;
-                }
-                pdPushNextHop = pdPushNextHopIPv6;
-                netLinkLength =  Ip6Address.BYTE_LENGTH + RouteAttribute.ROUTE_ATTRIBUTE_HEADER_LENGTH;
-                addrFamily = RtNetlink.RT_ADDRESS_FAMILY_INET6;
+        // Build route attributes.
+        if (prefix.isIp4()) {
+            List<Ip4Address> pdPushNextHopList;
+            if (pdPushNextHopIPv4 == null || pdPushNextHopIPv4.size() == 0) {
+                log.info("Prefix not pushed because ipv4 next-hop is null.");
+                return;
             }
-
-            RouteAttributeDst raDst = new RouteAttributeDst(
-                netLinkLength,
-                RouteAttribute.RTA_DST,
-                prefix.address());
-            attributes.add(raDst);
-
-            RouteAttributeGateway raGateway = new RouteAttributeGateway(
-                netLinkLength,
-                RouteAttribute.RTA_GATEWAY,
-                pdPushNextHop);
-            attributes.add(raGateway);
-
-            // Add RtNetlink header.
-            int srcLength = 0;
-            short tos = 0;
-            short table = 0;
-            short scope = 0;
-            long rtFlags = 0;
-            int messageLength = raDst.length() + raGateway.length() +
-                RtNetlink.RT_NETLINK_LENGTH;
-
-            RtNetlink rtNetlink =  new RtNetlink(
-                addrFamily,
-                prefix.prefixLength(),
-                srcLength,
-                tos,
-                table,
-                RtProtocol.ZEBRA,
-                scope,
-                FpmHeader.FPM_TYPE_NETLINK,
-                rtFlags,
-                attributes);
-
-            // Add Netlink header.
-            NetlinkMessageType nlMsgType;
-            if (isAdd) {
-                nlMsgType = NetlinkMessageType.RTM_NEWROUTE;
-            } else {
-                nlMsgType = NetlinkMessageType.RTM_DELROUTE;
+            pdPushNextHopList = pdPushNextHopIPv4;
+            raLength =  Ip4Address.BYTE_LENGTH + RouteAttribute.ROUTE_ATTRIBUTE_HEADER_LENGTH;
+            addrFamily = RtNetlink.RT_ADDRESS_FAMILY_INET;
+            for (Ip4Address pdPushNextHop: pdPushNextHopList) {
+                log.trace("IPv4 next hop is:" + pdPushNextHop);
+                updateRoute(pdPushNextHop, isAdd, prefix, ch, raLength, addrFamily);
             }
-            int flags = Netlink.NETLINK_REQUEST | Netlink.NETLINK_CREATE;
-            long sequence = 0;
-            long processPortId = 0;
-            messageLength += Netlink.NETLINK_HEADER_LENGTH;
-
-            Netlink netLink = new Netlink(messageLength,
-                nlMsgType,
-                flags,
-                sequence,
-                processPortId,
-                rtNetlink);
-
-            messageLength += FpmHeader.FPM_HEADER_LENGTH;
-
-            // Add FpmHeader.
-            FpmHeader fpmMessage = new FpmHeader(
-                FpmHeader.FPM_VERSION_1,
-                FpmHeader.FPM_TYPE_NETLINK,
-                messageLength,
-                netLink);
-
-            // Encode message in a channel buffer and transmit.
-            ch.write(fpmMessage.encode());
-
-        } catch (RuntimeException e) {
-            log.info("Route not sent over fpm connection.");
+        } else {
+            List<Ip6Address> pdPushNextHopList;
+            if (pdPushNextHopIPv6 == null || pdPushNextHopIPv6.size() == 0) {
+                log.info("Prefix not pushed because ipv6 next-hop is null.");
+                return;
+            }
+            pdPushNextHopList = pdPushNextHopIPv6;
+            raLength =  Ip6Address.BYTE_LENGTH + RouteAttribute.ROUTE_ATTRIBUTE_HEADER_LENGTH;
+            addrFamily = RtNetlink.RT_ADDRESS_FAMILY_INET6;
+            for (Ip6Address pdPushNextHop: pdPushNextHopList) {
+                log.trace("IPv6 next hop is:" + pdPushNextHop);
+                updateRoute(pdPushNextHop, isAdd, prefix, ch, raLength, addrFamily);
+            }
         }
     }
 
@@ -608,6 +689,41 @@ public class FpmManager implements FpmInfoService {
                         e -> toFpmInfo(e.getKey(), e.getValue())));
     }
 
+    @Override
+    public void updateAcceptRouteFlag(Collection<FpmPeerAcceptRoutes> modifiedPeers) {
+        modifiedPeers.forEach(modifiedPeer -> {
+            log.debug("FPM connection to {} is disabled", modifiedPeer);
+            NodeId localNode = clusterService.getLocalNode().id();
+            log.debug("Peer Flag {}", modifiedPeer.isAcceptRoutes());
+            peers.compute(modifiedPeer.peer(), (p, infos) -> {
+                if (infos == null) {
+                    return null;
+                }
+                Iterator<FpmConnectionInfo> iterator = infos.iterator();
+                if (iterator.hasNext()) {
+                    FpmConnectionInfo connectionInfo = iterator.next();
+                    if (connectionInfo.isAcceptRoutes() == modifiedPeer.isAcceptRoutes()) {
+                        return null;
+                    }
+                    localPeers.remove(modifiedPeer.peer());
+                    infos.remove(connectionInfo);
+                    infos.add(new FpmConnectionInfo(localNode, modifiedPeer.peer(),
+                            System.currentTimeMillis(), modifiedPeer.isAcceptRoutes()));
+                    localPeers.put(modifiedPeer.peer(), infos);
+                }
+                Map<IpPrefix, Route> routes = fpmRoutes.get(modifiedPeer.peer());
+                if (routes != null && !modifiedPeer.isAcceptRoutes()) {
+                    updateRouteStore(Lists.newArrayList(), routes.values());
+                } else {
+                    updateRouteStore(routes.values(), Lists.newArrayList());
+                }
+
+                return infos;
+            });
+        });
+
+    }
+
     private class InternalFpmListener implements FpmListener {
         @Override
         public void fpmMessage(FpmPeer peer, FpmHeader fpmMessage) {
@@ -616,6 +732,7 @@ public class FpmManager implements FpmInfoService {
 
         @Override
         public boolean peerConnected(FpmPeer peer) {
+            log.info("FPM connection to {} was connected", peer);
             if (peers.keySet().contains(peer)) {
                 return false;
             }
@@ -626,7 +743,8 @@ public class FpmManager implements FpmInfoService {
                     infos = new HashSet<>();
                 }
 
-                infos.add(new FpmConnectionInfo(localNode, peer, System.currentTimeMillis()));
+                infos.add(new FpmConnectionInfo(localNode, peer, System.currentTimeMillis(), true));
+                localPeers.put(peer, infos);
                 return infos;
             });
 
@@ -650,7 +768,10 @@ public class FpmManager implements FpmInfoService {
                 infos.stream()
                         .filter(i -> i.connectedTo().equals(clusterService.getLocalNode().id()))
                         .findAny()
-                        .ifPresent(i -> infos.remove(i));
+                        .ifPresent(i -> {
+                            infos.remove(i);
+                            localPeers.get(peer).remove(i);
+                        });
 
                 if (infos.isEmpty()) {
                     return null;
@@ -703,5 +824,64 @@ public class FpmManager implements FpmInfoService {
                     return;
             }
         }
+    }
+
+    private class InternalClusterListener implements ClusterEventListener {
+        @Override
+        public void event(ClusterEvent event) {
+            clusterEventExecutor.execute(() -> {
+                log.info("Receives ClusterEvent {} for {}", event.type(), event.subject().id());
+                switch (event.type()) {
+                    case INSTANCE_READY:
+                        // When current node is healing from a network partition,
+                        // seeing INSTANCE_READY means current node has the ability to read from the cluster,
+                        // but it is possible that current node still can't write to the cluster at this moment.
+                        // The AsyncDistributedLock is introduced to ensure we attempt to push FPM routes
+                        // after current node can write.
+                        // Adding 15 seconds retry for the current node to be able to write.
+                        asyncLock.tryLock(Duration.ofSeconds(15)).whenComplete((result, error) -> {
+                            if (result != null && result.isPresent()) {
+                                log.debug("Lock obtained. Push local FPM routes to route store");
+                                // All FPM routes on current node will be pushed again even when current node is not
+                                // the one that becomes READY. A better way is to do this only on the minority nodes.
+                                pushFpmRoutes();
+                                localPeers.forEach((key, value) -> peers.put(key, value));
+                                asyncLock.unlock();
+                            } else {
+                                log.debug("Fail to obtain lock. Abort.");
+                            }
+                        });
+                        break;
+                    case INSTANCE_DEACTIVATED:
+                    case INSTANCE_REMOVED:
+                        ImmutableMap.copyOf(peers.asJavaMap()).forEach((key, value) -> {
+                            if (value != null) {
+                                value.stream()
+                                    .filter(i -> i.connectedTo().equals(event.subject().id()))
+                                    .findAny()
+                                    .ifPresent(value::remove);
+                                log.info("Connection {} removed for disabled peer {}", value, key);
+                                if (value.isEmpty()) {
+                                    peers.remove(key);
+                                }
+                            }
+                        });
+                        break;
+                    case INSTANCE_ADDED:
+                    case INSTANCE_ACTIVATED:
+                    default:
+                        break;
+                }
+            });
+        }
+    }
+
+    @Override
+    public void pushFpmRoutes() {
+        Set<Route> routes = fpmRoutes.values().stream()
+                .map(Map::entrySet).flatMap(Set::stream).map(Map.Entry::getValue)
+                .collect(Collectors.toSet());
+        updateRouteStore(routes, Lists.newArrayList());
+        log.info("{} FPM routes have been updated to route store", routes.size());
     }
 }

@@ -15,11 +15,11 @@
  */
 package org.onosproject.driver;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.onosproject.codec.CodecService;
 import org.onosproject.driver.extensions.MoveExtensionTreatment;
 import org.onosproject.driver.extensions.NiciraMatchNshSi;
@@ -30,12 +30,15 @@ import org.onosproject.driver.extensions.NiciraSetNshContextHeader;
 import org.onosproject.driver.extensions.NiciraSetNshSi;
 import org.onosproject.driver.extensions.NiciraSetNshSpi;
 import org.onosproject.driver.extensions.NiciraSetTunnelDst;
+import org.onosproject.driver.extensions.Ofdpa3CopyField;
 import org.onosproject.driver.extensions.Ofdpa3MatchMplsL2Port;
 import org.onosproject.driver.extensions.Ofdpa3MatchOvid;
 import org.onosproject.driver.extensions.Ofdpa3SetMplsL2Port;
 import org.onosproject.driver.extensions.Ofdpa3SetMplsType;
 import org.onosproject.driver.extensions.Ofdpa3SetOvid;
 import org.onosproject.driver.extensions.Ofdpa3SetQosIndex;
+import org.onosproject.driver.extensions.OfdpaMatchActsetOutput;
+import org.onosproject.driver.extensions.OfdpaMatchAllowVlanTranslation;
 import org.onosproject.driver.extensions.OfdpaMatchVlanVid;
 import org.onosproject.driver.extensions.OfdpaSetVlanVid;
 import org.onosproject.driver.extensions.OplinkAttenuation;
@@ -48,12 +51,15 @@ import org.onosproject.driver.extensions.codec.NiciraSetNshContextHeaderCodec;
 import org.onosproject.driver.extensions.codec.NiciraSetNshSiCodec;
 import org.onosproject.driver.extensions.codec.NiciraSetNshSpiCodec;
 import org.onosproject.driver.extensions.codec.NiciraSetTunnelDstCodec;
+import org.onosproject.driver.extensions.codec.Ofdpa3CopyFieldCodec;
 import org.onosproject.driver.extensions.codec.Ofdpa3MatchMplsL2PortCodec;
 import org.onosproject.driver.extensions.codec.Ofdpa3MatchOvidCodec;
 import org.onosproject.driver.extensions.codec.Ofdpa3SetMplsL2PortCodec;
 import org.onosproject.driver.extensions.codec.Ofdpa3SetMplsTypeCodec;
 import org.onosproject.driver.extensions.codec.Ofdpa3SetOvidCodec;
 import org.onosproject.driver.extensions.codec.Ofdpa3SetQosIndexCodec;
+import org.onosproject.driver.extensions.codec.OfdpaMatchActsetOutputCodec;
+import org.onosproject.driver.extensions.codec.OfdpaMatchAllowVlanTranslationCodec;
 import org.onosproject.driver.extensions.codec.OfdpaMatchVlanVidCodec;
 import org.onosproject.driver.extensions.codec.OfdpaSetVlanVidCodec;
 import org.onosproject.driver.extensions.codec.OplinkAttenuationCodec;
@@ -69,7 +75,7 @@ public class DefaultCodecRegister {
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CodecService codecService;
 
     @Activate
@@ -85,6 +91,8 @@ public class DefaultCodecRegister {
         codecService.registerCodec(NiciraSetNshContextHeader.class, new NiciraSetNshContextHeaderCodec());
         codecService.registerCodec(OfdpaMatchVlanVid.class, new OfdpaMatchVlanVidCodec());
         codecService.registerCodec(OfdpaSetVlanVid.class, new OfdpaSetVlanVidCodec());
+        codecService.registerCodec(OfdpaMatchActsetOutput.class, new OfdpaMatchActsetOutputCodec());
+        codecService.registerCodec(OfdpaMatchAllowVlanTranslation.class, new OfdpaMatchAllowVlanTranslationCodec());
         codecService.registerCodec(Ofdpa3SetMplsType.class, new Ofdpa3SetMplsTypeCodec());
         codecService.registerCodec(Ofdpa3MatchOvid.class, new Ofdpa3MatchOvidCodec());
         codecService.registerCodec(Ofdpa3SetOvid.class, new Ofdpa3SetOvidCodec());
@@ -92,6 +100,7 @@ public class DefaultCodecRegister {
         codecService.registerCodec(Ofdpa3MatchMplsL2Port.class, new Ofdpa3MatchMplsL2PortCodec());
         codecService.registerCodec(Ofdpa3SetMplsL2Port.class, new Ofdpa3SetMplsL2PortCodec());
         codecService.registerCodec(OplinkAttenuation.class, new OplinkAttenuationCodec());
+        codecService.registerCodec(Ofdpa3CopyField.class, new Ofdpa3CopyFieldCodec());
         log.info("Registered default driver codecs.");
     }
 

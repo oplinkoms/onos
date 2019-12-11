@@ -16,12 +16,15 @@
 package org.onosproject.cli.net;
 
 import com.google.common.collect.Sets;
-import org.apache.karaf.shell.commands.Argument;
-import org.apache.karaf.shell.commands.Command;
+import org.apache.karaf.shell.api.action.Argument;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onlab.util.Tools;
+import org.onosproject.cli.AbstractShellCommand;
 import org.onosproject.net.Device;
 import org.onosproject.net.Host;
 import org.onosproject.net.Link;
+import org.onosproject.net.config.NetworkConfigService;
 import org.onosproject.net.device.DeviceAdminService;
 import org.onosproject.net.flow.FlowRuleService;
 import org.onosproject.net.group.GroupService;
@@ -33,7 +36,9 @@ import org.onosproject.net.intent.IntentService;
 import org.onosproject.net.intent.Key;
 import org.onosproject.net.link.LinkAdminService;
 import org.onosproject.net.region.RegionAdminService;
+import org.onosproject.ui.UiExtensionService;
 import org.onosproject.ui.UiTopoLayoutService;
+
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -46,16 +51,17 @@ import static org.onosproject.net.intent.IntentState.WITHDRAWN;
 /**
  * Wipes-out the entire network information base, i.e. devices, links, hosts, intents.
  */
+@Service
 @Command(scope = "onos", name = "wipe-out",
         description = "Wipes-out the entire network information base, i.e. devices, links, hosts")
-public class WipeOutCommand extends ClustersListCommand {
+public class WipeOutCommand extends AbstractShellCommand {
 
     private static final String PLEASE = "please";
     @Argument(name = "please", description = "Confirmation phrase")
     String please = null;
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         if (please == null || !please.equals(PLEASE)) {
             print("I'm afraid I can't do that!\nSay: %s", PLEASE);
             return;
@@ -67,9 +73,11 @@ public class WipeOutCommand extends ClustersListCommand {
         wipeOutGroups();
         wipeOutDevices();
         wipeOutLinks();
+        wipeOutNetworkConfig();
 
         wipeOutLayouts();
         wipeOutRegions();
+        wipeOutUiCache();
     }
 
     private void wipeOutIntents() {
@@ -94,14 +102,12 @@ public class WipeOutCommand extends ClustersListCommand {
         intentService.addListener(listener);
         intentsToWithdrawn.forEach(intentService::withdraw);
         try {
-            // Wait 1.5 seconds for each Intent
-            completableFuture.get(intentsToWithdrawn.size() * 1500, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            print("Got interrupted exception while withdrawn Intents " + e.toString());
-        } catch (ExecutionException e) {
-            print("Got execution exception while withdrawn Intents " + e.toString());
-        } catch (TimeoutException e) {
-            print("Got timeout exception while withdrawn Intents " + e.toString());
+            if (!intentsToWithdrawn.isEmpty()) {
+                // Wait 1.5 seconds for each Intent
+                completableFuture.get(intentsToWithdrawn.size() * 1500L, TimeUnit.MILLISECONDS);
+            }
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            print("Encountered exception while withdrawing intents: " + e.toString());
         } finally {
             intentService.removeListener(listener);
         }
@@ -185,4 +191,15 @@ public class WipeOutCommand extends ClustersListCommand {
         RegionAdminService service = get(RegionAdminService.class);
         service.getRegions().forEach(r -> service.removeRegion(r.id()));
     }
+
+    private void wipeOutNetworkConfig() {
+        print("Wiping network configs");
+        get(NetworkConfigService.class).removeConfig();
+    }
+
+    private void wipeOutUiCache() {
+        print("Wiping ui model cache");
+        get(UiExtensionService.class).refreshModel();
+    }
+
 }

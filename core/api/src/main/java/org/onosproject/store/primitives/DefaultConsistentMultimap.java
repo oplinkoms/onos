@@ -19,6 +19,7 @@ package org.onosproject.store.primitives;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Multiset;
 import org.onosproject.store.service.AsyncConsistentMultimap;
+import org.onosproject.store.service.AsyncIterator;
 import org.onosproject.store.service.ConsistentMapException;
 import org.onosproject.store.service.ConsistentMultimap;
 import org.onosproject.store.service.MultimapEventListener;
@@ -26,6 +27,7 @@ import org.onosproject.store.service.Synchronous;
 import org.onosproject.store.service.Versioned;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -84,8 +86,18 @@ public class DefaultConsistentMultimap<K, V>
     }
 
     @Override
+    public Versioned<Collection<? extends V>> putAndGet(K key, V value) {
+        return complete(asyncMultimap.putAndGet(key, value));
+    }
+
+    @Override
     public boolean remove(K key, V value) {
         return complete(asyncMultimap.remove(key, value));
+    }
+
+    @Override
+    public Versioned<Collection<? extends V>> removeAndGet(K key, V value) {
+        return complete(asyncMultimap.removeAndGet(key, value));
     }
 
     @Override
@@ -140,6 +152,11 @@ public class DefaultConsistentMultimap<K, V>
     }
 
     @Override
+    public Iterator<Map.Entry<K, V>> iterator() {
+        return new DefaultIterator<>(complete(asyncMultimap.iterator()));
+    }
+
+    @Override
     public Map<K, Collection<V>> asMap() {
         throw new UnsupportedOperationException("This operation is not yet " +
                                                         "supported.");
@@ -156,6 +173,24 @@ public class DefaultConsistentMultimap<K, V>
         complete(asyncMultimap.removeListener(listener));
     }
 
+    private class DefaultIterator<K, V> implements Iterator<Map.Entry<K, V>> {
+        private final AsyncIterator<Map.Entry<K, V>> iterator;
+
+        public DefaultIterator(AsyncIterator<Map.Entry<K, V>> iterator) {
+            this.iterator = iterator;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return complete(iterator.hasNext());
+        }
+
+        @Override
+        public Map.Entry<K, V> next() {
+            return complete(iterator.next());
+        }
+    }
+
     private <T> T complete(CompletableFuture<T> future) {
         try {
             return future.get(operationTimeoutMillis, TimeUnit.MILLISECONDS);
@@ -165,7 +200,7 @@ public class DefaultConsistentMultimap<K, V>
         } catch (TimeoutException e) {
             throw new ConsistentMapException.Timeout();
         } catch (ExecutionException e) {
-            Throwables.propagateIfPossible(e.getCause());
+            Throwables.throwIfUnchecked(e.getCause());
             throw new ConsistentMapException(e.getCause());
         }
     }

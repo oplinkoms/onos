@@ -19,14 +19,6 @@ import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Modified;
-import org.apache.felix.scr.annotations.Property;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
@@ -35,6 +27,7 @@ import org.onosproject.core.GroupId;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.MastershipRole;
+import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.group.DefaultGroup;
 import org.onosproject.net.group.DefaultGroupBucket;
 import org.onosproject.net.group.DefaultGroupDescription;
@@ -56,6 +49,7 @@ import org.onosproject.store.AbstractStore;
 import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.ConsistentMap;
+import org.onosproject.store.service.DistributedPrimitive.Status;
 import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.MapEventListener;
 import org.onosproject.store.service.MultiValuedTimestamp;
@@ -63,8 +57,13 @@ import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.Topic;
 import org.onosproject.store.service.Versioned;
-import org.onosproject.store.service.DistributedPrimitive.Status;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Modified;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -94,41 +93,57 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static org.onlab.util.Tools.get;
 import static org.onlab.util.Tools.groupedThreads;
+import static org.onosproject.store.OsgiPropertyConstants.ALLOW_EXTRANEOUS_GROUPS;
+import static org.onosproject.store.OsgiPropertyConstants.ALLOW_EXTRANEOUS_GROUPS_DEFAULT;
+import static org.onosproject.store.OsgiPropertyConstants.GARBAGE_COLLECT;
+import static org.onosproject.store.OsgiPropertyConstants.GARBAGE_COLLECT_DEFAULT;
+import static org.onosproject.store.OsgiPropertyConstants.GARBAGE_COLLECT_THRESH;
+import static org.onosproject.store.OsgiPropertyConstants.GARBAGE_COLLECT_THRESH_DEFAULT;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Manages inventory of group entries using distributed group stores from the
  * storage service.
  */
-@Component(immediate = true)
-@Service
+@Component(
+        immediate = true,
+        service = GroupStore.class,
+        property = {
+                GARBAGE_COLLECT + ":Boolean=" + GARBAGE_COLLECT_DEFAULT,
+                GARBAGE_COLLECT_THRESH + ":Integer=" + GARBAGE_COLLECT_THRESH_DEFAULT,
+                ALLOW_EXTRANEOUS_GROUPS + ":Boolean=" + ALLOW_EXTRANEOUS_GROUPS_DEFAULT
+        }
+)
 public class DistributedGroupStore
         extends AbstractStore<GroupEvent, GroupStoreDelegate>
         implements GroupStore {
 
     private final Logger log = getLogger(getClass());
 
-    private static final boolean GARBAGE_COLLECT = false;
-    private static final int GC_THRESH = 6;
-    private static final boolean ALLOW_EXTRANEOUS_GROUPS = true;
+    private static final int MAX_FAILED_ATTEMPTS = 3;
 
     private final int dummyId = 0xffffffff;
     private final GroupId dummyGroupId = new GroupId(dummyId);
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ClusterCommunicationService clusterCommunicator;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ClusterService clusterService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected StorageService storageService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected MastershipService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ComponentConfigService cfgService;
+
+    // Guarantees enabling DriverService before enabling GroupStore
+    // (DriverService is used in serializing/de-serializing DefaultGroup)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected DriverService driverService;
 
     private ScheduledExecutorService executor;
     private Consumer<Status> statusChangeListener;
@@ -146,6 +161,7 @@ public class DistributedGroupStore
             extraneousGroupEntriesById = new ConcurrentHashMap<>();
     private ExecutorService messageHandlingExecutor;
     private static final int MESSAGE_HANDLER_THREAD_POOL_SIZE = 1;
+
     private final HashMap<DeviceId, Boolean> deviceAuditStatus = new HashMap<>();
 
     private final AtomicInteger groupIdGen = new AtomicInteger();
@@ -154,17 +170,14 @@ public class DistributedGroupStore
 
     private static Topic<GroupStoreMessage> groupTopic;
 
-    @Property(name = "garbageCollect", boolValue = GARBAGE_COLLECT,
-            label = "Enable group garbage collection")
-    private boolean garbageCollect = GARBAGE_COLLECT;
+    /** Enable group garbage collection. */
+    private boolean garbageCollect = GARBAGE_COLLECT_DEFAULT;
 
-    @Property(name = "gcThresh", intValue = GC_THRESH,
-            label = "Number of rounds for group garbage collection")
-    private int gcThresh = GC_THRESH;
+    /** Number of rounds for group garbage collection. */
+    private int gcThresh = GARBAGE_COLLECT_THRESH_DEFAULT;
 
-    @Property(name = "allowExtraneousGroups", boolValue = ALLOW_EXTRANEOUS_GROUPS,
-            label = "Allow groups in switches not installed by ONOS")
-    private boolean allowExtraneousGroups = ALLOW_EXTRANEOUS_GROUPS;
+    /** Allow groups in switches not installed by ONOS. */
+    private boolean allowExtraneousGroups = ALLOW_EXTRANEOUS_GROUPS_DEFAULT;
 
     @Activate
     public void activate(ComponentContext context) {
@@ -253,18 +266,18 @@ public class DistributedGroupStore
         Dictionary<?, ?> properties = context != null ? context.getProperties() : new Properties();
 
         try {
-            String s = get(properties, "garbageCollect");
-            garbageCollect = isNullOrEmpty(s) ? GARBAGE_COLLECT : Boolean.parseBoolean(s.trim());
+            String s = get(properties, GARBAGE_COLLECT);
+            garbageCollect = isNullOrEmpty(s) ? GARBAGE_COLLECT_DEFAULT : Boolean.parseBoolean(s.trim());
 
-            s = get(properties, "gcThresh");
-            gcThresh = isNullOrEmpty(s) ? GC_THRESH : Integer.parseInt(s.trim());
+            s = get(properties, GARBAGE_COLLECT_THRESH);
+            gcThresh = isNullOrEmpty(s) ? GARBAGE_COLLECT_THRESH_DEFAULT : Integer.parseInt(s.trim());
 
-            s = get(properties, "allowExtraneousGroups");
-            allowExtraneousGroups = isNullOrEmpty(s) ? ALLOW_EXTRANEOUS_GROUPS : Boolean.parseBoolean(s.trim());
+            s = get(properties, ALLOW_EXTRANEOUS_GROUPS);
+            allowExtraneousGroups = isNullOrEmpty(s) ? ALLOW_EXTRANEOUS_GROUPS_DEFAULT : Boolean.parseBoolean(s.trim());
         } catch (Exception e) {
-            gcThresh = GC_THRESH;
-            garbageCollect = GARBAGE_COLLECT;
-            allowExtraneousGroups = ALLOW_EXTRANEOUS_GROUPS;
+            gcThresh = GARBAGE_COLLECT_THRESH_DEFAULT;
+            garbageCollect = GARBAGE_COLLECT_DEFAULT;
+            allowExtraneousGroups = ALLOW_EXTRANEOUS_GROUPS_DEFAULT;
         }
     }
 
@@ -435,7 +448,7 @@ public class DistributedGroupStore
         // Check if a group is existing with the same key
         Group existingGroup = getGroup(groupDesc.deviceId(), groupDesc.appCookie());
         if (existingGroup != null) {
-            log.info("Group already exists with the same key {} in dev:{} with id:0x{}",
+            log.debug("Group already exists with the same key {} in dev:{} with id:0x{}",
                      groupDesc.appCookie(), groupDesc.deviceId(),
                      Integer.toHexString(existingGroup.id().id()));
             return;
@@ -935,6 +948,7 @@ public class DistributedGroupStore
                 existing.setPackets(group.packets());
                 existing.setBytes(group.bytes());
                 existing.setReferenceCount(group.referenceCount());
+                existing.setFailedRetryCount(0);
                 if ((existing.state() == GroupState.PENDING_ADD) ||
                         (existing.state() == GroupState.PENDING_ADD_RETRY)) {
                     log.trace("addOrUpdateGroupEntry: group entry {} in device {} moving from {} to ADDED",
@@ -963,6 +977,7 @@ public class DistributedGroupStore
                              + "happening for a non-existing entry in the map");
         }
 
+        // XXX if map is going to trigger event, is this one needed?
         if (event != null) {
             notifyDelegate(event);
         }
@@ -1076,9 +1091,10 @@ public class DistributedGroupStore
             return;
         }
 
-        log.warn("groupOperationFailed: group operation {} failed"
+        log.warn("groupOperationFailed: group operation {} failed in state {} "
                          + "for group {} in device {} with code {}",
                  operation.opType(),
+                 existing.state(),
                  existing.id(),
                  existing.deviceId(),
                  operation.failureCode());
@@ -1101,9 +1117,26 @@ public class DistributedGroupStore
                         existing.buckets());
             }
         }
+        if (operation.failureCode() == GroupOperation.GroupMsgErrorCode.INVALID_GROUP) {
+            existing.incrFailedRetryCount();
+            if (existing.failedRetryCount() < MAX_FAILED_ATTEMPTS) {
+                log.warn("Group {} programming failed {} of {} times in dev {}, "
+                        + "retrying ..", existing.id(),
+                         existing.failedRetryCount(), MAX_FAILED_ATTEMPTS,
+                         deviceId);
+                return;
+            }
+            log.warn("Group {} programming failed {} of {} times in dev {}, "
+                    + "removing group from store", existing.id(),
+                     existing.failedRetryCount(), MAX_FAILED_ATTEMPTS,
+                     deviceId);
+            // fall through to case
+        }
+
         switch (operation.opType()) {
             case ADD:
-                if (existing.state() == GroupState.PENDING_ADD) {
+                if (existing.state() == GroupState.PENDING_ADD
+                    || existing.state() == GroupState.PENDING_ADD_RETRY) {
                     notifyDelegate(new GroupEvent(Type.GROUP_ADD_FAILED, existing));
                     log.warn("groupOperationFailed: cleaningup "
                                      + "group {} from store in device {}....",
@@ -1410,7 +1443,7 @@ public class DistributedGroupStore
                 }
             }
         }
-        for (Group group : storedGroupEntries) {
+        for (StoredGroupEntry group : storedGroupEntries) {
             // there are groups in the store that aren't in the switch
             log.debug("Group AUDIT: group {} missing in data plane for device {}",
                       group.id(), deviceId);
@@ -1464,7 +1497,7 @@ public class DistributedGroupStore
         return (group.referenceCount() == 0 && group.age() >= gcThresh);
     }
 
-    private void groupMissing(Group group) {
+    private void groupMissing(StoredGroupEntry group) {
         switch (group.state()) {
             case PENDING_DELETE:
                 log.debug("Group {} delete confirmation from device {}",
@@ -1475,19 +1508,13 @@ public class DistributedGroupStore
             case PENDING_ADD:
             case PENDING_ADD_RETRY:
             case PENDING_UPDATE:
-                log.debug("Group {} is in store but not on device {}",
-                          group, group.deviceId());
-                StoredGroupEntry existing =
-                        getStoredGroupEntry(group.deviceId(), group.id());
                 log.debug("groupMissing: group entry {} in device {} moving from {} to PENDING_ADD_RETRY",
-                          existing.id(),
-                          existing.deviceId(),
-                          existing.state());
-                existing.setState(Group.GroupState.PENDING_ADD_RETRY);
+                        group.id(),
+                        group.deviceId(),
+                        group.state());
+                group.setState(Group.GroupState.PENDING_ADD_RETRY);
                 //Re-PUT map entries to trigger map update events
-                getGroupStoreKeyMap().
-                        put(new GroupStoreKeyMapKey(existing.deviceId(),
-                                                    existing.appCookie()), existing);
+                getGroupStoreKeyMap().put(new GroupStoreKeyMapKey(group.deviceId(), group.appCookie()), group);
                 notifyDelegate(new GroupEvent(GroupEvent.Type.GROUP_ADD_REQUESTED,
                                               group));
                 break;

@@ -17,11 +17,13 @@ package org.onosproject.net.optical.config;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
+import java.util.Optional;
 import java.util.Set;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import org.onosproject.net.config.Config;
 import org.onosproject.net.config.NetworkConfigService;
 import org.onosproject.net.config.PortConfigOperator;
 import org.onosproject.net.AnnotationKeys;
@@ -93,7 +95,7 @@ public final class OpticalPortOperator implements PortConfigOperator {
         }
 
         OpticalPortConfig opc = lookupConfig(cp);
-        if (opc == null) {
+        if (descr == null || opc == null) {
             return descr;
         }
 
@@ -116,6 +118,12 @@ public final class OpticalPortOperator implements PortConfigOperator {
         return updateDescription(number, annotations, descr);
     }
 
+    @Override
+    public PortDescription combine(ConnectPoint cp, PortDescription descr, Optional<Config> prevConf) {
+        return combine(cp, descr);
+    }
+
+
     // updates a port description whose port type has not changed.
     /**
      * Updates {@link PortDescription} using specified number and annotations.
@@ -133,11 +141,10 @@ public final class OpticalPortOperator implements PortConfigOperator {
             // result is no-op
             return descr;
         }
-        return new DefaultPortDescription(port,
-                                          descr.isEnabled(),
-                                          descr.type(),
-                                          descr.portSpeed(),
-                                          sa);
+        return DefaultPortDescription.builder(descr)
+                .withPortNumber(port)
+                .annotations(sa)
+                .build();
     }
 
     /**

@@ -19,8 +19,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.google.common.collect.ImmutableSet;
-import org.apache.karaf.shell.commands.Command;
-import org.apache.karaf.shell.commands.Option;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.api.action.Option;
 import org.onosproject.cli.AbstractShellCommand;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.Device;
@@ -36,12 +37,14 @@ import static com.google.common.collect.Lists.newArrayList;
 /**
  * Lists all infrastructure devices.
  */
+@Service
 @Command(scope = "onos", name = "devices",
         description = "Lists all infrastructure devices")
 public class DevicesListCommand extends AbstractShellCommand {
 
     private static final String FMT =
-            "id=%s, available=%s, local-status=%s, role=%s, type=%s, mfr=%s, hw=%s, sw=%s, serial=%s, driver=%s%s";
+            "id=%s, available=%s, local-status=%s, role=%s, type=%s, mfr=%s, hw=%s, sw=%s, " +
+                    "serial=%s, chassis=%s, driver=%s%s";
 
     private static final String FMT_SHORT =
             "id=%s, available=%s, role=%s, type=%s, driver=%s";
@@ -51,7 +54,7 @@ public class DevicesListCommand extends AbstractShellCommand {
     private boolean shortOnly = false;
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         DeviceService deviceService = get(DeviceService.class);
         if (outputJson()) {
             print("%s", json(getSortedDevices(deviceService)));
@@ -106,7 +109,7 @@ public class DevicesListCommand extends AbstractShellCommand {
                       deviceService.localStatus(device.id()),
                       deviceService.getRole(device.id()), device.type(),
                       device.manufacturer(), device.hwVersion(), device.swVersion(),
-                      device.serialNumber(), driver,
+                      device.serialNumber(), device.chassisId(), driver,
                       annotations(device.annotations(), ImmutableSet.of(AnnotationKeys.DRIVER)));
             }
         }

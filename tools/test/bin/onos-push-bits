@@ -28,6 +28,7 @@ set -u
 
 node=${1:-$OCI}
 remote=$ONOS_USER@$node
+remote_with_bracket=$ONOS_USER@[$node]
 SSH_OPTIONS=" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
  -o ControlMaster=auto -o ControlPath=~/.ssh/mux-%r@%h:%p \
  -o ControlPersist=300 "
@@ -69,7 +70,9 @@ if [ "$USE_RSYNC" = "true" ]; then
   rsync -az --delete --checksum --omit-dir-times --progress \
         -e "ssh $SSH_OPTIONS" \
         --rsync-path="mkdir -p /tmp/$ONOS_BITS/ && rsync" \
-        $RSYNC_STAGE/ $remote:/tmp/$ONOS_BITS
+        $RSYNC_STAGE/ [$ONOS_USER@$node]:/tmp/$ONOS_BITS
+                      # rsync < 3.0.6 cannot parse $ONOS_USER@[$node]
+                      #  https://bugzilla.samba.org/show_bug.cgi?id=6067
 
   # create $ONOS_TAR equivalent tar ball remotely
   # TODO hash will not be the same as local one, probably due to different uid, etc.
@@ -84,6 +87,7 @@ else
   if [ -n "$locHash" ] && [ "$locHash" = "$remHash" ]; then
       echo "ONOS bits $ONOS_TAR already up-to-date on $node..."
   else
-      scp -q $ONOS_TAR $remote:/tmp
+      ssh $remote rm -f $ONOS_TAR
+      scp -q $ONOS_TAR $remote_with_bracket:/tmp
   fi
 fi

@@ -23,6 +23,7 @@ import org.dom4j.DocumentHelper;
 import org.dom4j.Element;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DefaultPortDescription;
 import org.onosproject.net.device.DefaultPortStatistics;
 import org.onosproject.net.device.PortDescription;
@@ -182,9 +183,13 @@ public final class HuaweiXmlParser {
 
             DefaultAnnotations annotations = DefaultAnnotations.builder()
                     .set(PORT_NAME, ifName).build();
-            ports.add(new DefaultPortDescription(portNumber(port), isEnabled,
-                                                 COPPER, portSpeed,
-                                                 annotations));
+            ports.add(DefaultPortDescription.builder()
+                      .withPortNumber(portNumber(port))
+                      .isEnabled(isEnabled)
+                      .type(COPPER)
+                      .portSpeed(portSpeed)
+                      .annotations(annotations)
+                      .build());
         }
     }
 
@@ -201,7 +206,7 @@ public final class HuaweiXmlParser {
         if (!portName.contains(DELIMITER)) {
             portInc++;
             port = String.valueOf(portInc) + portName;
-        } else if (portName.indexOf(DELIMITER) > 0) {
+        } else if (portName.contains(DELIMITER)) {
             try {
                 port = portName.substring(
                         portName.lastIndexOf(DELIMITER) + 1);
@@ -257,7 +262,7 @@ public final class HuaweiXmlParser {
                                                           .getText());
 
             return builder.setDeviceId(id)
-                    .setPort(port)
+                    .setPort(PortNumber.portNumber(port))
                     .setPacketsReceived(packetReceived)
                     .setPacketsSent(packetSent)
                     .setBytesReceived(bytesReceived)

@@ -17,9 +17,12 @@ package org.onosproject.cli.net;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import org.apache.karaf.shell.commands.Argument;
-import org.apache.karaf.shell.commands.Command;
-import org.apache.karaf.shell.commands.Option;
+import com.google.common.collect.Lists;
+import org.apache.karaf.shell.api.action.Argument;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.Completion;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.apache.karaf.shell.api.action.Option;
 import org.onosproject.cli.AbstractShellCommand;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
@@ -34,15 +37,16 @@ import org.onosproject.utils.Comparators;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
-
-import static com.google.common.collect.Lists.newArrayList;
+import java.util.stream.Stream;
 
 /**
  * Lists all groups in the system.
  */
+@Service
 @Command(scope = "onos", name = "groups",
         description = "Lists all groups in the system")
 public class GroupsListCommand extends AbstractShellCommand {
@@ -52,14 +56,16 @@ public class GroupsListCommand extends AbstractShellCommand {
     private static final String FORMAT =
             "   id=0x%s, state=%s, type=%s, bytes=%s, packets=%s, appId=%s, referenceCount=%s";
     private static final String BUCKET_FORMAT =
-            "       id=0x%s, bucket=%s, bytes=%s, packets=%s, actions=%s";
+            "       id=0x%s, bucket=%s, bytes=%s, packets=%s, weight=%s, actions=%s";
 
     @Argument(index = 1, name = "uri", description = "Device ID",
             required = false, multiValued = false)
+    @Completion(DeviceIdCompleter.class)
     String uri = null;
 
     @Argument(index = 0, name = "state", description = "Group state",
             required = false, multiValued = false)
+    @Completion(GroupStatusCompleter.class)
     String state;
 
     @Option(name = "-c", aliases = "--count",
@@ -67,9 +73,15 @@ public class GroupsListCommand extends AbstractShellCommand {
             required = false, multiValued = false)
     private boolean countOnly = false;
 
+    @Option(name = "-r", aliases = "--referenced",
+            description = "Print referenced groups only",
+            required = false, multiValued = false)
+    private boolean referencedOnly = false;
+
     @Option(name = "-t", aliases = "--type",
             description = "Print groups with specified type",
             required = false, multiValued = false)
+    @Completion(GroupTypeCompleter.class)
     private String type = null;
 
 
@@ -84,7 +96,7 @@ public class GroupsListCommand extends AbstractShellCommand {
     }
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         DeviceService deviceService = get(DeviceService.class);
         GroupService groupService = get(GroupService.class);
         SortedMap<Device, List<Group>> sortedGroups =
@@ -102,43 +114,30 @@ public class GroupsListCommand extends AbstractShellCommand {
      * @param groupService group service
      * @return sorted device list
      */
-    protected SortedMap<Device, List<Group>>
-        getSortedGroups(DeviceService deviceService,
-                        GroupService groupService) {
-        SortedMap<Device, List<Group>> sortedGroups =
-                new TreeMap<>(Comparators.ELEMENT_COMPARATOR);
-        List<Group> groups;
-        GroupState s = null;
-        if (state != null && !"any".equals(state)) {
-            s = GroupState.valueOf(state.toUpperCase());
-        }
-        Iterable<Device> devices = deviceService.getDevices();
-        if (uri != null) {
-            Device dev = deviceService.getDevice(DeviceId.deviceId(uri));
-            if (dev != null) {
-                devices = Collections.singletonList(dev);
-            }
-        }
+    protected SortedMap<Device, List<Group>> getSortedGroups(DeviceService deviceService, GroupService groupService) {
+        final GroupState groupsState = (this.state != null && !"any".equals(this.state)) ?
+                GroupState.valueOf(this.state.toUpperCase()) :
+                null;
+        final Iterable<Device> devices = Optional.ofNullable(uri)
+                .map(DeviceId::deviceId)
+                .map(deviceService::getDevice)
+                .map(dev -> (Iterable<Device>) Collections.singletonList(dev))
+                .orElse(deviceService.getDevices());
+
+        SortedMap<Device, List<Group>> sortedGroups = new TreeMap<>(Comparators.ELEMENT_COMPARATOR);
         for (Device d : devices) {
-            if (s == null) {
-                groups = newArrayList(groupService.getGroups(d.id()));
-            } else {
-                groups = newArrayList();
-                for (Group g : groupService.getGroups(d.id())) {
-                    if (g.state().equals(s)) {
-                        groups.add(g);
-                    }
-                }
+            Stream<Group> groupStream = Lists.newArrayList(groupService.getGroups(d.id())).stream();
+            if (groupsState != null) {
+                groupStream = groupStream.filter(g -> g.state().equals(groupsState));
             }
-            groups.sort(Comparators.GROUP_COMPARATOR);
-            sortedGroups.put(d, groups);
-        }
-        if (type != null && !"any".equals(type))  {
-            for (Device device : sortedGroups.keySet()) {
-                sortedGroups.put(device, sortedGroups.get(device).stream()
-                        .filter(group -> GroupDescription.Type.valueOf(type.toUpperCase()).equals(group.type()))
-                        .collect(Collectors.toList()));
+            if (referencedOnly) {
+                groupStream = groupStream.filter(g -> g.referenceCount() != 0);
             }
+            if (type != null && !"any".equals(type)) {
+                groupStream = groupStream.filter(g ->
+                        g.type().equals(GroupDescription.Type.valueOf(type.toUpperCase())));
+            }
+            sortedGroups.put(d, groupStream.sorted(Comparators.GROUP_COMPARATOR).collect(Collectors.toList()));
         }
         return sortedGroups;
     }
@@ -156,7 +155,7 @@ public class GroupsListCommand extends AbstractShellCommand {
             int i = 0;
             for (GroupBucket bucket:group.buckets().buckets()) {
                 print(BUCKET_FORMAT, Integer.toHexString(group.id().id()), ++i,
-                      bucket.bytes(), bucket.packets(),
+                      bucket.bytes(), bucket.packets(), bucket.weight(),
                       bucket.treatment().allInstructions());
             }
         }

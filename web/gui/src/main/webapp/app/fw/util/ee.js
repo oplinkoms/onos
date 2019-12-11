@@ -40,7 +40,9 @@
         'hwdoc',
         'acxefcsdgt',
         'pmmn',
-        'ugaryc'
+        'ugaryc',
+        'xcedrcxekzg',
+        'qit'
         // Add more beans...
     ];
 

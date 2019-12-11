@@ -29,10 +29,12 @@ import org.onosproject.core.CoreServiceAdapter;
 import org.onosproject.core.DefaultApplicationId;
 import org.onosproject.event.Event;
 import org.onosproject.net.Device;
+import org.onosproject.openstacknode.api.DefaultOpenstackNode;
 import org.onosproject.openstacknode.api.NodeState;
 import org.onosproject.openstacknode.api.OpenstackNode;
 import org.onosproject.openstacknode.api.OpenstackNodeEvent;
 import org.onosproject.openstacknode.api.OpenstackNodeListener;
+import org.onosproject.openstacknode.api.OpenstackNodeTest;
 import org.onosproject.store.service.TestStorageService;
 
 import java.util.List;
@@ -63,12 +65,14 @@ public class OpenstackNodeManagerTest extends OpenstackNodeTest {
     private static final String COMPUTE_2_HOSTNAME = "compute_2";
     private static final String COMPUTE_3_HOSTNAME = "compute_3";
     private static final String GATEWAY_1_HOSTNAME = "gateway_1";
+    private static final String COMPUTE_1_DUP_INT_HOSTNAME = "compute_1_dup_int";
+
+    private static final String GATEWAY_1_UPLINKPORT = "eth0";
 
     private static final Device COMPUTE_1_INTG_DEVICE = createDevice(1);
     private static final Device COMPUTE_2_INTG_DEVICE = createDevice(2);
     private static final Device COMPUTE_3_INTG_DEVICE = createDevice(3);
     private static final Device GATEWAY_1_INTG_DEVICE = createDevice(4);
-    private static final Device GATEWAY_1_ROUT_DEVICE = createDevice(5);
 
     private static final OpenstackNode COMPUTE_1 = createNode(
             COMPUTE_1_HOSTNAME,
@@ -95,9 +99,23 @@ public class OpenstackNodeManagerTest extends OpenstackNodeTest {
             GATEWAY_1_HOSTNAME,
             OpenstackNode.NodeType.GATEWAY,
             GATEWAY_1_INTG_DEVICE,
-            GATEWAY_1_ROUT_DEVICE,
             IpAddress.valueOf("10.100.0.4"),
+            GATEWAY_1_UPLINKPORT,
             NodeState.COMPLETE
+    );
+    private static final OpenstackNode COMPUTE_1_DUP_INT = createNode(
+            COMPUTE_1_DUP_INT_HOSTNAME,
+            COMPUTE,
+            COMPUTE_1_INTG_DEVICE,
+            IpAddress.valueOf("10.100.0.1"),
+            NodeState.INIT
+    );
+    private static final OpenstackNode COMPUTE_2_DUP_INT = createNode(
+            COMPUTE_2_HOSTNAME,
+            COMPUTE,
+            COMPUTE_3_INTG_DEVICE,
+            IpAddress.valueOf("10.100.0.2"),
+            NodeState.INIT
     );
 
     private final TestOpenstackNodeListener testListener = new TestOpenstackNodeListener();
@@ -118,6 +136,7 @@ public class OpenstackNodeManagerTest extends OpenstackNodeTest {
         osNodeStore.createNode(GATEWAY_1);
 
         target = new org.onosproject.openstacknode.impl.OpenstackNodeManager();
+        target.storageService = new TestStorageService();
         target.coreService = new TestCoreService();
         target.clusterService = new TestClusterService();
         target.leadershipService = new TestLeadershipService();
@@ -170,6 +189,15 @@ public class OpenstackNodeManagerTest extends OpenstackNodeTest {
     }
 
     /**
+     * Checks if creating a node with duplicated integration bridge.
+     */
+    @Test(expected = IllegalArgumentException.class)
+    public void testCreateNodeWithDuplicateIntgBridge() {
+        target.createNode(COMPUTE_1);
+        target.createNode(COMPUTE_1_DUP_INT);
+    }
+
+    /**
      * Checks if removing null node fails with proper exception.
      */
     @Test(expected = IllegalArgumentException.class)
@@ -188,6 +216,14 @@ public class OpenstackNodeManagerTest extends OpenstackNodeTest {
         target.updateNode(updated);
         assertEquals(ERR_NOT_MATCH, updated, target.node(COMPUTE_2_INTG_DEVICE.id()));
         validateEvents(OPENSTACK_NODE_UPDATED);
+    }
+
+    /**
+     * Checks if updating a node with duplicated integration bridge.
+     */
+    @Test(expected = IllegalArgumentException.class)
+    public void testUpdateNodeWithDuplicateIntgBridge() {
+        target.updateNode(COMPUTE_2_DUP_INT);
     }
 
     /**
@@ -227,7 +263,7 @@ public class OpenstackNodeManagerTest extends OpenstackNodeTest {
     /**
      * Checks if updating not existing node fails with proper exception.
      */
-    @Test(expected = IllegalArgumentException.class)
+    @Test(expected = NullPointerException.class)
     public void testUpdateNotExistingNode() {
         target.updateNode(COMPUTE_1);
     }
@@ -288,8 +324,6 @@ public class OpenstackNodeManagerTest extends OpenstackNodeTest {
                 target.node(GATEWAY_1_INTG_DEVICE.id()), GATEWAY_1));
         assertTrue(ERR_NOT_FOUND, Objects.equals(
                 target.node(GATEWAY_1.ovsdb()), GATEWAY_1));
-        assertTrue(ERR_NOT_FOUND, Objects.equals(
-                target.node(GATEWAY_1.routerBridge()), GATEWAY_1));
     }
 
     private void validateEvents(Enum... types) {

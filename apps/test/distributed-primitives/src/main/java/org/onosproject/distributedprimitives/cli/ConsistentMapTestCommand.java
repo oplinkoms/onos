@@ -15,9 +15,11 @@
  */
 package org.onosproject.distributedprimitives.cli;
 
-import org.apache.karaf.shell.commands.Argument;
-import org.apache.karaf.shell.commands.Command;
+import org.apache.karaf.shell.api.action.Argument;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onosproject.cli.AbstractShellCommand;
+import org.onosproject.core.Version;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.ConsistentMap;
 import org.onosproject.store.service.Serializer;
@@ -27,6 +29,7 @@ import org.onosproject.store.service.Versioned;
 /**
  * CLI command to manipulate a distributed value.
  */
+@Service
 @Command(scope = "onos", name = "map-test",
         description = "Manipulate a consistent map")
 public class ConsistentMapTestCommand extends AbstractShellCommand {
@@ -59,12 +62,14 @@ public class ConsistentMapTestCommand extends AbstractShellCommand {
     ConsistentMap<String, String> map;
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         StorageService storageService = get(StorageService.class);
         map = storageService.<String, String>consistentMapBuilder()
-                                    .withName(name)
-                                    .withSerializer(Serializer.using(KryoNamespaces.BASIC))
-                                    .build();
+            .withName(name)
+            .withSerializer(Serializer.using(KryoNamespaces.BASIC))
+            .withVersion(Version.version("1.0.0"))
+            .withCompatibilityFunction((value, version) -> version + ":" + value)
+            .build();
         if ("get".equals(operation)) {
             print(map.get(arg1));
         } else if ("put".equals(operation)) {
@@ -95,6 +100,22 @@ public class ConsistentMapTestCommand extends AbstractShellCommand {
             } else {
                 print("%b", map.replace(arg1, arg2, arg3));
             }
+        } else if ("compatiblePut".equals(operation)) {
+            ConsistentMap<String, String> map = storageService.<String, String>consistentMapBuilder()
+                .withName(name)
+                .withSerializer(Serializer.using(KryoNamespaces.BASIC))
+                .withCompatibilityFunction((value, version) -> version + ":" + value)
+                .withVersion(Version.version("2.0.0"))
+                .build();
+            print(map.put(arg1, arg2));
+        } else if ("compatibleGet".equals(operation)) {
+            ConsistentMap<String, String> map = storageService.<String, String>consistentMapBuilder()
+                .withName(name)
+                .withSerializer(Serializer.using(KryoNamespaces.BASIC))
+                .withCompatibilityFunction((value, version) -> version + ":" + value)
+                .withVersion(Version.version("2.0.0"))
+                .build();
+            print(map.get(arg1));
         }
     }
 

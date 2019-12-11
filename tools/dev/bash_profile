@@ -4,26 +4,19 @@
 
 # Root of the ONOS source tree
 export ONOS_ROOT=${ONOS_ROOT:-~/onos}
+
 # This is a hack to remove symlinks from the ONOS_ROOT path. To be removed when
 # the protobuf buck rules can handle symlinks
 ONOS_ROOT=$(pushd $ONOS_ROOT >/dev/null && pwd -P && popd >/dev/null)
 
-# Setup some environmental context for developers
-if [ -z "${JAVA_HOME}" ]; then
-    if [ -x /usr/libexec/java_home ]; then
-        export JAVA_HOME=$(/usr/libexec/java_home -v 1.8)
-    elif [ -d /usr/lib/jvm/java-8-oracle ]; then
-        export JAVA_HOME="/usr/lib/jvm/java-8-oracle"
-    elif [ -d /usr/lib/jvm/java-8-openjdk-amd64 ]; then
-        export JAVA_HOME="/usr/lib/jvm/java-8-openjdk-amd64"
-    fi
-fi
+# Rely on developer preference for automatically ignited apps
+# Default to drivers and gui2
+export ONOS_APPS=${ONOS_APPS:-drivers,openflow,gui2}
 
 export MAVEN=${MAVEN:-~/Applications/apache-maven-3.3.9}
 
-export KARAF_VERSION=${KARAF_VERSION:-3.0.8}
-export KARAF_ROOT=${KARAF_ROOT:-~/Applications/apache-karaf-$KARAF_VERSION}
-export KARAF_LOG=$KARAF_ROOT/data/log/karaf.log
+# Clean up Karaf environment variables to avoid issues when switching from ONOS 1.x to 2.x
+unset KARAF_VERSION KARAF_ROOT KARAF_LOG
 
 # Setup a path
 export PATH="$PATH:$ONOS_ROOT/tools/dev/bin"
@@ -31,7 +24,7 @@ export PATH="$PATH:$ONOS_ROOT/tools/test/bin:$ONOS_ROOT/tools/test/scenarios/bin
 export RUN_PACK_PATH=${RUN_PACK_PATH:-$ONOS_ROOT/tools/package/runtime/bin}
 export PATH="$RUN_PACK_PATH:$PATH"
 export PATH="$PATH:$ONOS_ROOT/tools/build"
-export PATH="$PATH:$MAVEN/bin:$KARAF_ROOT/bin"
+export PATH="$PATH:$MAVEN/bin"
 
 # Setup cell enviroment
 export ONOS_CELL=${ONOS_CELL:-local}
@@ -50,26 +43,18 @@ export BMV2_MN_PY=$ONOS_ROOT/tools/dev/mininet/bmv2.py
 # Convenience utility to warp to various ONOS source projects
 # e.g. 'o api', 'o dev', 'o'
 function o {
-    cd $(find $ONOS_ROOT/ -type d -and \( -name 'buck-out' -o -name '.git' -o -name 'target' -o -name 'gen-src' -o -name 'src' \) -prune -o -type d | \
+    cd $(find $ONOS_ROOT/ -type d -and \( -name 'bazel-*' -o -name 'buck-out' -o -name '.git' -o -name 'target' -o -name 'gen-src' -o -name 'src' \) -prune -o -type d | \
         egrep "${1:-$ONOS_ROOT}" | awk '{print length($1)"\t"$1}'  | sort -n | cut -f2 | head -n 1)
 }
 
-# Buck (if "buck" is not on the PATH)
-[ -z "$(which buck)" ] && alias buck="onos-buck"
-
 # Short-hand for ONOS build, package and test.
-alias ob='onos-build'
-alias obf='(cd $ONOS_ROOT && onos-buck build onos)'
-alias obd='onos-build-docs'
-alias op='onos-package'
-alias ot='onos-test'
+alias op="SHLVL=1 bazel build //:onos"
+alias ot="bazel run //:buildifier_check && bazel query 'tests(//...)' | grep -v "coverage" | SHLVL=1 xargs bazel test --test_summary=terse --test_output=errors"
+alias ob="op && ot"
+alias obd="SHLVL=1 bazel build //docs:external"
 
-alias deprecatedAlias='echo "This alias has been deprecated."'
-alias obi=deprecatedAlias
-alias obs=deprecatedAlias
-
-alias ok='NO_BUCKD=1 onos-buck run onos-local --'
-alias oh='onos localhost halt'
+alias ok="SHLVL=1 bazel run //:onos-local --"
+alias oh="onos localhost halt"
 
 alias ol='onos-log'
 alias ow='onos-watch'
@@ -78,7 +63,6 @@ alias oi='setPrimaryInstance'
 
 # Short-hand for tailing and searching the ONOS (karaf) log
 alias tl='$ONOS_ROOT/tools/dev/bin/onos-local-log'
-alias gl='grep $KARAF_LOG --colour=auto -E -e '
 
 function filterLocalLog {
     tl | grep --colour=always -E -e "${1-org.onlab|org.onosproject}"
@@ -102,8 +86,6 @@ alias gui='onos-gui'
 
 # Short-hand for 'mvn clean install' for us lazy folk
 alias mci='mvn clean install'
-alias mcis='mvn clean install -DskipTests -Dcheckstyle.skip'
-alias mis='mvn install -DskipTests -Dcheckstyle.skip'
 
 # Git annotated one-line log
 alias gil='git log --oneline --decorate=short'
@@ -140,6 +122,8 @@ function topo {
     *)
         [ ! -f $ONOS_ROOT/tools/test/topos/$1.recipe ] && echo "No such topo recipe: $1" >&2 && return 1
         unset ONOS_TOPO OTD OTL OTH ONOS_DEVICES ONOS_HOSTS
+        ONOS_DEVICES=""
+        ONOS_HOSTS=""
         unset $(env | sed -n 's:\(^OT[DLH][0-9]\{1,\}\)=.*:\1 :g p')
         export ONOS_TOPO=$1
         . $ONOS_ROOT/tools/test/topos/$1.recipe
@@ -170,6 +154,18 @@ function topos {
 # Sets the primary instance to the specified instance number.
 function setPrimaryInstance {
     export ONOS_INSTANCES=$(env | grep 'OC[0-9]*=' | sort | cut -d= -f2)
+
+    if [ -z "${OCC1-}" ]; then
+        aux=/tmp/cell-$$.aux
+        let i=1
+        for n in $ONOS_INSTANCES; do
+            echo "export OCC$i=$n" >> $aux
+            let i=i+1
+        done
+        [ -f $aux ] && source $aux && rm $aux
+    fi
+
+    export ONOS_CORES=$(env | grep 'OCC[0-9]*=' | sort | cut -d= -f2)
     export OCI=$(env | egrep "OC[0-9]+" | sort | egrep OC${1:-1} | cut -d= -f2)
     echo $OCI
 }
@@ -177,32 +173,39 @@ function setPrimaryInstance {
 # Sets minority (OCMI) and majority (OCMA) variables
 function setMinorityMajority {
     nodes=($(env | grep 'OC[0-9]*=' | sort | cut -d= -f2))
-    middle=$(expr "${#nodes[@]}" / "2")
-    index=0
     min=1
     maj=1
-    for node in "${nodes[@]}"; do
-        if [ "$index" -gt "$middle" ]; then
-            export OCMI${min}=${node}
-            min=$(expr $min + 1)
-        else
-            export OCMA${maj}=${node}
-            maj=$(expr $maj + 1)
-        fi
-        index=$(expr $index + 1)
-    done
+    node_count="${#nodes[@]}"
+    if [ $node_count -gt 1 ]; then
+        middle=$(expr "$node_count" / "2")
+        index=0
+        for node in "${nodes[@]}"; do
+            if [ "$index" -gt "$middle" ]; then
+                export OCMI${min}=${node}
+                min=$(expr $min + 1)
+            else
+                export OCMA${maj}=${node}
+                maj=$(expr $maj + 1)
+            fi
+            index=$(expr $index + 1)
+        done
+    fi
 }
 
-# ON.Lab shared test cell warden address
-export CELL_WARDEN="10.254.1.19"
-export CELL_SLAVES="$CELL_WARDEN 10.254.1.18 10.254.1.17"
+# Open Networking Foundation shared test cell warden address
+export CELL_WARDEN="10.192.19.72"
+export CELL_SLAVE_1=$CELL_WARDEN
+export CELL_SLAVE_2="10.192.19.71"
+export CELL_SLAVE_3="10.192.19.70"
+export CELL_SLAVES="$CELL_SLAVE_1 $CELL_SLAVE_2 $CELL_SLAVE_3"
 
 # Clears cell environment
 function clearCell {
-    unset ONOS_CELL ONOS_NIC ONOS_IP ONOS_APPS ONOS_BOOT_FEATURES
-    unset OCI OCN OCT ONOS_INSTANCES ONOS_FEATURES
+    unset ONOS_CELL ONOS_IP ONOS_BOOT_FEATURES
+    unset OCI OCN OCT ONOS_INSTANCES ONOS_CORES ONOS_FEATURES
     unset ONOS_USER ONOS_GROUP ONOS_WEB_USER ONOS_WEB_PASS
     unset $(env | sed -n 's:\(^OC[0-9]\{1,\}\)=.*:\1 :g p')
+    unset $(env | sed -n 's:\(^OCC[0-9]\{1,\}\)=.*:\1 :g p')
     unset $(env | sed -n 's:\(^OCMI[0-9]\{1,\}\)=.*:\1 :g p')
     unset $(env | sed -n 's:\(^OCMA[0-9]\{1,\}\)=.*:\1 :g p')
 }
@@ -216,10 +219,10 @@ function cell {
         clearCell
         aux="/tmp/cell-$$"
         duration=${2:-0}
-        spec=${3:-3+1}
-        spec=${spec/+/%2B}
+        spec=${3:-5+3+1}
+        spec=${spec//+/%2B}
         user=${4:-$(id -un)}
-        hint=${5}
+        hint=${5:-""}
         query="duration=$duration&spec=$spec&user=$user&cellNameHint=$hint"
         curl -sS -X POST "http://$CELL_WARDEN:4321/?$query" -d "$(cat ~/.ssh/id_rsa.pub)" > $aux
         . $aux
@@ -240,10 +243,10 @@ function cell {
 
     "")
         env | egrep "^ONOS_CELL"
-        env | egrep "^OCI"
+        env | egrep "^OCC[0-9]+" | sort
         env | egrep "^OC[0-9]+" | sort
-        env | egrep "^OC[NT]"
-        env | egrep "^ONOS_" | egrep -v 'ONOS_ROOT|ONOS_CELL|ONOS_INSTANCES|ONOS_DEVICES|ONOS_HOSTS' | sort
+        env | egrep "^OC[INT]" | sort
+        env | egrep "^ONOS_" | egrep -v 'ONOS_ROOT|ONOS_CELL|ONOS_INSTANCES|ONOS_CORES|ONOS_DEVICES|ONOS_HOSTS' | sort
         ;;
 
     *)
@@ -260,8 +263,6 @@ function cell {
         topo default >/dev/null
     esac
 }
-
-[ -n "$ONOS_CELL" -a "$ONOS_CELL" != "borrow" ] && cell $ONOS_CELL > /dev/null
 
 # Lists available cells
 function cells {
@@ -329,3 +330,7 @@ alias atttopo='onos-netcfg $OCI $ONOS_ROOT/tools/test/topos/attmpls-cfg.json'
 
 # Load UK topo GEO data
 alias uktopo='onos-netcfg $OCI $ONOS_ROOT/tools/test/topos/uk-cfg.json'
+
+# Mininet command that uses BMv2 instead of OVS
+alias mn-bmv2='sudo -E mn --custom $BMV2_MN_PY --switch onosbmv2 --controller remote,ip=$OCI'
+alias mn-stratum='sudo -E mn --custom $BMV2_MN_PY --switch stratum --controller remote,ip=$OCI'

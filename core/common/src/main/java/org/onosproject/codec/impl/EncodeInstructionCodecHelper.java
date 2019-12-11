@@ -20,12 +20,12 @@ import org.onlab.osgi.DefaultServiceDirectory;
 import org.onlab.osgi.ServiceDirectory;
 import org.onlab.util.HexString;
 import org.onosproject.codec.CodecContext;
-import org.onosproject.net.flow.ExtensionTreatmentCodec;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.OchSignal;
 import org.onosproject.net.OduSignalId;
 import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.flow.ExtensionTreatmentCodec;
 import org.onosproject.net.flow.instructions.Instruction;
 import org.onosproject.net.flow.instructions.Instructions;
 import org.onosproject.net.flow.instructions.L0ModificationInstruction;
@@ -33,6 +33,11 @@ import org.onosproject.net.flow.instructions.L1ModificationInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction;
 import org.onosproject.net.flow.instructions.L3ModificationInstruction;
 import org.onosproject.net.flow.instructions.L4ModificationInstruction;
+import org.onosproject.net.flow.instructions.PiInstruction;
+import org.onosproject.net.pi.runtime.PiAction;
+import org.onosproject.net.pi.runtime.PiActionParam;
+import org.onosproject.net.pi.runtime.PiActionProfileGroupId;
+import org.onosproject.net.pi.runtime.PiActionProfileMemberId;
 import org.slf4j.Logger;
 
 import static org.onlab.util.Tools.toHexWithPrefix;
@@ -42,7 +47,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * JSON encoding of Instructions.
  */
 public final class EncodeInstructionCodecHelper {
-    protected static final Logger log = getLogger(EncodeInstructionCodecHelper.class);
+    private static final Logger log = getLogger(EncodeInstructionCodecHelper.class);
     private final Instruction instruction;
     private final CodecContext context;
 
@@ -240,6 +245,38 @@ public final class EncodeInstructionCodecHelper {
         }
     }
 
+    /**
+     * Encode a protocol-independent instruction.
+     *
+     * @param result json node that the instruction attributes are added to
+     */
+    private void encodePi(ObjectNode result) {
+        PiInstruction piInstruction = (PiInstruction) instruction;
+        result.put(InstructionCodec.SUBTYPE, piInstruction.action().type().name());
+        switch (piInstruction.action().type()) {
+            case ACTION:
+                final PiAction piAction = (PiAction) piInstruction.action();
+                result.put(InstructionCodec.PI_ACTION_ID, piAction.id().id());
+                final ObjectNode jsonActionParams = context.mapper().createObjectNode();
+                for (PiActionParam actionParam : piAction.parameters()) {
+                    jsonActionParams.put(actionParam.id().id(),
+                                         HexString.toHexString(actionParam.value().asArray(), null));
+                }
+                result.set(InstructionCodec.PI_ACTION_PARAMS, jsonActionParams);
+                break;
+            case ACTION_PROFILE_GROUP_ID:
+                final PiActionProfileGroupId groupId = (PiActionProfileGroupId) piInstruction.action();
+                result.put(InstructionCodec.PI_ACTION_PROFILE_GROUP_ID, groupId.id());
+                break;
+            case ACTION_PROFILE_MEMBER_ID:
+                final PiActionProfileMemberId memberId = (PiActionProfileMemberId) piInstruction.action();
+                result.put(InstructionCodec.PI_ACTION_PROFILE_MEMBER_ID, memberId.id());
+                break;
+            default:
+                throw new IllegalArgumentException("Cannot convert protocol-independent subtype of" +
+                                                           piInstruction.action().type().name());
+        }
+    }
 
     /**
      * Encodes a extension instruction.
@@ -334,6 +371,10 @@ public final class EncodeInstructionCodecHelper {
 
             case L4MODIFICATION:
                 encodeL4(result);
+                break;
+
+            case PROTOCOL_INDEPENDENT:
+                encodePi(result);
                 break;
 
             case EXTENSION:

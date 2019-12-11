@@ -20,7 +20,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.glassfish.jersey.server.ChunkedOutput;
 import org.onosproject.rest.AbstractWebResource;
-import org.onosproject.restconf.api.Patch;
+import org.onosproject.restconf.api.MediaTypeRestconf;
+import org.onosproject.restconf.api.RestconfError;
 import org.onosproject.restconf.api.RestconfException;
 import org.onosproject.restconf.api.RestconfRpcOutput;
 import org.onosproject.restconf.api.RestconfService;
@@ -30,6 +31,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
+import javax.ws.rs.PATCH;
 import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
@@ -42,12 +44,14 @@ import javax.ws.rs.core.UriInfo;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 
 import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 import static javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
 import static javax.ws.rs.core.Response.Status.NOT_FOUND;
 import static javax.ws.rs.core.Response.Status.OK;
+import static org.onlab.util.Tools.readTreeFromStream;
 import static org.slf4j.LoggerFactory.getLogger;
 
 
@@ -68,23 +72,20 @@ public class RestconfWebResource extends AbstractWebResource {
     @Context
     UriInfo uriInfo;
 
-    private static final String NOT_EXIST = "Requested data resource does not exist";
-
     private final RestconfService service = get(RestconfService.class);
     private final Logger log = getLogger(getClass());
 
     /**
      * Handles a RESTCONF GET operation against a target data resource. If the
      * operation is successful, the JSON presentation of the resource plus HTTP
-     * status code "200 OK" is returned. Otherwise, HTTP error status code
-     * "400 Bad Request" is returned.
+     * status code "200 OK" is returned. If it is not found then "404 Not Found"
+     * is returned. On internal error "500 Internal Server Error" is returned.
      *
      * @param uriString URI of the data resource.
-     * @return HTTP response
+     * @return HTTP response - 200, 404 or 500
      */
     @GET
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
+    @Produces(MediaTypeRestconf.APPLICATION_YANG_DATA_JSON)
     @Path("data/{identifier : .+}")
     public Response handleGetRequest(@PathParam("identifier") String uriString) {
         log.debug("handleGetRequest: {}", uriString);
@@ -94,13 +95,32 @@ public class RestconfWebResource extends AbstractWebResource {
         try {
             ObjectNode node = service.runGetOperationOnDataResource(uri);
             if (node == null) {
-                return Response.status(NOT_FOUND).entity(NOT_EXIST).build();
+                RestconfError error =
+                        RestconfError.builder(RestconfError.ErrorType.PROTOCOL,
+                                RestconfError.ErrorTag.INVALID_VALUE)
+                        .errorMessage("Resource not found")
+                        .errorPath(uriString)
+                        .errorAppTag("handleGetRequest")
+                        .build();
+                return Response.status(NOT_FOUND)
+                        .entity(RestconfError.wrapErrorAsJson(Arrays.asList(error)))
+                        .build();
             }
-            return ok(node).build();
+            return Response.ok(node)
+            .build();
         } catch (RestconfException e) {
             log.error("ERROR: handleGetRequest: {}", e.getMessage());
             log.debug("Exception in handleGetRequest:", e);
-            return e.getResponse();
+            return Response.status(e.getResponse().getStatus())
+                    .entity(e.toRestconfErrorJson())
+                    .build();
+        } catch (Exception e) {
+            RestconfError error = RestconfError
+                    .builder(RestconfError.ErrorType.APPLICATION, RestconfError.ErrorTag.OPERATION_FAILED)
+                    .errorMessage(e.getMessage()).errorAppTag("handlePostRequest").build();
+            return Response.status(INTERNAL_SERVER_ERROR)
+                    .entity(RestconfError.wrapErrorAsJson(Arrays.asList(error)))
+                    .build();
         }
     }
 
@@ -120,7 +140,7 @@ public class RestconfWebResource extends AbstractWebResource {
      * @return A string data stream over HTTP keep-alive session
      */
     @GET
-    @Produces(MediaType.APPLICATION_JSON)
+    @Produces(MediaTypeRestconf.APPLICATION_YANG_DATA_JSON)
     @Path("streams/{streamId}")
     public ChunkedOutput<String> handleNotificationRegistration(@PathParam("streamId") String streamId,
                                                                 @Context HttpServletRequest request) {
@@ -150,8 +170,8 @@ public class RestconfWebResource extends AbstractWebResource {
      * @return HTTP response
      */
     @POST
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes({MediaTypeRestconf.APPLICATION_YANG_DATA_JSON, MediaType.APPLICATION_JSON})
+    @Produces(MediaTypeRestconf.APPLICATION_YANG_DATA_JSON)
     @Path("data")
     public Response handlePostDatastore(InputStream stream) {
 
@@ -170,8 +190,8 @@ public class RestconfWebResource extends AbstractWebResource {
      * @return HTTP response
      */
     @POST
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes({ MediaTypeRestconf.APPLICATION_YANG_DATA_JSON, MediaType.APPLICATION_JSON })
+    @Produces(MediaTypeRestconf.APPLICATION_YANG_DATA_JSON)
     @Path("data/{identifier : .+}")
     public Response handlePostRequest(@PathParam("identifier") String uriString,
                                       InputStream stream) {
@@ -180,20 +200,29 @@ public class RestconfWebResource extends AbstractWebResource {
         URI uri = uriInfo.getRequestUri();
 
         try {
-            ObjectNode rootNode = (ObjectNode) mapper().readTree(stream);
+            ObjectNode rootNode = readTreeFromStream(mapper(), stream);
 
             service.runPostOperationOnDataResource(uri, rootNode);
             return Response.created(uriInfo.getRequestUri()).build();
         } catch (JsonProcessingException e) {
             log.error("ERROR: handlePostRequest ", e);
-            return Response.status(BAD_REQUEST).build();
+            RestconfError error = RestconfError
+                    .builder(RestconfError.ErrorType.APPLICATION, RestconfError.ErrorTag.MALFORMED_MESSAGE)
+                    .errorMessage(e.getMessage()).errorAppTag("handlePostRequest").build();
+            return Response.status(BAD_REQUEST)
+                    .entity(RestconfError.wrapErrorAsJson(Arrays.asList(error))).build();
         } catch (RestconfException e) {
             log.error("ERROR: handlePostRequest: {}", e.getMessage());
             log.debug("Exception in handlePostRequest:", e);
-            return e.getResponse();
+            return Response.status(e.getResponse().getStatus())
+                    .entity(e.toRestconfErrorJson()).build();
         } catch (IOException ex) {
             log.error("ERROR: handlePostRequest ", ex);
-            return Response.status(INTERNAL_SERVER_ERROR).build();
+            RestconfError error = RestconfError
+                    .builder(RestconfError.ErrorType.APPLICATION, RestconfError.ErrorTag.OPERATION_FAILED)
+                    .errorMessage(ex.getMessage()).errorAppTag("handlePostRequest").build();
+            return Response.status(INTERNAL_SERVER_ERROR)
+                    .entity(RestconfError.wrapErrorAsJson(Arrays.asList(error))).build();
         }
     }
 
@@ -208,15 +237,15 @@ public class RestconfWebResource extends AbstractWebResource {
      * @return RPC output
      */
     @POST
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes({ MediaTypeRestconf.APPLICATION_YANG_DATA_JSON, MediaType.APPLICATION_JSON })
+    @Produces(MediaTypeRestconf.APPLICATION_YANG_DATA_JSON)
     @Path("operations/{rpc : .+}")
     public Response handleRpcRequest(@PathParam("rpc") String rpcName,
                                      InputStream rpcInput,
                                      @Context HttpServletRequest request) {
         URI uri = uriInfo.getRequestUri();
         try {
-            ObjectNode inputNode = (ObjectNode) mapper().readTree(rpcInput);
+            ObjectNode inputNode = readTreeFromStream(mapper(), rpcInput);
             CompletableFuture<RestconfRpcOutput> rpcFuture = service.runRpc(uri,
                                                                             inputNode,
                                                                             request.getRemoteAddr());
@@ -230,14 +259,23 @@ public class RestconfWebResource extends AbstractWebResource {
             return ok(node).build();
         } catch (JsonProcessingException e) {
             log.error("ERROR:  handleRpcRequest", e);
-            return Response.status(BAD_REQUEST).build();
+            RestconfError error = RestconfError
+                    .builder(RestconfError.ErrorType.APPLICATION, RestconfError.ErrorTag.MALFORMED_MESSAGE)
+                    .errorMessage(e.getMessage()).errorAppTag("handleRpcRequest").build();
+            return Response.status(BAD_REQUEST)
+                    .entity(RestconfError.wrapErrorAsJson(Arrays.asList(error))).build();
         } catch (RestconfException e) {
             log.error("ERROR: handleRpcRequest: {}", e.getMessage());
             log.debug("Exception in handleRpcRequest:", e);
-            return e.getResponse();
+            return Response.status(e.getResponse().getStatus())
+                    .entity(e.toRestconfErrorJson()).build();
         } catch (Exception e) {
             log.error("ERROR: handleRpcRequest ", e);
-            return Response.status(INTERNAL_SERVER_ERROR).build();
+            RestconfError error = RestconfError
+                    .builder(RestconfError.ErrorType.APPLICATION, RestconfError.ErrorTag.OPERATION_FAILED)
+                    .errorMessage(e.getMessage()).errorAppTag("handleRpcRequest").build();
+            return Response.status(INTERNAL_SERVER_ERROR)
+                    .entity(RestconfError.wrapErrorAsJson(Arrays.asList(error))).build();
         }
     }
 
@@ -256,8 +294,8 @@ public class RestconfWebResource extends AbstractWebResource {
      * @return HTTP response
      */
     @PUT
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes({ MediaTypeRestconf.APPLICATION_YANG_DATA_JSON, MediaType.APPLICATION_JSON })
+    @Produces(MediaTypeRestconf.APPLICATION_YANG_DATA_JSON)
     @Path("data/{identifier : .+}")
     public Response handlePutRequest(@PathParam("identifier") String uriString,
                                      InputStream stream) {
@@ -266,20 +304,29 @@ public class RestconfWebResource extends AbstractWebResource {
         URI uri = uriInfo.getRequestUri();
 
         try {
-            ObjectNode rootNode = (ObjectNode) mapper().readTree(stream);
+            ObjectNode rootNode = readTreeFromStream(mapper(), stream);
 
             service.runPutOperationOnDataResource(uri, rootNode);
             return Response.created(uriInfo.getRequestUri()).build();
         } catch (JsonProcessingException e) {
             log.error("ERROR: handlePutRequest ", e);
-            return Response.status(BAD_REQUEST).build();
+            RestconfError error = RestconfError
+                    .builder(RestconfError.ErrorType.APPLICATION, RestconfError.ErrorTag.MALFORMED_MESSAGE)
+                    .errorMessage(e.getMessage()).errorAppTag("handlePutRequest").build();
+            return Response.status(BAD_REQUEST)
+                    .entity(RestconfError.wrapErrorAsJson(Arrays.asList(error))).build();
         } catch (RestconfException e) {
             log.error("ERROR: handlePutRequest: {}", e.getMessage());
             log.debug("Exception in handlePutRequest:", e);
-            return e.getResponse();
+            return Response.status(e.getResponse().getStatus())
+                    .entity(e.toRestconfErrorJson()).build();
         } catch (IOException ex) {
             log.error("ERROR: handlePutRequest ", ex);
-            return Response.status(INTERNAL_SERVER_ERROR).build();
+            RestconfError error = RestconfError
+                    .builder(RestconfError.ErrorType.APPLICATION, RestconfError.ErrorTag.OPERATION_FAILED)
+                    .errorMessage(ex.getMessage()).errorAppTag("handlePutRequest").build();
+            return Response.status(INTERNAL_SERVER_ERROR)
+                    .entity(RestconfError.wrapErrorAsJson(Arrays.asList(error))).build();
         }
     }
 
@@ -294,8 +341,7 @@ public class RestconfWebResource extends AbstractWebResource {
      * @return HTTP response
      */
     @DELETE
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
+    @Produces(MediaTypeRestconf.APPLICATION_YANG_DATA_JSON)
     @Path("data/{identifier : .+}")
     public Response handleDeleteRequest(@PathParam("identifier") String uriString) {
         log.debug("handleDeleteRequest: {}", uriString);
@@ -308,7 +354,8 @@ public class RestconfWebResource extends AbstractWebResource {
         } catch (RestconfException e) {
             log.error("ERROR: handleDeleteRequest: {}", e.getMessage());
             log.debug("Exception in handleDeleteRequest:", e);
-            return e.getResponse();
+            return Response.status(e.getResponse().getStatus())
+                    .entity(e.toRestconfErrorJson()).build();
         }
     }
 
@@ -322,9 +369,9 @@ public class RestconfWebResource extends AbstractWebResource {
      * @param stream    Input JSON object
      * @return HTTP response
      */
-    @Patch
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
+    @PATCH
+    @Consumes({ MediaTypeRestconf.APPLICATION_YANG_DATA_JSON, MediaType.APPLICATION_JSON })
+    @Produces(MediaTypeRestconf.APPLICATION_YANG_DATA_JSON)
     @Path("data/{identifier : .+}")
     public Response handlePatchRequest(@PathParam("identifier") String uriString,
                                        InputStream stream) {
@@ -334,20 +381,29 @@ public class RestconfWebResource extends AbstractWebResource {
         URI uri = uriInfo.getRequestUri();
 
         try {
-            ObjectNode rootNode = (ObjectNode) mapper().readTree(stream);
+            ObjectNode rootNode = readTreeFromStream(mapper(), stream);
 
             service.runPatchOperationOnDataResource(uri, rootNode);
             return Response.ok().build();
         } catch (JsonProcessingException e) {
             log.error("ERROR: handlePatchRequest ", e);
-            return Response.status(BAD_REQUEST).build();
+            RestconfError error = RestconfError
+                    .builder(RestconfError.ErrorType.APPLICATION, RestconfError.ErrorTag.MALFORMED_MESSAGE)
+                    .errorMessage(e.getMessage()).errorAppTag("handlePatchRequest").build();
+            return Response.status(BAD_REQUEST)
+                    .entity(RestconfError.wrapErrorAsJson(Arrays.asList(error))).build();
         } catch (RestconfException e) {
             log.error("ERROR: handlePatchRequest: {}", e.getMessage());
             log.debug("Exception in handlePatchRequest:", e);
-            return e.getResponse();
+            return Response.status(e.getResponse().getStatus())
+                    .entity(e.toRestconfErrorJson()).build();
         } catch (IOException ex) {
             log.error("ERROR: handlePatchRequest ", ex);
-            return Response.status(INTERNAL_SERVER_ERROR).build();
+            RestconfError error = RestconfError
+                    .builder(RestconfError.ErrorType.APPLICATION, RestconfError.ErrorTag.OPERATION_FAILED)
+                    .errorMessage(ex.getMessage()).errorAppTag("handlePatchRequest").build();
+            return Response.status(INTERNAL_SERVER_ERROR)
+                    .entity(RestconfError.wrapErrorAsJson(Arrays.asList(error))).build();
         }
     }
 
@@ -361,9 +417,9 @@ public class RestconfWebResource extends AbstractWebResource {
      * @param stream Input JSON object
      * @return HTTP response
      */
-    @Patch
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
+    @PATCH
+    @Consumes({ MediaTypeRestconf.APPLICATION_YANG_DATA_JSON, MediaType.APPLICATION_JSON })
+    @Produces(MediaTypeRestconf.APPLICATION_YANG_DATA_JSON)
     @Path("data")
     public Response handlePatchDatastore(InputStream stream) {
         log.debug("handlePatchDatastore");

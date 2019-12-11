@@ -28,8 +28,6 @@ import org.onosproject.net.pi.model.PiActionParamId;
 import org.onosproject.net.pi.model.PiActionParamModel;
 import org.onosproject.net.pi.model.PiActionProfileId;
 import org.onosproject.net.pi.model.PiActionProfileModel;
-import org.onosproject.net.pi.model.PiControlMetadataId;
-import org.onosproject.net.pi.model.PiControlMetadataModel;
 import org.onosproject.net.pi.model.PiCounterId;
 import org.onosproject.net.pi.model.PiCounterModel;
 import org.onosproject.net.pi.model.PiCounterType;
@@ -39,25 +37,31 @@ import org.onosproject.net.pi.model.PiMatchType;
 import org.onosproject.net.pi.model.PiMeterId;
 import org.onosproject.net.pi.model.PiMeterModel;
 import org.onosproject.net.pi.model.PiMeterType;
+import org.onosproject.net.pi.model.PiPacketMetadataId;
+import org.onosproject.net.pi.model.PiPacketMetadataModel;
 import org.onosproject.net.pi.model.PiPacketOperationModel;
 import org.onosproject.net.pi.model.PiPacketOperationType;
 import org.onosproject.net.pi.model.PiPipelineModel;
+import org.onosproject.net.pi.model.PiRegisterId;
+import org.onosproject.net.pi.model.PiRegisterModel;
 import org.onosproject.net.pi.model.PiTableId;
 import org.onosproject.net.pi.model.PiTableModel;
 import org.onosproject.net.pi.model.PiTableType;
-import p4.config.P4InfoOuterClass.Action;
-import p4.config.P4InfoOuterClass.ActionProfile;
-import p4.config.P4InfoOuterClass.ActionRef;
-import p4.config.P4InfoOuterClass.ControllerPacketMetadata;
-import p4.config.P4InfoOuterClass.Counter;
-import p4.config.P4InfoOuterClass.CounterSpec;
-import p4.config.P4InfoOuterClass.DirectCounter;
-import p4.config.P4InfoOuterClass.DirectMeter;
-import p4.config.P4InfoOuterClass.MatchField;
-import p4.config.P4InfoOuterClass.Meter;
-import p4.config.P4InfoOuterClass.MeterSpec;
-import p4.config.P4InfoOuterClass.P4Info;
-import p4.config.P4InfoOuterClass.Table;
+import org.slf4j.Logger;
+import p4.config.v1.P4InfoOuterClass;
+import p4.config.v1.P4InfoOuterClass.Action;
+import p4.config.v1.P4InfoOuterClass.ActionProfile;
+import p4.config.v1.P4InfoOuterClass.ActionRef;
+import p4.config.v1.P4InfoOuterClass.ControllerPacketMetadata;
+import p4.config.v1.P4InfoOuterClass.Counter;
+import p4.config.v1.P4InfoOuterClass.CounterSpec;
+import p4.config.v1.P4InfoOuterClass.DirectCounter;
+import p4.config.v1.P4InfoOuterClass.DirectMeter;
+import p4.config.v1.P4InfoOuterClass.MatchField;
+import p4.config.v1.P4InfoOuterClass.Meter;
+import p4.config.v1.P4InfoOuterClass.MeterSpec;
+import p4.config.v1.P4InfoOuterClass.P4Info;
+import p4.config.v1.P4InfoOuterClass.Table;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -68,11 +72,14 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Parser of P4Info to PI pipeline model instances.
  */
 public final class P4InfoParser {
+
+    private static final Logger log = getLogger(P4InfoParser.class);
 
     private static final String PACKET_IN = "packet_in";
     private static final String PACKET_OUT = "packet_out";
@@ -100,7 +107,6 @@ public final class P4InfoParser {
 
     private static final Map<MatchField.MatchType, PiMatchType> MATCH_TYPE_MAP =
             new ImmutableMap.Builder<MatchField.MatchType, PiMatchType>()
-                    .put(MatchField.MatchType.VALID, PiMatchType.VALID)
                     .put(MatchField.MatchType.EXACT, PiMatchType.EXACT)
                     .put(MatchField.MatchType.LPM, PiMatchType.LPM)
                     .put(MatchField.MatchType.TERNARY, PiMatchType.TERNARY)
@@ -141,6 +147,10 @@ public final class P4InfoParser {
         final Map<Integer, PiMeterModel> meterMap = Maps.newHashMap();
         meterMap.putAll(parseMeters(p4info));
         meterMap.putAll(parseDirectMeters(p4info));
+
+        // Registers.
+        final Map<Integer, PiRegisterModel> registerMap = Maps.newHashMap();
+        registerMap.putAll(parseRegisters(p4info));
 
         // Action profiles.
         final Map<Integer, PiActionProfileModel> actProfileMap = parseActionProfiles(p4info);
@@ -204,11 +214,12 @@ public final class P4InfoParser {
                             tableMsg.getSize(),
                             tableCounterMapBuilder.build(),
                             tableMeterMapBuilder.build(),
-                            tableMsg.getWithEntryTimeout(),
+                            !tableMsg.getIdleTimeoutBehavior()
+                                    .equals(Table.IdleTimeoutBehavior.NO_TIMEOUT),
                             tableFieldMapBuilder.build(),
                             tableActionMapBuilder.build(),
                             actionMap.get(tableMsg.getConstDefaultActionId()),
-                            tableMsg.getConstDefaultActionHasMutableParams()));
+                            tableMsg.getIsConstTable()));
 
         }
 
@@ -219,6 +230,9 @@ public final class P4InfoParser {
         ImmutableMap<PiMeterId, PiMeterModel> meterImmMap = ImmutableMap.copyOf(
                 meterMap.values().stream()
                         .collect(Collectors.toMap(PiMeterModel::id, m -> m)));
+        ImmutableMap<PiRegisterId, PiRegisterModel> registerImmMap = ImmutableMap.copyOf(
+                registerMap.values().stream()
+                        .collect(Collectors.toMap(PiRegisterModel::id, r -> r)));
         ImmutableMap<PiActionProfileId, PiActionProfileModel> actProfileImmMap = ImmutableMap.copyOf(
                 actProfileMap.values().stream()
                         .collect(Collectors.toMap(PiActionProfileModel::id, a -> a)));
@@ -227,6 +241,7 @@ public final class P4InfoParser {
                 tableImmMapBuilder.build(),
                 counterImmMap,
                 meterImmMap,
+                registerImmMap,
                 actProfileImmMap,
                 ImmutableMap.copyOf(pktOpMap));
     }
@@ -296,6 +311,16 @@ public final class P4InfoParser {
         return meterMap;
     }
 
+    private static Map<Integer, PiRegisterModel> parseRegisters(P4Info p4info) {
+        final Map<Integer, PiRegisterModel> registerMap = Maps.newHashMap();
+        for (P4InfoOuterClass.Register registerMsg : p4info.getRegistersList()) {
+            registerMap.put(registerMsg.getPreamble().getId(),
+                            new P4RegisterModel(PiRegisterId.of(registerMsg.getPreamble().getName()),
+                                                registerMsg.getSize()));
+        }
+        return registerMap;
+    }
+
     private static Map<Integer, PiActionProfileModel> parseActionProfiles(P4Info p4info)
             throws P4InfoParserException {
         final Map<Integer, PiActionProfileModel> actProfileMap = Maps.newHashMap();
@@ -304,13 +329,34 @@ public final class P4InfoParser {
             for (int tableId : actProfileMsg.getTableIdsList()) {
                 tableIdSetBuilder.add(PiTableId.of(getTableName(tableId, p4info)));
             }
+            // TODO: we should copy all annotations to model classes for later
+            //  use in the PI framework.
+            // This is a temporary workaround to the inability of p4c to
+            // correctly interpret P4Runtime-defined max_group_size annotation:
+            // https://s3-us-west-2.amazonaws.com/p4runtime/docs/master/
+            // P4Runtime-Spec.html#sec-p4info-action-profile
+            final String maxSizeAnnString = findAnnotation(
+                    "max_group_size", actProfileMsg.getPreamble());
+            final int maxSizeAnn = maxSizeAnnString != null
+                    ? Integer.valueOf(maxSizeAnnString) : 0;
+            final int maxGroupSize;
+            if (actProfileMsg.getMaxGroupSize() == 0 && maxSizeAnn != 0) {
+                log.warn("Found valid 'max_group_size' annotation for " +
+                                 "ActionProfile {}, using that...",
+                         actProfileMsg.getPreamble().getName());
+                maxGroupSize = maxSizeAnn;
+            } else {
+                maxGroupSize = actProfileMsg.getMaxGroupSize();
+            }
+
             actProfileMap.put(
                     actProfileMsg.getPreamble().getId(),
                     new P4ActionProfileModel(
                             PiActionProfileId.of(actProfileMsg.getPreamble().getName()),
                             tableIdSetBuilder.build(),
                             actProfileMsg.getWithSelector(),
-                            actProfileMsg.getSize()));
+                            actProfileMsg.getSize(),
+                            maxGroupSize));
         }
         return actProfileMap;
     }
@@ -340,10 +386,10 @@ public final class P4InfoParser {
             throws P4InfoParserException {
         final Map<PiPacketOperationType, PiPacketOperationModel> packetOpMap = Maps.newHashMap();
         for (ControllerPacketMetadata ctrlPktMetaMsg : p4info.getControllerPacketMetadataList()) {
-            final ImmutableList.Builder<PiControlMetadataModel> metadataListBuilder =
+            final ImmutableList.Builder<PiPacketMetadataModel> metadataListBuilder =
                     ImmutableList.builder();
             ctrlPktMetaMsg.getMetadataList().forEach(metadataMsg -> metadataListBuilder.add(
-                    new P4ControlMetadataModel(PiControlMetadataId.of(metadataMsg.getName()),
+                    new P4PacketMetadataModel(PiPacketMetadataId.of(metadataMsg.getName()),
                                                metadataMsg.getBitwidth())));
             packetOpMap.put(
                     mapPacketOpType(ctrlPktMetaMsg.getPreamble().getName()),
@@ -408,5 +454,14 @@ public final class P4InfoParser {
                     "Unrecognized match field type '%s'", type));
         }
         return MATCH_TYPE_MAP.get(type);
+    }
+
+    private static String findAnnotation(String name, P4InfoOuterClass.Preamble preamble) {
+        return preamble.getAnnotationsList().stream()
+                .filter(a -> a.startsWith("@" + name))
+                // e.g. @my_annotaion(value)
+                .map(a -> a.substring(name.length() + 2, a.length() - 1))
+                .findFirst()
+                .orElse(null);
     }
 }

@@ -17,15 +17,19 @@
 package org.onosproject.snmp;
 
 import com.btisystems.pronx.ems.core.snmp.ISnmpSession;
-import org.onosproject.incubator.net.faultmanagement.alarm.DefaultAlarm;
+import com.google.common.annotations.Beta;
+
+import org.onosproject.alarm.DefaultAlarm;
 import org.onosproject.net.DeviceId;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.Collection;
 
 /**
  * Snmp Controller.
  */
+@Beta
 public interface SnmpController {
 
     /**
@@ -42,17 +46,25 @@ public interface SnmpController {
     SnmpDevice getDevice(DeviceId deviceId);
 
     /**
+     * Gets a device for a specific host address.
+     *
+     * @param uri URI of the device
+     * @return SnmpDevice for given deviceId
+     */
+    SnmpDevice getDevice(URI uri);
+
+    /**
      * Removes a specific device.
      * @param deviceId device id of the device to be removed
      */
     void removeDevice(DeviceId deviceId);
 
     /**
-     * Add a device with a specific DeviceId.
-     * @param deviceId deviceId of the device
+     * Add a snmp device.
+     *
      * @param device device to add to this controller
      */
-    void addDevice(DeviceId deviceId, SnmpDevice device);
+    void addDevice(SnmpDevice device);
 
     /**
      * Gets an Instance of ISnmpSession for a specific device.
@@ -60,7 +72,9 @@ public interface SnmpController {
      * @param deviceId device to retrieve the session for.
      * @return ISnmp session.
      * @throws IOException if the session can't be established.
+     * @deprecated 1.14.0 moved to snmp4j
      */
+    @Deprecated
     ISnmpSession getSession(DeviceId deviceId) throws IOException;
 
     /**
@@ -70,4 +84,6 @@ public interface SnmpController {
      * @return default alarm error
      */
     DefaultAlarm buildWalkFailedAlarm(DeviceId deviceId);
+
+
 }

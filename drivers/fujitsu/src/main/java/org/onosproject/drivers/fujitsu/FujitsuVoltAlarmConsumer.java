@@ -19,10 +19,11 @@ package org.onosproject.drivers.fujitsu;
 import com.google.common.collect.ImmutableList;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.onosproject.drivers.utilities.XmlConfigParser;
-import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmConsumer;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmEntityId;
-import org.onosproject.incubator.net.faultmanagement.alarm.DefaultAlarm;
+import org.onosproject.alarm.Alarm;
+import org.onosproject.alarm.AlarmConsumer;
+import org.onosproject.alarm.AlarmEntityId;
+import org.onosproject.alarm.AlarmId;
+import org.onosproject.alarm.DefaultAlarm;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.net.driver.DriverHandler;
@@ -42,7 +43,7 @@ import java.util.TimeZone;
 import java.nio.charset.StandardCharsets;
 import java.io.ByteArrayInputStream;
 
-import static org.onosproject.incubator.net.faultmanagement.alarm.Alarm.SeverityLevel;
+import static org.onosproject.alarm.Alarm.SeverityLevel;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.drivers.fujitsu.FujitsuVoltXmlUtility.*;
 import static org.slf4j.LoggerFactory.getLogger;
@@ -170,7 +171,7 @@ public class FujitsuVoltAlarmConsumer extends AbstractHandlerBehaviour implement
                     List<HierarchicalConfiguration> idFields =
                             child.configurationsAt(RESOURCE_ID);
                     if (idFields.isEmpty()) {
-                        log.error("{} does not exsit: SQ={}, TYPE={}, SEV={}, CLEARED={}",
+                        log.error("{} does not exist: SQ={}, TYPE={}, SEV={}, CLEARED={}",
                                 RESOURCE_ID, seqNum, alertType, severity, cleared);
                         continue;
                     }
@@ -190,6 +191,7 @@ public class FujitsuVoltAlarmConsumer extends AbstractHandlerBehaviour implement
                         log.warn("Unknown severity: {}", severity);
                     }
                     DefaultAlarm.Builder alarmBuilder = new DefaultAlarm.Builder(
+                            AlarmId.alarmId(ncDeviceId, Long.toString(timeRaised)),
                             ncDeviceId, alertType.toUpperCase(), alarmLevel, timeRaised)
                             .forSource(AlarmEntityId.alarmEntityId(alarmSrc));
                     alarms.add(alarmBuilder.build());
@@ -271,7 +273,7 @@ public class FujitsuVoltAlarmConsumer extends AbstractHandlerBehaviour implement
         List<HierarchicalConfiguration> timeFields =
                 cfg.configurationsAt(ALERT_TIME);
         if (timeFields.isEmpty()) {
-            log.debug("{} does not exsit", ALERT_TIME);
+            log.debug("{} does not exist", ALERT_TIME);
         } else {
             for (HierarchicalConfiguration child : timeFields) {
                 strDate = child.getString(DATE);
@@ -286,7 +288,7 @@ public class FujitsuVoltAlarmConsumer extends AbstractHandlerBehaviour implement
                         log.error("Cannot parse exception {} {} {}", strDate, strTime, e);
                     }
                 } else {
-                    log.error("{} or {} does not exsit", DATE, TIME);
+                    log.error("{} or {} does not exist", DATE, TIME);
                 }
             }
         }

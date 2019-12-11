@@ -15,6 +15,12 @@
  */
 package org.onosproject.net.config.basics;
 
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.google.common.collect.ImmutableSet;
+
+import java.util.Objects;
+import java.util.Set;
+
 /**
  * Basic configuration for network elements, e.g. devices, hosts. Such elements
  * can have a friendly name, geo-coordinates (or grid-coordinates),
@@ -68,13 +74,20 @@ public abstract class BasicElementConfig<S> extends AllowedEntityConfig<S> {
     protected static final String OWNER = "owner";
 
     /**
+     * Key for roles.
+     */
+    protected static final String ROLES = "roles";
+
+    /**
      * Threshold for detecting double value is zero.
      */
     protected static final double ZERO_THRESHOLD = Double.MIN_VALUE * 2.0;
 
     private static final double DEFAULT_COORD = 0.0;
-    private static final String LOC_TYPE_GEO = "geo";
-    private static final String LOC_TYPE_GRID = "grid";
+
+    public static final String LOC_TYPE_GEO = "geo";
+    public static final String LOC_TYPE_GRID = "grid";
+    public static final String LOC_TYPE_NONE = "none";
 
     private static final int NAME_MAX_LENGTH = 256;
     private static final int UI_TYPE_MAX_LENGTH = 128;
@@ -126,23 +139,29 @@ public abstract class BasicElementConfig<S> extends AllowedEntityConfig<S> {
 
     /**
      * Returns the location type (geo or grid) for the element in
-     * the Topology View. If not set, returns the default of "geo".
+     * the Topology View. If not set, the type will be determined implicitly
+     * by latitude being set ("geo") or gridX being set ("grid");
+     * otherwise returns the default of "none".
      *
      * @return location type (string)
      */
     public String locType() {
-        return get(LOC_TYPE, LOC_TYPE_GEO);
+        String l = get(LATITUDE, null);
+        String x = get(GRID_X, null);
+        String def = l != null ? LOC_TYPE_GEO : (x != null ? LOC_TYPE_GRID : LOC_TYPE_NONE);
+        return get(LOC_TYPE, def);
     }
 
     /**
      * Sets the location type (geo or grid) for the element in
-     * the Topology View. If null is passsed, it will default to "geo".
+     * the Topology View. If null is passed, it will default to "geo".
      *
      * @param locType the UI type; null for default
      * @return self
      */
     public BasicElementConfig locType(String locType) {
-        String lt = LOC_TYPE_GRID.equals(locType) ? LOC_TYPE_GRID : LOC_TYPE_GEO;
+        String lt = Objects.equals(LOC_TYPE_GRID, locType) || Objects.equals(LOC_TYPE_GEO, locType)
+                ? locType : LOC_TYPE_NONE;
         return (BasicElementConfig) setOrClear(LOC_TYPE, lt);
     }
 
@@ -202,16 +221,12 @@ public abstract class BasicElementConfig<S> extends AllowedEntityConfig<S> {
 
     /**
      * Returns true if the grid coordinates (gridY and gridX) are set on
-     * this element; false otherwise.
-     * <p>
-     * It is assumed that elements will not be placed at {@code (0,0)}.
-     * If you really need to position the element there, consider setting the
-     * coordinates to something like {@code (0.000001, 0.000001)} instead.
+     * this element, i.e. if locType is set to 'grid'; false otherwise.
      *
      * @return true if grid coordinates are set; false otherwise.
      */
     public boolean gridCoordsSet() {
-        return !doubleIsZero(gridY()) || !doubleIsZero(gridX());
+        return Objects.equals(locType(), LOC_TYPE_GRID);
     }
 
     /**
@@ -288,6 +303,30 @@ public abstract class BasicElementConfig<S> extends AllowedEntityConfig<S> {
      */
     public BasicElementConfig owner(String owner) {
         return (BasicElementConfig) setOrClear(OWNER, owner);
+    }
+
+    /**
+     * Returns set of roles assigned to the element.
+     *
+     * @return set of roles
+     */
+    public Set<String> roles() {
+        ImmutableSet.Builder<String> roles = ImmutableSet.builder();
+        if (object.has(ROLES)) {
+            ArrayNode roleNodes = (ArrayNode) object.path(ROLES);
+            roleNodes.forEach(r -> roles.add(r.asText()));
+        }
+        return roles.build();
+    }
+
+    /**
+     * Sets the roles of the element.
+     *
+     * @param roles new roles; null to clear
+     * @return self
+     */
+    public BasicElementConfig roles(Set<String> roles) {
+        return (BasicElementConfig) setOrClear(ROLES, roles);
     }
 
     @Override

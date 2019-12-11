@@ -15,6 +15,7 @@
  */
 package org.onosproject.net;
 
+import org.onlab.packet.EthType;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
@@ -64,19 +65,52 @@ public interface Host extends Element {
     HostLocation location();
 
     /**
-     * Returns all host locations where the host attaches to the network edge.
+     * Returns host locations where the host attaches to the network edge.
      *
-     * @return all host locations
+     * @return host locations
      */
     Set<HostLocation> locations();
 
     /**
+     * Returns host auxiliary locations, which could be useful for app operations in addition to the attach points.
+     *
+     * @return auxiliary locations, or null if unspecified
+     */
+    Set<HostLocation> auxLocations();
+
+    /**
      * Returns true if configured by NetworkConfiguration.
+     *
      * @return configured/learnt dynamically
      */
     default boolean configured() {
         return false;
     }
+
+    /**
+     * Returns the inner VLAN ID tied to this host.
+     *
+     * @return VLAN ID value; VlanId.NONE if only one VLAN ID is tied to this host
+     */
+    default VlanId innerVlan() {
+        return VlanId.NONE;
+    }
+
+    /**
+     * Returns the TPID of the outermost VLAN associated with this host.
+     *
+     * @return TPID of the outermost VLAN header
+     */
+    default EthType tpid() {
+        return EthType.EtherType.UNKNOWN.ethType();
+    }
     // TODO: explore capturing list of recent locations to aid in mobility
+
+    /**
+     * Returns the state of host whether it is in suspended state(offending host due to frequent movement.).
+     *
+     * @return state true if suspended else false.
+     */
+    boolean suspended();
 
 }

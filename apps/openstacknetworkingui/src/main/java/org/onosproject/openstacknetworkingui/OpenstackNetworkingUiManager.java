@@ -15,21 +15,14 @@
  */
 package org.onosproject.openstacknetworkingui;
 
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Streams;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.Link.Type;
 import org.onosproject.net.Port;
 import org.onosproject.net.device.DeviceService;
-import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.link.DefaultLinkDescription;
 import org.onosproject.net.link.LinkDescription;
 import org.onosproject.net.link.LinkStore;
@@ -40,9 +33,13 @@ import org.onosproject.ui.UiMessageHandlerFactory;
 import org.onosproject.ui.UiTopoOverlayFactory;
 import org.onosproject.ui.UiView;
 import org.onosproject.ui.UiViewHidden;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.onosproject.net.Link.Type;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -50,34 +47,32 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.onosproject.net.Device.Type.SWITCH;
+
 /**
  * Implementation of OpenStack Networking UI service.
  */
-@Service
-@Component(immediate = true)
+@Component(immediate = true, service = OpenstackNetworkingUiService.class)
 public class OpenstackNetworkingUiManager implements OpenstackNetworkingUiService {
 
     private static final ClassLoader CL = OpenstackNetworkingUiManager.class.getClassLoader();
     private static final String VIEW_ID = "sonaTopov";
     private static final String PORT_NAME = "portName";
     private static final String VXLAN = "vxlan";
-    private static final String OVS = "ovs";
     private static final String APP_ID = "org.onosproject.openstacknetworkingui";
     private static final String SONA_GUI = "sonagui";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected UiExtensionService uiExtensionService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceService deviceService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected DriverService driverService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected LinkStore linkStore;
+
     Set<Device> vDevices;
 
     private OpenstackNetworkingUiMessageHandler messageHandler = new OpenstackNetworkingUiMessageHandler();
@@ -105,7 +100,7 @@ public class OpenstackNetworkingUiManager implements OpenstackNetworkingUiServic
         uiExtensionService.register(extension);
 
         vDevices = Streams.stream(deviceService.getAvailableDevices())
-                .filter(this::isVirtualDevice)
+                .filter(device -> device.type() == SWITCH)
                 .collect(Collectors.toSet());
 
         vDevices.forEach(this::createLinksConnectedToTargetvDevice);
@@ -119,40 +114,11 @@ public class OpenstackNetworkingUiManager implements OpenstackNetworkingUiServic
         log.info("Stopped");
     }
 
-    @Override
-    public void sendMessage(String type, ObjectNode payload) {
-        messageHandler.sendMessagetoUi(type, payload);
-    }
-
-    @Override
-    public void setRestServerIp(String ipAddress) {
-        messageHandler.setRestUrl(ipAddress);
-    }
-
-    @Override
-    public String restServerUrl() {
-        return messageHandler.restUrl();
-    }
-
-    @Override
-    public void setRestServerAuthInfo(String id, String password) {
-        messageHandler.setRestAuthInfo(id, password);
-    }
-
-    @Override
-    public String restServerAuthInfo() {
-        return messageHandler.restAuthInfo();
-    }
-
-
     private Optional<Port> vxlanPort(DeviceId deviceId) {
         return deviceService.getPorts(deviceId)
                 .stream()
                 .filter(port -> port.annotations().value(PORT_NAME).equals(VXLAN))
                 .findAny();
-    }
-    private boolean isVirtualDevice(Device device) {
-        return driverService.getDriver(device.id()).name().equals(OVS);
     }
 
     private void createLinksConnectedToTargetvDevice(Device targetvDevice) {
@@ -183,5 +149,4 @@ public class OpenstackNetworkingUiManager implements OpenstackNetworkingUiServic
     private LinkDescription createLinkDescription(ConnectPoint srcConnectPoint, ConnectPoint dstConnectPoint) {
         return new DefaultLinkDescription(srcConnectPoint, dstConnectPoint, Type.DIRECT, true);
     }
-
 }

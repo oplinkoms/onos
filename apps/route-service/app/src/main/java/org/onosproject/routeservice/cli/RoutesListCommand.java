@@ -19,7 +19,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.apache.karaf.shell.commands.Command;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onosproject.cli.AbstractShellCommand;
 import org.onosproject.routeservice.ResolvedRoute;
 import org.onosproject.routeservice.RouteInfo;
@@ -34,6 +35,7 @@ import java.util.Optional;
 /**
  * Command to show the routes in the routing tables.
  */
+@Service
 @Command(scope = "onos", name = "routes",
         description = "Lists routes in the route store")
 public class RoutesListCommand extends AbstractShellCommand {
@@ -43,14 +45,14 @@ public class RoutesListCommand extends AbstractShellCommand {
     private static final String SOURCE = "Source";
     private static final String NODE = "Node";
 
-    private static final String FORMAT_ROUTE = "%-1s   %-18s %-15s %s (%s)";
-    private static final String FORMAT_ROUTE6 = "%-1s   %-43s %-39s %s (%s)";
+    private static final String FORMAT_ROUTE = "%-1s %-1s  %-18s %-15s %s (%s)";
+    private static final String FORMAT_ROUTE6 = "%-1s %-1s  %-43s %-39s %s (%s)";
 
     private static final String FORMAT_TABLE = "Table: %s";
     private static final String FORMAT_TOTAL = "   Total: %d";
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         RouteService service = AbstractShellCommand.get(RouteService.class);
 
         if (outputJson()) {
@@ -60,6 +62,7 @@ public class RoutesListCommand extends AbstractShellCommand {
             result.set("routes6", json(service.getRoutes(new RouteTableId("ipv6"))));
             print("%s", result);
         } else {
+            print("B: Best route, R: Resolved route\n");
             service.getRouteTables().forEach(id -> {
                 Collection<RouteInfo> tableRoutes = service.getRoutes(id);
 
@@ -68,7 +71,7 @@ public class RoutesListCommand extends AbstractShellCommand {
 
                 // Print header
                 print(FORMAT_TABLE, id);
-                print(format, "", NETWORK, NEXTHOP, SOURCE, NODE);
+                print(format, "B", "R", NETWORK, NEXTHOP, SOURCE, NODE);
 
                 // Print routing entries
                 tableRoutes.stream()
@@ -83,13 +86,19 @@ public class RoutesListCommand extends AbstractShellCommand {
 
     private void print(String format, RouteInfo routeInfo) {
         routeInfo.allRoutes().stream()
-                .sorted(Comparator.comparing(r -> r.nextHop()))
-                .forEach(r -> print(format, isBestRoute(routeInfo.bestRoute(), r) ? ">" : "",
+                .sorted(Comparator.comparing(ResolvedRoute::nextHop))
+                .forEach(r -> print(format,
+                        isBestRoute(routeInfo.bestRoute(), r) ? ">" : "",
+                        isResolvedRoute(r) ? "*" : "",
                         r.prefix(), r.nextHop(), r.route().source(), r.route().sourceNode()));
     }
 
     private boolean isBestRoute(Optional<ResolvedRoute> bestRoute, ResolvedRoute route) {
         return Objects.equals(bestRoute.orElse(null), route);
+    }
+
+    private boolean isResolvedRoute(ResolvedRoute route) {
+        return route.nextHopMac() != null && route.nextHopVlan() != null;
     }
 
     /**

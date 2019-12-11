@@ -19,7 +19,6 @@ package org.onosproject.net.flow.instructions;
 import com.google.common.base.MoreObjects;
 import org.onosproject.net.flow.AbstractExtension;
 import java.util.Arrays;
-import java.util.Objects;
 
 /**
  * Unresolved extension treatment.
@@ -42,7 +41,7 @@ public class UnresolvedExtensionTreatment extends AbstractExtension implements E
 
     @Override
     public ExtensionTreatmentType type() {
-        return ExtensionTreatmentType.ExtensionTreatmentTypes.UNRESOLVED_TYPE.type();
+        return unresolvedTreatmentType;
     }
 
     @Override
@@ -57,7 +56,7 @@ public class UnresolvedExtensionTreatment extends AbstractExtension implements E
 
     @Override
     public int hashCode() {
-        return Objects.hash(bytes);
+        return Arrays.hashCode(bytes);
     }
 
     @Override

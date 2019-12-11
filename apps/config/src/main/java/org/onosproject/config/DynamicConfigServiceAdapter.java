@@ -63,8 +63,7 @@ public class DynamicConfigServiceAdapter
     }
 
     @Override
-    public CompletableFuture<RpcOutput> invokeRpc(ResourceId id,
-                                                  RpcInput input) {
+    public CompletableFuture<RpcOutput> invokeRpc(RpcInput input) {
         return CompletableFuture.completedFuture(new RpcOutput(RPC_NODATA, null));
     }
 

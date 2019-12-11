@@ -27,7 +27,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.onlab.osgi.ServiceDirectory;
 import org.onlab.osgi.TestServiceDirectory;
-import org.onlab.rest.BaseResource;
 import org.onosproject.codec.CodecService;
 import org.onosproject.codec.impl.CodecManager;
 import org.onosproject.net.DefaultPort;
@@ -36,16 +35,15 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.Port;
 import org.onosproject.net.device.DeviceService;
-import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.driver.DefaultDriver;
-import org.onosproject.net.driver.TestBehaviourImpl;
+import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.driver.TestBehaviour;
+import org.onosproject.net.driver.TestBehaviourImpl;
 import org.onosproject.net.driver.TestBehaviourTwo;
 import org.onosproject.net.driver.TestBehaviourTwoImpl;
 
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.client.WebTarget;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -175,8 +173,8 @@ public class DevicesResourceTest extends ResourceTest {
 
         @Override
         public boolean matchesSafely(JsonArray json) {
-            final int minExpectedAttributes = 9;
-            final int maxExpectedAttributes = 10;
+            final int minExpectedAttributes = 11;
+            final int maxExpectedAttributes = 12;
 
             boolean deviceFound = false;
 
@@ -236,6 +234,12 @@ public class DevicesResourceTest extends ResourceTest {
         expect(mockDeviceService.getRole(isA(DeviceId.class)))
                 .andReturn(MastershipRole.MASTER)
                 .anyTimes();
+        expect(mockDeviceService.getLastUpdatedInstant(isA(DeviceId.class)))
+                .andReturn(0L)
+                .anyTimes();
+        expect(mockDeviceService.localStatus(isA(DeviceId.class)))
+                .andReturn("")
+                .anyTimes();
 
 
         // Register the services needed for the test
@@ -247,7 +251,7 @@ public class DevicesResourceTest extends ResourceTest {
                         .add(DriverService.class, mockDriverService)
                         .add(CodecService.class, codecService);
 
-        BaseResource.setServiceDirectory(testDirectory);
+        setServiceDirectory(testDirectory);
     }
 
     /**

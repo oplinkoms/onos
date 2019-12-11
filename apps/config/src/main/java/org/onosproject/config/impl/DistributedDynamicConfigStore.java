@@ -16,12 +16,6 @@
 package org.onosproject.config.impl;
 
 import com.google.common.annotations.Beta;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.config.DynamicConfigEvent;
 import org.onosproject.config.DynamicConfigStore;
@@ -29,6 +23,7 @@ import org.onosproject.config.DynamicConfigStoreDelegate;
 import org.onosproject.config.FailedException;
 import org.onosproject.config.Filter;
 import org.onosproject.config.ResourceIdParser;
+import org.onosproject.d.config.DeviceResourceIds;
 import org.onosproject.d.config.ResourceIds;
 import org.onosproject.store.AbstractStore;
 import org.onosproject.store.serializers.KryoNamespaces;
@@ -50,10 +45,16 @@ import org.onosproject.yang.model.InnerNode;
 import org.onosproject.yang.model.KeyLeaf;
 import org.onosproject.yang.model.LeafListKey;
 import org.onosproject.yang.model.LeafNode;
+import org.onosproject.yang.model.LeafType;
 import org.onosproject.yang.model.ListKey;
 import org.onosproject.yang.model.NodeKey;
 import org.onosproject.yang.model.ResourceId;
 import org.onosproject.yang.model.SchemaId;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,24 +65,25 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+
 import static org.onosproject.config.DynamicConfigEvent.Type.NODE_ADDED;
 import static org.onosproject.config.DynamicConfigEvent.Type.NODE_DELETED;
 import static org.onosproject.config.DynamicConfigEvent.Type.NODE_UPDATED;
 import static org.onosproject.config.DynamicConfigEvent.Type.UNKNOWN_OPRN;
+import static org.onosproject.d.config.DeviceResourceIds.DCS_NAMESPACE;
 
 /**
  * Implementation of the dynamic config store.
  */
 @Beta
-@Component(immediate = true)
-@Service
+@Component(immediate = true, service = DynamicConfigStore.class)
 public class DistributedDynamicConfigStore
         extends AbstractStore<DynamicConfigEvent, DynamicConfigStoreDelegate>
         implements DynamicConfigStore {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected StorageService storageService;
 
     // FIXME transactionally mutate the 2 or consolidate into 1 AsyncDocTree
@@ -110,7 +112,8 @@ public class DistributedDynamicConfigStore
                 .register(KeyLeaf.class)
                 .register(BigInteger.class)
                 .register(BigDecimal.class)
-                .register(LinkedHashMap.class);
+                .register(LinkedHashMap.class)
+                .register(LeafType.class);
         keystore = storageService.<DataNode.Type>documentTreeBuilder()
                 .withSerializer(Serializer.using(kryoBuilder.build()))
                 .withName("config-key-store")
@@ -143,10 +146,17 @@ public class DistributedDynamicConfigStore
         if (spath == null) {
             throw new FailedException("Invalid ResourceId, cannot create Node");
         }
-        if (!spath.equals(ResourceIdParser.ROOT)) {
-            if (completeVersioned(keystore.get(DocumentPath.from(spath))) == null) {
-                throw new FailedException("Node or parent does not exist for " + spath);
+        if (spath.equals(ResourceIdParser.ROOT)) {
+            //If not present, adding static ROOT node after immutable documentTree root.
+            if (complete(keystore.get(DocumentPath.from(spath))) == null) {
+                addLeaf(spath, LeafNode.builder(DeviceResourceIds.ROOT_NAME, DCS_NAMESPACE)
+                        .type(DataNode.Type.SINGLE_INSTANCE_NODE).build());
             }
+            ResourceId abs = ResourceIds.resourceId(parent, node);
+            parseNode(ResourceIdParser.parseResId(abs), node);
+            return CompletableFuture.completedFuture(true);
+        } else if (complete(keystore.get(DocumentPath.from(spath))) == null) {
+            throw new FailedException("Node or parent does not exist for " + spath);
         }
         ResourceId abs = ResourceIds.resourceId(parent, node);
         //spath = ResourceIdParser.appendNodeKey(spath, node.key());
@@ -300,7 +310,7 @@ public class DistributedDynamicConfigStore
         entries = complete(ret);
         log.trace(" keystore.getChildren({})", spath);
         log.trace("  entries keys:{}", entries.keySet());
-        if ((entries != null) && (!entries.isEmpty())) {
+        if (!entries.isEmpty()) {
             entries.forEach((k, v) -> {
                 String[] names = k.split(ResourceIdParser.NM_CHK);
                 String name = names[0];
@@ -309,14 +319,19 @@ public class DistributedDynamicConfigStore
                 DataNode.Type type = v.value();
                 String tempPath = ResourceIdParser.appendNodeKey(spath, name, nmSpc);
                 if (type == DataNode.Type.SINGLE_INSTANCE_LEAF_VALUE_NODE) {
-                    superBldr.createChildBuilder(name, nmSpc, readLeaf(tempPath).value())
+                    LeafNode lfnode = readLeaf(tempPath);
+                    // FIXME there should be builder for copying
+                    superBldr.createChildBuilder(name, nmSpc, lfnode.value(), lfnode.valueNamespace())
                             .type(type)
+                            .leafType(lfnode.leafType())
                             .exitNode();
                 } else if (type == DataNode.Type.MULTI_INSTANCE_LEAF_VALUE_NODE) {
                     String mlpath = ResourceIdParser.appendLeafList(tempPath, keyVal);
                     LeafNode lfnode = readLeaf(mlpath);
-                    superBldr.createChildBuilder(name, nmSpc, lfnode.value())
+                    // FIXME there should be builder for copying
+                    superBldr.createChildBuilder(name, nmSpc, lfnode.value(), lfnode.valueNamespace())
                             .type(type)
+                            .leafType(lfnode.leafType())
                             .addLeafListValue(lfnode.value())
                             .exitNode();
                     //TODO this alone should be sufficient and take the nm, nmspc too
@@ -495,6 +510,7 @@ public class DistributedDynamicConfigStore
                     //log.info("UNKNOWN operation in store");
                     type = UNKNOWN_OPRN;
             }
+            // FIXME don't use ResourceIdParser
             path = ResourceIdParser.getResId(event.path().pathElements());
             notifyDelegate(new DynamicConfigEvent(type, path));
         }

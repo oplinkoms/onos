@@ -31,6 +31,7 @@ import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.FlowRule;
+import org.onosproject.net.flow.FlowRuleOperation;
 import org.onosproject.net.flow.FlowRuleOperations;
 import org.onosproject.net.flow.FlowRuleServiceAdapter;
 import org.onosproject.net.flow.TrafficSelector;
@@ -54,6 +55,8 @@ import java.util.stream.Collectors;
 import static org.easymock.EasyMock.mock;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.onosproject.net.flow.FlowRuleOperation.Type.ADD;
+import static org.onosproject.net.flow.FlowRuleOperation.Type.REMOVE;
 
 /**
  * Tests for flow rule Intent installer.
@@ -61,14 +64,14 @@ import static org.junit.Assert.assertTrue;
 public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
 
     private TestFlowRuleService flowRuleService;
-    private TestFlowRuleServiceNonDisruptive flowRuleServiceNonDisruptive;
+    private final TestFlowRuleServiceNonDisruptive flowRuleServiceNonDisruptive =
+            new TestFlowRuleServiceNonDisruptive();
     private FlowRuleIntentInstaller installer;
 
     @Before
     public void setup() {
         super.setup();
         flowRuleService = new TestFlowRuleService();
-        flowRuleServiceNonDisruptive = new TestFlowRuleServiceNonDisruptive();
         installer = new FlowRuleIntentInstaller();
         installer.flowRuleService = flowRuleService;
         installer.store = new SimpleIntentStore();
@@ -98,7 +101,7 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toInstall = new IntentData(createP2PIntent(),
                                               IntentState.INSTALLING,
                                               new WallClockTimestamp());
-        toInstall = new IntentData(toInstall, intentsToInstall);
+        toInstall = IntentData.compiled(toInstall, intentsToInstall);
 
 
         IntentOperationContext<FlowRuleIntent> operationContext;
@@ -131,7 +134,7 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toUninstall = new IntentData(createP2PIntent(),
                                               IntentState.WITHDRAWING,
                                               new WallClockTimestamp());
-        toUninstall = new IntentData(toUninstall, intentsToUninstall);
+        toUninstall = IntentData.compiled(toUninstall, intentsToUninstall);
 
 
         IntentOperationContext<FlowRuleIntent> operationContext;
@@ -163,11 +166,11 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toInstall = new IntentData(createP2PIntent(),
                                               IntentState.INSTALLING,
                                               new WallClockTimestamp());
-        toInstall = new IntentData(toInstall, intentsToInstall);
+        toInstall = IntentData.compiled(toInstall, intentsToInstall);
         IntentData toUninstall = new IntentData(createP2PIntent(),
                                                 IntentState.INSTALLED,
                                                 new WallClockTimestamp());
-        toUninstall = new IntentData(toUninstall, intentsToUninstall);
+        toUninstall = IntentData.compiled(toUninstall, intentsToUninstall);
 
         IntentOperationContext<FlowRuleIntent> operationContext;
         IntentInstallationContext context = new IntentInstallationContext(toUninstall, toInstall);
@@ -206,11 +209,11 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toInstall = new IntentData(createP2PIntent(),
                                               IntentState.INSTALLING,
                                               new WallClockTimestamp());
-        toInstall = new IntentData(toInstall, intentsToInstall);
+        toInstall = IntentData.compiled(toInstall, intentsToInstall);
         IntentData toUninstall = new IntentData(createP2PIntent(),
                                                 IntentState.INSTALLED,
                                                 new WallClockTimestamp());
-        toUninstall = new IntentData(toUninstall, intentsToUninstall);
+        toUninstall = IntentData.compiled(toUninstall, intentsToUninstall);
 
         IntentOperationContext<FlowRuleIntent> operationContext;
         IntentInstallationContext context = new IntentInstallationContext(toUninstall, toInstall);
@@ -237,11 +240,11 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toInstall = new IntentData(createP2PIntent(),
                                               IntentState.INSTALLING,
                                               new WallClockTimestamp());
-        toInstall = new IntentData(toInstall, intentsToInstall);
+        toInstall = IntentData.compiled(toInstall, intentsToInstall);
         IntentData toUninstall = new IntentData(createP2PIntent(),
                                                 IntentState.INSTALLED,
                                                 new WallClockTimestamp());
-        toUninstall = new IntentData(toUninstall, intentsToUninstall);
+        toUninstall = IntentData.compiled(toUninstall, intentsToUninstall);
 
         IntentOperationContext<FlowRuleIntent> operationContext;
         IntentInstallationContext context = new IntentInstallationContext(toUninstall, toInstall);
@@ -290,7 +293,7 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toInstall = new IntentData(createP2PIntent(),
                                               IntentState.INSTALLING,
                                               new WallClockTimestamp());
-        toInstall = new IntentData(toInstall, intentsToInstall);
+        toInstall = IntentData.compiled(toInstall, intentsToInstall);
 
 
         IntentOperationContext<FlowRuleIntent> operationContext;
@@ -314,11 +317,11 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toInstall = new IntentData(createP2PIntent(),
                                               IntentState.INSTALLING,
                                               new WallClockTimestamp());
-        toInstall = new IntentData(toInstall, intentsToInstall);
+        toInstall = IntentData.compiled(toInstall, intentsToInstall);
         IntentData toUninstall = new IntentData(createP2PIntent(),
                                                 IntentState.INSTALLED,
                                                 new WallClockTimestamp());
-        toUninstall = new IntentData(toUninstall, intentsToUninstall);
+        toUninstall = IntentData.compiled(toUninstall, intentsToUninstall);
 
         IntentOperationContext<FlowRuleIntent> operationContext;
         IntentInstallationContext context = new IntentInstallationContext(toUninstall, toInstall);
@@ -352,11 +355,11 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
         IntentData toInstall = new IntentData(createP2PIntentNonDisruptive(),
                                               IntentState.INSTALLING,
                                               new WallClockTimestamp());
-        toInstall = new IntentData(toInstall, intentsToInstall);
+        toInstall = IntentData.compiled(toInstall, intentsToInstall);
         IntentData toUninstall = new IntentData(createP2PIntentNonDisruptive(),
                                                 IntentState.INSTALLED,
                                                 new WallClockTimestamp());
-        toUninstall = new IntentData(toUninstall, intentsToUninstall);
+        toUninstall = IntentData.compiled(toUninstall, intentsToUninstall);
 
         IntentOperationContext<FlowRuleIntent> operationContext;
         IntentInstallationContext context = new IntentInstallationContext(toUninstall, toInstall);
@@ -381,6 +384,14 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
                 .makePermanent()
                 .build();
 
+        // We need to wait a bit in order to avoid
+        // race conditions and failing builds
+        synchronized (flowRuleServiceNonDisruptive) {
+            while (!verifyFlowRule(ADD, firstStageInstalledRule)) {
+                flowRuleServiceNonDisruptive.wait();
+            }
+        }
+
         assertTrue(flowRuleServiceNonDisruptive.flowRulesAdd.contains(firstStageInstalledRule));
 
         selector = DefaultTrafficSelector.builder()
@@ -398,6 +409,12 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
                 .withPriority(DEFAULT_PRIORITY)
                 .makePermanent()
                 .build();
+
+        synchronized (flowRuleServiceNonDisruptive) {
+            while (!verifyFlowRule(REMOVE, secondStageUninstalledRule)) {
+                flowRuleServiceNonDisruptive.wait();
+            }
+        }
 
         assertTrue(flowRuleServiceNonDisruptive.flowRulesRemove.contains(secondStageUninstalledRule));
 
@@ -417,6 +434,12 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
                 .makePermanent()
                 .build();
 
+        synchronized (flowRuleServiceNonDisruptive) {
+            while (!verifyFlowRule(ADD, thirdStageInstalledRule)) {
+                flowRuleServiceNonDisruptive.wait();
+            }
+        }
+
         assertTrue(flowRuleServiceNonDisruptive.flowRulesAdd.contains(thirdStageInstalledRule));
 
         selector = DefaultTrafficSelector.builder()
@@ -435,10 +458,21 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
                 .makePermanent()
                 .build();
 
+        synchronized (flowRuleServiceNonDisruptive) {
+            while (!verifyFlowRule(REMOVE, lastStageUninstalledRule)) {
+                flowRuleServiceNonDisruptive.wait();
+            }
+        }
+
         assertTrue(flowRuleServiceNonDisruptive.flowRulesRemove.contains(lastStageUninstalledRule));
 
         IntentOperationContext successContext = intentInstallCoordinator.successContext;
         assertEquals(successContext, operationContext);
+    }
+
+    private boolean verifyFlowRule(FlowRuleOperation.Type type, FlowRule flowRule) {
+        return type == ADD ? flowRuleServiceNonDisruptive.flowRulesAdd.contains(flowRule) :
+                flowRuleServiceNonDisruptive.flowRulesRemove.contains(flowRule);
     }
 
     /**
@@ -734,6 +768,9 @@ public class FlowRuleIntentInstallerTest extends AbstractIntentInstallerTest {
         public void apply(FlowRuleOperations ops) {
             record(ops);
             ops.callback().onSuccess(ops);
+            synchronized (this) {
+                this.notify();
+            }
         }
     }
 

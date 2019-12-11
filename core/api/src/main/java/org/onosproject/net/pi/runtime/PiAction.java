@@ -17,7 +17,6 @@
 package org.onosproject.net.pi.runtime;
 
 import com.google.common.annotations.Beta;
-import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -31,21 +30,24 @@ import java.util.StringJoiner;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
- * Instance of an action, and its runtime parameters, of a table entry in a protocol-independent pipeline.
+ * Instance of an action, and its runtime parameters, of a table entry in a
+ * protocol-independent pipeline.
  */
 @Beta
 public final class PiAction implements PiTableAction {
 
     private final PiActionId actionId;
-    private final Map<PiActionParamId, PiActionParam> runtimeParams;
+    private final ImmutableMap<PiActionParamId, PiActionParam> runtimeParams;
 
     /**
-     * Creates a new action instance for the given action identifier and runtime parameters.
+     * Creates a new action instance for the given action identifier and runtime
+     * parameters.
      *
      * @param actionId      action identifier
      * @param runtimeParams list of runtime parameters
      */
-    private PiAction(PiActionId actionId, Map<PiActionParamId, PiActionParam> runtimeParams) {
+    private PiAction(PiActionId actionId,
+                     Map<PiActionParamId, PiActionParam> runtimeParams) {
         this.actionId = actionId;
         this.runtimeParams = ImmutableMap.copyOf(runtimeParams);
     }
@@ -65,8 +67,8 @@ public final class PiAction implements PiTableAction {
     }
 
     /**
-     * Returns all runtime parameters of this action. Return an empty collection if the action doesn't take any runtime
-     * parameters.
+     * Returns all runtime parameters of this action. Return an empty collection
+     * if the action doesn't take any runtime parameters.
      *
      * @return list of byte sequences
      */
@@ -96,9 +98,7 @@ public final class PiAction implements PiTableAction {
     public String toString() {
         StringJoiner stringParams = new StringJoiner(", ", "(", ")");
         this.parameters().forEach(p -> stringParams.add(p.toString()));
-        return MoreObjects.toStringHelper(this)
-                .addValue(this.id().toString() + stringParams.toString())
-                .toString();
+        return this.id().toString() + stringParams.toString();
     }
 
     /**

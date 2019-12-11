@@ -485,9 +485,8 @@ class PcepChannelHandler extends IdleStateAwareChannelHandler {
      * @throws PcepParseException while building pcep error message
      */
     public void processUnknownMsg() throws PcepParseException {
-        Date now = null;
+        Date now = new Date();
         if (pcepPacketStats.wrongPacketCount() == 0) {
-            now = new Date();
             pcepPacketStats.setTime(now.getTime());
             pcepPacketStats.addWrongPacket();
             sendErrMsgForInvalidMsg();
@@ -710,7 +709,7 @@ class PcepChannelHandler extends IdleStateAwareChannelHandler {
          *
          * @param handshakeComplete status of handshake
          */
-        public void setHandshakeComplete(boolean handshakeComplete) {
+        private void setHandshakeComplete(boolean handshakeComplete) {
             this.handshakeComplete = handshakeComplete;
         }
 

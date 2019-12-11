@@ -15,14 +15,6 @@
  */
 package org.onosproject.store.topology.impl;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Modified;
-import org.apache.felix.scr.annotations.Property;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
 import org.onlab.graph.GraphPathSearch;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.cfg.ComponentConfigService;
@@ -41,7 +33,6 @@ import org.onosproject.net.topology.DefaultGraphDescription;
 import org.onosproject.net.topology.GeoDistanceLinkWeight;
 import org.onosproject.net.topology.GraphDescription;
 import org.onosproject.net.topology.LinkWeigher;
-import org.onosproject.net.topology.LinkWeight;
 import org.onosproject.net.topology.MetricLinkWeight;
 import org.onosproject.net.topology.PathAdminService;
 import org.onosproject.net.topology.Topology;
@@ -60,6 +51,12 @@ import org.onosproject.store.service.EventuallyConsistentMapListener;
 import org.onosproject.store.service.LogicalClockService;
 import org.onosproject.store.service.StorageService;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Modified;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.util.Collections;
@@ -74,8 +71,9 @@ import java.util.stream.Stream;
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.onlab.util.Tools.get;
 import static org.onlab.util.Tools.isNullOrEmpty;
-import static org.onosproject.net.topology.AdapterLinkWeigher.adapt;
 import static org.onosproject.net.topology.TopologyEvent.Type.TOPOLOGY_CHANGED;
+import static org.onosproject.store.OsgiPropertyConstants.LINK_WEIGHT_FUNCTION;
+import static org.onosproject.store.OsgiPropertyConstants.LINK_WEIGHT_FUNCTION_DEFAULT;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -85,8 +83,15 @@ import static org.slf4j.LoggerFactory.getLogger;
  * Note: This component is not distributed per-se. It runs on every
  * instance and feeds off of other distributed stores.
  */
-@Component(immediate = true)
-@Service
+@Component(
+        immediate = true,
+        service = {
+                TopologyStore.class, PathAdminService.class
+        },
+        property = {
+                LINK_WEIGHT_FUNCTION + "=" + LINK_WEIGHT_FUNCTION_DEFAULT
+        }
+)
 public class DistributedTopologyStore
         extends AbstractStore<TopologyEvent, TopologyStoreDelegate>
         implements TopologyStore, PathAdminService {
@@ -101,29 +106,27 @@ public class DistributedTopologyStore
                                                             Collections.emptyList(),
                                                             Collections.emptyList()));
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected StorageService storageService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected LogicalClockService clockService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected MastershipService mastershipService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ComponentConfigService configService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceService deviceService;
 
     private static final String HOP_COUNT = "hopCount";
     private static final String LINK_METRIC = "linkMetric";
     private static final String GEO_DISTANCE = "geoDistance";
 
-    private static final String DEFAULT_LINK_WEIGHT_FUNCTION = "hopCount";
-    @Property(name = "linkWeightFunction", value = DEFAULT_LINK_WEIGHT_FUNCTION,
-            label = "Default link-weight function: hopCount, linkMetric, geoDistance")
-    private String linkWeightFunction = DEFAULT_LINK_WEIGHT_FUNCTION;
+    /** Default link-weight function: hopCount, linkMetric, geoDistance. */
+    private String linkWeightFunction = LINK_WEIGHT_FUNCTION_DEFAULT;
 
     // Cluster root to broadcast points bindings to allow convergence to
     // a shared broadcast tree; node that is the master of the cluster root
@@ -161,15 +164,15 @@ public class DistributedTopologyStore
     protected void modified(ComponentContext context) {
         Dictionary<?, ?> properties = context.getProperties();
 
-        String newLinkWeightFunction = get(properties, "linkWeightFunction");
+        String newLinkWeightFunction = get(properties, LINK_WEIGHT_FUNCTION);
         if (newLinkWeightFunction != null &&
                 !Objects.equals(newLinkWeightFunction, linkWeightFunction)) {
             linkWeightFunction = newLinkWeightFunction;
-            LinkWeight weight = linkWeightFunction.equals(LINK_METRIC) ?
+            LinkWeigher weight = linkWeightFunction.equals(LINK_METRIC) ?
                     new MetricLinkWeight() :
                     linkWeightFunction.equals(GEO_DISTANCE) ?
                             new GeoDistanceLinkWeight(deviceService) : null;
-            setDefaultLinkWeight(weight);
+            setDefaultLinkWeigher(weight);
         }
         log.info(FORMAT, linkWeightFunction);
     }
@@ -215,11 +218,6 @@ public class DistributedTopologyStore
         return defaultTopology(topology).getPaths(src, dst);
     }
 
-    @Override
-    public Set<Path> getPaths(Topology topology, DeviceId src, DeviceId dst,
-                              LinkWeight weight) {
-        return getPaths(topology, src, dst, adapt(weight));
-    }
 
     @Override
     public Set<Path> getPaths(Topology topology, DeviceId src,
@@ -249,12 +247,6 @@ public class DistributedTopologyStore
     }
 
     @Override
-    public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src, DeviceId dst,
-                                              LinkWeight weight) {
-        return getDisjointPaths(topology, src, dst, adapt(weight));
-    }
-
-    @Override
     public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src,
                                               DeviceId dst, LinkWeigher weigher) {
         return defaultTopology(topology).getDisjointPaths(src, dst, weigher);
@@ -264,12 +256,6 @@ public class DistributedTopologyStore
     public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src, DeviceId dst,
                                               Map<Link, Object> riskProfile) {
         return defaultTopology(topology).getDisjointPaths(src, dst, riskProfile);
-    }
-
-    @Override
-    public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src, DeviceId dst,
-                                              LinkWeight weight, Map<Link, Object> riskProfile) {
-        return getDisjointPaths(topology, src, dst, adapt(weight), riskProfile);
     }
 
     @Override
@@ -349,11 +335,6 @@ public class DistributedTopologyStore
         checkArgument(topology instanceof DefaultTopology,
                       "Topology class %s not supported", topology.getClass());
         return (DefaultTopology) topology;
-    }
-
-    @Override
-    public void setDefaultLinkWeight(LinkWeight linkWeight) {
-        DefaultTopology.setDefaultLinkWeigher(adapt(linkWeight));
     }
 
     @Override

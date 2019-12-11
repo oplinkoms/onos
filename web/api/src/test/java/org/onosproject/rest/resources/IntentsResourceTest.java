@@ -29,7 +29,6 @@ import org.junit.Test;
 import org.onlab.osgi.ServiceDirectory;
 import org.onlab.osgi.TestServiceDirectory;
 import org.onlab.packet.MacAddress;
-import org.onlab.rest.BaseResource;
 import org.onosproject.codec.CodecService;
 import org.onosproject.codec.impl.CodecManager;
 import org.onosproject.codec.impl.MockCodecContext;
@@ -49,7 +48,6 @@ import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowEntryAdapter;
 import org.onosproject.net.flow.FlowId;
 import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.FlowRuleExtPayLoad;
 import org.onosproject.net.flow.FlowRuleService;
 import org.onosproject.net.flow.TableId;
 import org.onosproject.net.flow.TrafficSelector;
@@ -63,6 +61,7 @@ import org.onosproject.net.intent.IntentService;
 import org.onosproject.net.intent.IntentState;
 import org.onosproject.net.intent.Key;
 import org.onosproject.net.intent.MockIdGenerator;
+import org.onosproject.net.intent.PathIntent;
 import org.onosproject.net.provider.ProviderId;
 
 
@@ -356,11 +355,6 @@ public class IntentsResourceTest extends ResourceTest {
         @Override
         public boolean exactMatch(FlowRule rule) {
             return false;
-        }
-
-        @Override
-        public FlowRuleExtPayLoad payLoad() {
-            return null;
         }
     }
 
@@ -745,7 +739,7 @@ public class IntentsResourceTest extends ResourceTest {
                         .add(CodecService.class, codecService)
                         .add(CoreService.class, mockCoreService);
 
-        BaseResource.setServiceDirectory(testDirectory);
+        setServiceDirectory(testDirectory);
 
         MockIdGenerator.cleanBind();
     }
@@ -862,8 +856,11 @@ public class IntentsResourceTest extends ResourceTest {
         flowRules.add(flowRule2);
         FlowRuleIntent flowRuleIntent = new FlowRuleIntent(
                 APP_ID,
+                null,
                 flowRules,
-                new HashSet<NetworkResource>());
+                new HashSet<NetworkResource>(),
+                PathIntent.ProtectionType.PRIMARY,
+        null);
         Intent intent = new MockIntent(3L);
         installableIntents.add(flowRuleIntent);
         intents.add(intent);
@@ -936,8 +933,11 @@ public class IntentsResourceTest extends ResourceTest {
 
         FlowRuleIntent flowRuleIntent = new FlowRuleIntent(
                 APP_ID,
+                null,
                 new ArrayList<>(),
-                resources);
+                resources,
+                PathIntent.ProtectionType.PRIMARY,
+                null);
 
         Intent intent = new MockIntent(MockIntent.nextId());
         Long intentId = intent.id().id();

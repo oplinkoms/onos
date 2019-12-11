@@ -57,7 +57,7 @@ public class BgpPathAttributes {
            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
            REFERENCE : RFC 4271
     */
-    protected static final Logger log = LoggerFactory.getLogger(BgpPathAttributes.class);
+    private static final Logger log = LoggerFactory.getLogger(BgpPathAttributes.class);
 
     public static final int LINK_STATE_ATTRIBUTE_TYPE = 29;
     public static final int MPREACHNLRI_TYPE = 14;
@@ -274,7 +274,7 @@ public class BgpPathAttributes {
                     BgpErrorType.MISSING_WELLKNOWN_ATTRIBUTE,
                     AsPath.ASPATH_TYPE);
         }
-        if (!isMpUnReach && !isMpReach && !isNextHop) {
+        if (!isMpReach && !isNextHop) {
             log.debug("Mandatory attributes not Present");
             Validation.validateType(BgpErrorType.UPDATE_MESSAGE_ERROR,
                     BgpErrorType.MISSING_WELLKNOWN_ATTRIBUTE,

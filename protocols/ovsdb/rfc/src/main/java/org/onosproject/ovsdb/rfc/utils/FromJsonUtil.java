@@ -218,18 +218,24 @@ public final class FromJsonUtil {
     public static List<OperationResult> jsonNodeToOperationResult(List<JsonNode> input,
                                                                   List<Operation> operations) {
         ObjectMapper objectMapper = ObjectMapperUtil.getObjectMapper(false);
-        List<OperationResult> operationResults = new ArrayList<OperationResult>();
+        List<OperationResult> operationResults = new ArrayList<>();
         for (int i = 0; i < input.size(); i++) {
             JsonNode jsonNode = input.get(i);
-            Operation operation = operations.get(i);
+
             if (jsonNode != null && jsonNode.size() > 0) {
-                if (i >= operations.size() || !operation.getOp().equals("select")) {
+                if (i >= operations.size()) {
                     OperationResult or = objectMapper.convertValue(jsonNode, OperationResult.class);
                     operationResults.add(or);
                 } else {
-                    List<Row> rows = createRows(operation.getTableSchema(), jsonNode);
-                    OperationResult or = new OperationResult(rows);
-                    operationResults.add(or);
+                    Operation operation = operations.get(i);
+                    if (!operation.getOp().equals("select")) {
+                        OperationResult or = objectMapper.convertValue(jsonNode, OperationResult.class);
+                        operationResults.add(or);
+                    } else {
+                        List<Row> rows = createRows(operation.getTableSchema(), jsonNode);
+                        OperationResult or = new OperationResult(rows);
+                        operationResults.add(or);
+                    }
                 }
             }
         }

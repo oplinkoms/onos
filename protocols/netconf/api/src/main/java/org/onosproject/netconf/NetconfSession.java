@@ -55,9 +55,28 @@ public interface NetconfSession {
      * the underlying connection
      * @throws NetconfTransportException on secure transport-layer error
      */
-    default CompletableFuture<String> rpc(String request) throws NetconfException {
-        return request(request);
-    }
+    CompletableFuture<String> rpc(String request) throws NetconfException;
+
+    /**
+     * Retrieves the specified configuration.
+     *
+     * @param datastore to retrieve configuration from
+     * @return specified configuration
+     *
+     * @throws NetconfException when there is a problem in the communication process on
+     * the underlying connection
+     */
+    CompletableFuture<CharSequence> asyncGetConfig(DatastoreId datastore) throws NetconfException;
+
+    /**
+     * Retrieves running configuration and device state.
+     *
+     * @return running configuration and device state
+     *
+     * @throws NetconfException when there is a problem in the communication process on
+     * the underlying connection
+     */
+    CompletableFuture<CharSequence> asyncGet() throws NetconfException;
 
 
     /**
@@ -103,13 +122,29 @@ public interface NetconfSession {
     String requestSync(String request) throws NetconfException;
 
     /**
+     * Executes an synchronous RPC to the server with specific reply TIMEOUT.
+     *
+     * @param request the XML containing the RPC for the server.
+     * @param timeout the reply timeout.
+     * @return Server response or ERROR
+     * @throws NetconfException when there is a problem in the communication process on
+     * the underlying connection
+     */
+    default String requestSync(String request, int timeout) throws NetconfException {
+        return "";
+    }
+
+    /**
      * Retrieves the specified configuration.
      *
      * @param netconfTargetConfig the type of configuration to retrieve.
      * @return specified configuration.
      * @throws NetconfException when there is a problem in the communication process on
      * the underlying connection
+     *
+     * @deprecated in 1.13.0 use async version instead.
      */
+    @Deprecated
     String getConfig(DatastoreId netconfTargetConfig) throws NetconfException;
 
     /**
@@ -140,7 +175,7 @@ public interface NetconfSession {
      * Retrieves part of the specified configuration based on the filterSchema.
      *
      * @param netconfTargetConfig the targetConfiguration to change
-     * @param mode                selected mode to change the configuration
+     * @param mode                default-operation mode
      * @param newConfiguration    configuration to set
      * @return true if the configuration was edited correctly
      * @throws NetconfException when there is a problem in the communication process on
@@ -267,6 +302,17 @@ public interface NetconfSession {
     }
 
     /**
+     * Commits the candidate configuration the running configuration.
+     *
+     * @return true if successful.
+     * @throws NetconfException when there is a problem in the communication process on
+     * the underlying connection
+     */
+    default boolean commit() throws NetconfException {
+        return false;
+    }
+
+    /**
      * Closes the Netconf session with the device.
      * the first time it tries gracefully, then kills it forcefully
      *
@@ -288,7 +334,6 @@ public interface NetconfSession {
      * session.
      *
      * @return Network capabilities as strings in a Set.
-     *
      * @since 1.10.0
      */
     Set<String> getDeviceCapabilitiesSet();
@@ -309,7 +354,6 @@ public interface NetconfSession {
      * Sets the ONOS side capabilities.
      *
      * @param capabilities list of capabilities ONOS has.
-     *
      * @since 1.10.0
      */
     default void setOnosCapabilities(Iterable<String> capabilities) {
@@ -318,18 +362,20 @@ public interface NetconfSession {
     }
 
     /**
-     * Remove a listener from the underlying stream handler implementation.
+     * Add a listener to the underlying stream handler implementation.
      *
      * @param listener event listener.
+     * @throws NetconfException when this method will be called by STANDBY or NONE node.
      */
-    void addDeviceOutputListener(NetconfDeviceOutputEventListener listener);
+    void addDeviceOutputListener(NetconfDeviceOutputEventListener listener) throws NetconfException;
 
     /**
      * Remove a listener from the underlying stream handler implementation.
      *
      * @param listener event listener.
+     * @throws NetconfException when this method will be called by STANDBY or NONE node.
      */
-    void removeDeviceOutputListener(NetconfDeviceOutputEventListener listener);
+    void removeDeviceOutputListener(NetconfDeviceOutputEventListener listener) throws NetconfException;
 
     /**
      * Read the connect timeout that this session was created with.
@@ -337,7 +383,7 @@ public interface NetconfSession {
      */
     default int timeoutConnectSec() {
         return 0;
-    };
+    }
 
     /**
      * Read the reply timeout that this session was created with.
@@ -345,7 +391,7 @@ public interface NetconfSession {
      */
     default int timeoutReplySec() {
         return 0;
-    };
+    }
 
     /**
      * Read the idle timeout that this session was created with.
@@ -353,6 +399,6 @@ public interface NetconfSession {
      */
     default int timeoutIdleSec() {
         return 0;
-    };
+    }
 
 }

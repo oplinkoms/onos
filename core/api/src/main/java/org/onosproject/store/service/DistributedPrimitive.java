@@ -99,7 +99,12 @@ public interface DistributedPrimitive {
         /**
          * Transaction Context.
          */
-        TRANSACTION_CONTEXT
+        TRANSACTION_CONTEXT,
+
+        /**
+         * Distributed lock.
+         */
+        LOCK,
     }
 
     /**
@@ -126,15 +131,9 @@ public interface DistributedPrimitive {
     }
 
     /**
-     * Use {@link #DEFAULT_OPERATION_TIMEOUT_MILLIS} instead.
-     */
-    @Deprecated
-    long DEFAULT_OPERTATION_TIMEOUT_MILLIS = 5000L;
-
-    /**
      * Default timeout for primitive operations.
      */
-    long DEFAULT_OPERATION_TIMEOUT_MILLIS = 5000L;
+    long DEFAULT_OPERATION_TIMEOUT_MILLIS = 15000L;
 
     /**
      * Returns the name of this primitive.

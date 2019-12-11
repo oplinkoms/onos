@@ -284,7 +284,7 @@ public class NetconfDeviceConfigSynchronizerProviderTest {
 
             return new DefaultCompositeStream(id, xml);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new IllegalStateException(e);
         }
     }
 
@@ -293,7 +293,7 @@ public class NetconfDeviceConfigSynchronizerProviderTest {
      */
     private class TestEditNetconfSession extends NetconfSessionAdapter {
         @Override
-        public CompletableFuture<String> request(String request)
+        public CompletableFuture<String> rpc(String request)
                 throws NetconfException {
             System.out.println("TestEditNetconfSession received:");
             System.out.println(XmlString.prettifyXml(request));

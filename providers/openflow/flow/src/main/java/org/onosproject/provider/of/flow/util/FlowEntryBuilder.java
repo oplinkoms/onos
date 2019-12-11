@@ -82,6 +82,7 @@ import org.projectfloodlight.openflow.protocol.action.OFActionSetVlanVid;
 import org.projectfloodlight.openflow.protocol.instruction.OFInstruction;
 import org.projectfloodlight.openflow.protocol.instruction.OFInstructionApplyActions;
 import org.projectfloodlight.openflow.protocol.instruction.OFInstructionGotoTable;
+import org.projectfloodlight.openflow.protocol.instruction.OFInstructionMeter;
 import org.projectfloodlight.openflow.protocol.instruction.OFInstructionStatTrigger;
 import org.projectfloodlight.openflow.protocol.instruction.OFInstructionWriteActions;
 import org.projectfloodlight.openflow.protocol.instruction.OFInstructionWriteMetadata;
@@ -94,6 +95,7 @@ import org.projectfloodlight.openflow.protocol.ver13.OFFactoryVer13;
 import org.projectfloodlight.openflow.types.CircuitSignalID;
 import org.projectfloodlight.openflow.types.IPv4Address;
 import org.projectfloodlight.openflow.types.IPv6Address;
+import org.projectfloodlight.openflow.types.IpDscp;
 import org.projectfloodlight.openflow.types.Masked;
 import org.projectfloodlight.openflow.types.OFBooleanValue;
 import org.projectfloodlight.openflow.types.OFVlanVidMatch;
@@ -285,7 +287,7 @@ public class FlowEntryBuilder {
 
     }
 
-    private FlowEntry createFlowEntryForFlowMod(FlowEntryState ...state) {
+    private FlowEntry createFlowEntryForFlowMod(FlowEntryState...state) {
         FlowEntryState flowState = state.length > 0 ? state[0] : FlowEntryState.FAILED;
         FlowRule.Builder builder = DefaultFlowRule.builder()
                 .forDevice(deviceId)
@@ -444,6 +446,7 @@ public class FlowEntryBuilder {
                 case EXPERIMENTER:
                     break;
                 case METER:
+                    builder.meter(MeterId.meterId(((OFInstructionMeter) in).getMeterId()));
                     break;
                 default:
                     log.warn("Unknown instructions type {}", in.getType());
@@ -798,6 +801,7 @@ public class FlowEntryBuilder {
         case OFDPA_MPLS_TYPE:
         case OFDPA_OVID:
         case OFDPA_MPLS_L2_PORT:
+        case OFDPA_ALLOW_VLAN_TRANSLATION:
         case OFDPA_QOS_INDEX:
             if (treatmentInterpreter != null) {
                 try {
@@ -807,6 +811,11 @@ public class FlowEntryBuilder {
                     log.warn("Unsupported action extension");
                 }
             }
+            break;
+        case IP_DSCP:
+            @SuppressWarnings("unchecked")
+            OFOxm<IpDscp> ipDscp = (OFOxm<IpDscp>) oxm;
+            builder.setIpDscp(ipDscp.getValue().getDscpValue());
             break;
         case ARP_THA:
         case ARP_TPA:
@@ -841,7 +850,6 @@ public class FlowEntryBuilder {
         case IPV6_ND_TARGET:
         case IPV6_ND_TLL:
         case IPV6_SRC:
-        case IP_DSCP:
         case IP_ECN:
         case IP_PROTO:
         case METADATA:
@@ -1277,6 +1285,31 @@ public class FlowEntryBuilder {
                     }
                 }
                 break;
+                case OFDPA_ALLOW_VLAN_TRANSLATION:
+                    if (selectorInterpreter != null &&
+                            selectorInterpreter.supported(
+                                    ExtensionSelectorTypes.OFDPA_MATCH_ALLOW_VLAN_TRANSLATION.type())) {
+                        if (isOF13OrLater(match)) {
+                            OFOxm oxm = ((OFMatchV3) match).getOxmList().get(MatchField.OFDPA_ALLOW_VLAN_TRANSLATION);
+                            builder.extension(selectorInterpreter.mapOxm(oxm),
+                                              deviceId);
+                        } else {
+                            break;
+                        }
+                    }
+                    break;
+                case OFDPA_ACTSET_OUTPUT:
+                    if (selectorInterpreter != null &&
+                            selectorInterpreter.supported(ExtensionSelectorTypes.OFDPA_MATCH_ACTSET_OUTPUT.type())) {
+                        if (isOF13OrLater(match)) {
+                            OFOxm oxm = ((OFMatchV3) match).getOxmList().get(MatchField.OFDPA_ACTSET_OUTPUT);
+                            builder.extension(selectorInterpreter.mapOxm(oxm),
+                                              deviceId);
+                        } else {
+                            break;
+                        }
+                    }
+                    break;
             case MPLS_TC:
             default:
                 log.warn("Match type {} not yet implemented.", field.id);

@@ -37,7 +37,9 @@ public class LLDP extends BasePacket {
 
     public static final byte PORT_TLV_TYPE = 2;
     public static final short PORT_TLV_SIZE = 5;
-    public static final byte PORT_TLV_SUBTYPE = 2;
+
+    public static final byte PORT_TLV_COMPONENT_SUBTYPE = 2;
+    public static final byte PORT_TLV_INTERFACE_NAME_SUBTYPE = 5;
 
     public static final byte TTL_TLV_TYPE = 3;
     public static final short TTL_TLV_SIZE = 2;
@@ -114,6 +116,16 @@ public class LLDP extends BasePacket {
      */
     public LLDP setOptionalTLVList(final List<LLDPTLV> optionalTLVList) {
         this.optionalTLVList = optionalTLVList;
+        return this;
+    }
+
+    /**
+     * Adds additional TLV to optionalTLVList.
+     * @param lldptlv the optional TLV to be added
+     * @return this
+     */
+    public LLDP addOptionalTLV(final LLDPTLV lldptlv) {
+        this.optionalTLVList.add(lldptlv);
         return this;
     }
 

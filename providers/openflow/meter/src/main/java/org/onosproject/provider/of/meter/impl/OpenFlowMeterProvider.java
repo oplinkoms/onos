@@ -23,11 +23,11 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.onlab.util.ItemNotFoundException;
 import org.onosproject.core.CoreService;
 import org.onosproject.net.driver.Driver;
@@ -92,16 +92,16 @@ public class OpenFlowMeterProvider extends AbstractProvider implements MeterProv
 
     private final Logger log = getLogger(getClass());
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected OpenFlowController controller;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected MeterProviderRegistry providerRegistry;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DriverService driverService;
 
     private MeterProviderService providerService;
@@ -121,7 +121,9 @@ public class OpenFlowMeterProvider extends AbstractProvider implements MeterProv
             ImmutableSet.copyOf(EnumSet.of(Device.Type.ROADM,
                                            Device.Type.ROADM_OTN,
                                            Device.Type.FIBER_SWITCH,
-                                           Device.Type.OTN));
+                                           Device.Type.OTN,
+                                           Device.Type.OLS,
+                                           Device.Type.TERMINAL_DEVICE));
 
     /**
      * Creates a OpenFlow meter provider.
@@ -138,6 +140,8 @@ public class OpenFlowMeterProvider extends AbstractProvider implements MeterProv
                 .expireAfterWrite(TIMEOUT, TimeUnit.SECONDS)
                 .removalListener((RemovalNotification<Long, MeterOperation> notification) -> {
                     if (notification.getCause() == RemovalCause.EXPIRED) {
+                        log.debug("Expired on meter provider. Meter key {} and operation {}",
+                                notification.getKey(), notification.getValue());
                         providerService.meterOperationFailed(notification.getValue(),
                                                              MeterFailReason.TIMEOUT);
                     }
@@ -205,9 +209,6 @@ public class OpenFlowMeterProvider extends AbstractProvider implements MeterProv
 
     private void performOperation(OpenFlowSwitch sw, MeterOperation op) {
 
-        pendingOperations.put(op.meter().id().id(), op);
-
-
         Meter meter = op.meter();
         MeterModBuilder builder = MeterModBuilder.builder(meter.id().id(), sw.factory());
         if (meter.isBurst()) {
@@ -219,12 +220,14 @@ public class OpenFlowMeterProvider extends AbstractProvider implements MeterProv
 
         switch (op.type()) {
             case ADD:
+                pendingOperations.put(op.meter().id().id(), op);
                 sw.sendMsg(builder.add());
                 break;
             case REMOVE:
                 sw.sendMsg(builder.remove());
                 break;
             case MODIFY:
+                pendingOperations.put(op.meter().id().id(), op);
                 sw.sendMsg(builder.modify());
                 break;
             default:
@@ -257,6 +260,7 @@ public class OpenFlowMeterProvider extends AbstractProvider implements MeterProv
                 sw.factory().getVersion() == OFVersion.OF_12 ||
                 NO_METER_SUPPORT.contains(sw.deviceType()) ||
                 !isMeterCapable(sw)) {
+            log.debug("{} does not support Meter.\n", sw.getDpid());
             return false;
         }
 

@@ -27,6 +27,7 @@ import org.onosproject.net.HostLocation;
 import org.onosproject.net.host.DefaultHostDescription;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.onlab.util.Tools.toHex;
 import static org.onosproject.provider.nil.NullProviders.SCHEME;
@@ -84,6 +85,23 @@ public class CustomTopologySimulator extends TopologySimulator {
     }
 
     /**
+     * Creates simulated device.
+     *
+     * @param id        device identifier
+     * @param name      device name
+     * @param type      device type
+     * @param hw        hardware revision
+     * @param sw        software revision
+     * @param portCount number of device ports
+     */
+    public void createDevice(DeviceId id, String name, Device.Type type,
+                             String hw, String sw, int portCount) {
+        int chassisId = Integer.parseInt(id.uri().getSchemeSpecificPart(), 16);
+        createDevice(id, chassisId, type, hw, sw, portCount);
+        nameToId.put(name, id);
+    }
+
+    /**
      * Creates a simulated host.
      *
      * @param hostId   host identifier
@@ -93,6 +111,19 @@ public class CustomTopologySimulator extends TopologySimulator {
     public void createHost(HostId hostId, HostLocation location, IpAddress hostIp) {
         DefaultHostDescription description =
                 new DefaultHostDescription(hostId.mac(), hostId.vlanId(), location, hostIp);
+        hostProviderService.hostDetected(hostId, description, false);
+    }
+
+    /**
+     * Creates a simulated multi-homed host.
+     *
+     * @param hostId   host identifier
+     * @param locations host locations
+     * @param hostIps   host IP addresses
+     */
+    public void createHost(HostId hostId, Set<HostLocation> locations, Set<IpAddress> hostIps) {
+        DefaultHostDescription description =
+                new DefaultHostDescription(hostId.mac(), hostId.vlanId(), locations, hostIps, false);
         hostProviderService.hostDetected(hostId, description, false);
     }
 
@@ -108,12 +139,12 @@ public class CustomTopologySimulator extends TopologySimulator {
     protected void createHosts() {
     }
 
-    /**
-     * Resets the device and host ID seeds to the default values. That is, the
-     * next assigned values will start from 1 again.
-     */
-    public void resetIdSeeds() {
+    @Override
+    public void tearDownTopology() {
+        super.tearDownTopology();
         nextDeviceId = 0;
         nextHostId = 0;
+        nameToId.clear();
     }
+
 }

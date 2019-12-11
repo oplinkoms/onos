@@ -15,11 +15,13 @@
  */
 package org.onosproject.provider.nil.cli;
 
-import org.apache.karaf.shell.commands.Argument;
-import org.apache.karaf.shell.commands.Command;
+import org.apache.karaf.shell.api.action.Argument;
+import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.Completion;
+import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.provider.nil.CustomTopologySimulator;
+import org.onosproject.cli.StartStopCompleter;
 import org.onosproject.provider.nil.NullProviders;
 import org.onosproject.provider.nil.TopologySimulator;
 
@@ -28,42 +30,39 @@ import static org.onosproject.cli.StartStopCompleter.START;
 /**
  * Starts or stops topology simulation.
  */
+@Service
 @Command(scope = "onos", name = "null-simulation",
         description = "Starts or stops topology simulation")
 public class NullControlCommand extends AbstractShellCommand {
 
-    private static final String CUSTOM = "custom";
-
     @Argument(index = 0, name = "cmd", description = "Control command: start/stop",
-            required = true, multiValued = false)
+            required = true)
+    @Completion(StartStopCompleter.class)
     String cmd = null;
 
     @Argument(index = 1, name = "topoShape",
             description = "Topology shape: e.g. configured, linear, reroute, " +
-                    "centipede, tree, spineleaf, mesh, fattree, custom",
-            required = false, multiValued = false)
+                    "centipede, tree, spineleaf, mesh, fattree, custom")
+    @Completion(TopologyShapeCompleter.class)
     String topoShape = null;
 
     @Override
-    protected void execute() {
+    protected void doExecute() {
         ComponentConfigService service = get(ComponentConfigService.class);
+        // If there is an existing topology; make sure it's stopped before restarting
+        if (cmd.equals(START)) {
+            NullProviders npService = get(NullProviders.class);
+            TopologySimulator simulator = npService.currentSimulator();
+            if (simulator != null) {
+                simulator.tearDownTopology();
+            }
+        }
+
         if (topoShape != null) {
             service.setProperty(NullProviders.class.getName(), "topoShape", topoShape);
         }
         service.setProperty(NullProviders.class.getName(), "enabled",
                             cmd.equals(START) ? "true" : "false");
-
-        // If we are re-starting the "custom" topology, reset the counts
-        //  on the auto-assigned IDs for null-devices and null-hosts, so that
-        //  scripts can rely on consistent assignment of IDs to nodes.
-        if (CUSTOM.equals(topoShape) && START.equals(cmd)) {
-            NullProviders npService = get(NullProviders.class);
-            TopologySimulator simulator = npService.currentSimulator();
-            if (simulator instanceof CustomTopologySimulator) {
-                CustomTopologySimulator sim = (CustomTopologySimulator) simulator;
-                sim.resetIdSeeds();
-            }
-        }
     }
 
 }

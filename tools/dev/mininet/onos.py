@@ -63,6 +63,7 @@ KarafPort = 8101	# ssh port indicating karaf is running
 GUIPort = 8181		# GUI/REST port
 OpenFlowPort = 6653 	# OpenFlow port
 CopycatPort = 9876      # Copycat port
+DebugPort = 5005      # JVM debug port
 
 def defaultUser():
     "Return a reasonable default user"
@@ -98,7 +99,7 @@ def initONOSEnv():
     environ[ 'ONOS_USER' ] = defaultUser()
     ONOS_USER = sd( 'ONOS_USER', defaultUser() )
     ONOS_APPS = sd( 'ONOS_APPS',
-                     'drivers,openflow,fwd,proxyarp,mobility' )
+                     'gui,drivers,openflow,fwd,proxyarp,mobility' )
     JAVA_OPTS = sd( 'JAVA_OPTS', '-Xms128m -Xmx512m' )
     # ONOS_WEB_{USER,PASS} isn't respected by onos-karaf:
     environ.update( ONOS_WEB_USER='karaf', ONOS_WEB_PASS='karaf' )
@@ -110,7 +111,7 @@ def initONOSEnv():
 def updateNodeIPs( env, nodes ):
     "Update env dict and environ with node IPs"
     # Get rid of stale junk
-    for var in 'ONOS_NIC', 'ONOS_CELL', 'ONOS_INSTANCES':
+    for var in 'ONOS_CELL', 'ONOS_INSTANCES':
         env[ var ] = ''
     for var in environ.keys():
         if var.startswith( 'OC' ):
@@ -126,7 +127,7 @@ def updateNodeIPs( env, nodes ):
     return env
 
 
-tarDefaultPath = 'buck-out/gen/tools/package/onos-package/onos.tar.gz'
+tarDefaultPath = "bazel-out/k8-fastbuild/bin/onos.tar.gz"
 
 def unpackONOS( destDir='/tmp', run=quietRun ):
     "Unpack ONOS and return its location"
@@ -248,10 +249,29 @@ class ONOSNode( Controller ):
 
     # pylint: disable=arguments-differ
 
-    def start( self, env, nodes=() ):
+
+    def start( self, env=None, nodes=(), debug=False ):
         """Start ONOS on node
            env: environment var dict
            nodes: all nodes in cluster"""
+        if env is not None:
+            self.genStartConfig(env, nodes)
+        self.cmd( 'cd', self.ONOS_HOME )
+        info( '(starting %s debug: %s)' % ( self, debug ) )
+        service = join( self.ONOS_HOME, 'bin/onos-service' )
+        if debug:
+            self.ucmd( service, 'server debug 1>../onos.log 2>../onos.log'
+                            ' & echo $! > onos.pid; ln -s `pwd`/onos.pid ..' )
+        else:
+            self.ucmd( service, 'server 1>../onos.log 2>../onos.log'
+                                ' & echo $! > onos.pid; ln -s `pwd`/onos.pid ..' )
+        self.onosPid = int( self.cmd( 'cat onos.pid' ).strip() )
+        self.warningCount = 0
+
+    # pylint: disable=arguments-differ
+
+    def genStartConfig( self, env, nodes=() ):
+        """generate a start config"""
         env = dict( env )
         env.update( ONOS_HOME=self.ONOS_HOME )
         self.updateEnv( env )
@@ -260,16 +280,8 @@ class ONOSNode( Controller ):
         self.cmd( 'export PATH=%s:%s:$PATH' % ( onosbin, karafbin ) )
         self.cmd( 'cd', self.ONOS_HOME )
         self.ucmd( 'mkdir -p config && '
-                   'onos-gen-partitions config/cluster.json',
+                   'onos-gen-default-cluster  config/cluster.json --nodes ',
                    ' '.join( node.IP() for node in nodes ) )
-        info( '(starting %s)' % self )
-        service = join( self.ONOS_HOME, 'bin/onos-service' )
-        self.ucmd( service, 'server 1>../onos.log 2>../onos.log'
-                   ' & echo $! > onos.pid; ln -s `pwd`/onos.pid ..' )
-        self.onosPid = int( self.cmd( 'cat onos.pid' ).strip() )
-        self.warningCount = 0
-
-    # pylint: enable=arguments-differ
 
     def intfsDown( self ):
         """Bring all interfaces down"""
@@ -285,6 +297,10 @@ class ONOSNode( Controller ):
             cmdOutput = intf.ifconfig( 'up' )
             if cmdOutput:
                 error( "Error setting %s up: %s " % ( intf.name, cmdOutput ) )
+
+    def kill( self ):
+        """Kill ONOS process"""
+        self.cmd( 'kill %d && wait' % ( self.onosPid ) )
 
     def stop( self ):
         # XXX This will kill all karafs - too bad!
@@ -381,6 +397,11 @@ class ONOSNode( Controller ):
                       ( self.IP(), self.IP(), CopycatPort )
             if nodeStr in result:
                 break
+
+            # just break if state is active
+            if "state=ACTIVE" in result:
+                break
+
             info( '.' )
             self.sanityCheck()
             time.sleep( 1 )
@@ -413,6 +434,7 @@ class ONOSCluster( Controller ):
            portOffset: offset to port base (optional)
            topo: topology class or instance
            nodeOpts: ONOSNode options
+           debug: enabling debug mode or not
            **kwargs: additional topology parameters
         By default, multiple ONOSClusters will increment
         the portOffset automatically; alternately, it can
@@ -438,7 +460,9 @@ class ONOSCluster( Controller ):
             topo = RenamedTopo( topo, *args, hnew='onos', **kwargs )
         self.ipBase = kwargs.pop( 'ipBase', '192.168.123.0/24' )
         self.forward = kwargs.pop( 'forward',
-                                   [ KarafPort, GUIPort, OpenFlowPort ] )
+                                   [ KarafPort, GUIPort, OpenFlowPort, DebugPort ] )
+        self.debug = kwargs.pop('debug', 'False') == 'True'
+
         super( ONOSCluster, self ).__init__( name, inNamespace=False )
         fixIPTables()
         self.env = initONOSEnv()
@@ -458,7 +482,7 @@ class ONOSCluster( Controller ):
         info( '*** ONOS_APPS = %s\n' % ONOS_APPS )
         self.net.start()
         for node in self.nodes():
-            node.start( self.env, self.nodes() )
+            node.start( self.env, self.nodes(), self.debug )
         info( '\n' )
         self.configPortForwarding( ports=self.forward, action='A' )
         self.waitStarted()
@@ -498,6 +522,17 @@ class ONOSCluster( Controller ):
                           'PREROUTING -t nat -p tcp --dport', inport,
                           '-j DNAT --to-destination %s:%s' % ( ip, port ) )
 
+    def getONOSNode( self, instance ):
+        """Return ONOS node which name is 'instance'
+           instance: ONOS instance name"""
+        try:
+            onos = self.net.getNodeByName( instance )
+            if isONOSNode( onos ):
+                return onos
+            else:
+                info( 'instance %s is not ONOS.\n' % instance )
+        except KeyError:
+            info( 'No such ONOS instance %s.\n' % instance )
 
 class ONOSSwitchMixin( object ):
     "Mixin for switches that connect to an ONOSCluster"
@@ -636,16 +671,13 @@ class ONOSCLI( OldCLI ):
             return
         c0 = self.mn.controllers[ 0 ]
         if isONOSCluster( c0 ):
-            try:
-                onos = self.mn.controllers[ 0 ].net.getNodeByName( instance )
-                if isONOSNode( onos ):
-                    info('Bringing %s %s...\n' % ( instance, cmd ) )
-                    if cmd == 'up':
-                        onos.intfsUp()
-                    else:
-                        onos.intfsDown()
-            except KeyError:
-                info( 'No such ONOS instance %s.\n' % instance )
+            onos = c0.getONOSNode( instance )
+            if onos:
+                info('Bringing %s %s...\n' % ( instance, cmd ) )
+                if cmd == 'up':
+                    onos.intfsUp()
+                else:
+                    onos.intfsDown()
 
     def do_onosdown( self, instance=None ):
         """Disconnects an ONOS instance from the network"""
@@ -655,6 +687,29 @@ class ONOSCLI( OldCLI ):
         """"Connects an ONOS instance to the network"""
         self.onosupdown( 'up', instance )
 
+    def do_start( self, instance=None ):
+        """Start ONOS instance"""
+        if not instance:
+            info( 'Provide the name of an ONOS instance.\n' )
+            return
+        c0 = self.mn.controllers[ 0 ]
+        if isONOSCluster( c0 ):
+            onos = c0.getONOSNode( instance )
+            if onos:
+                info('Starting %s...\n' % ( instance ) )
+                onos.start( debug=c0.debug )
+
+    def do_kill( self, instance=None ):
+        """Kill ONOS instance"""
+        if not instance:
+            info( 'Provide the name of an ONOS instance.\n' )
+            return
+        c0 = self.mn.controllers[ 0 ]
+        if isONOSCluster( c0 ):
+            onos = c0.getONOSNode( instance )
+            if onos:
+                info('Killing %s...\n' % ( instance ) )
+                onos.kill()
 
 # For interactive use, exit on error
 exitOnError = dict( nodeOpts={ 'alertAction': 'exit' } )

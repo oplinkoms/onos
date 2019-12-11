@@ -111,9 +111,8 @@ public class DynamicDeviceConfigServiceView
     }
 
     @Override
-    public CompletableFuture<RpcOutput> invokeRpc(ResourceId id,
-                                                  RpcInput input) {
-        return super.invokeRpc(toAbsoluteId(id), input);
+    public CompletableFuture<RpcOutput> invokeRpc(RpcInput input) {
+        return super.invokeRpc(new RpcInput(toAbsoluteId(input.id()), input.data()));
     }
 
     @Override

@@ -28,7 +28,7 @@ import com.google.common.base.MoreObjects;
 import org.onosproject.store.service.DocumentPath;
 
 /**
- * Map update operation.
+ * DocumentTree node update operation.
  *
  * @param <V> map value type
  */
@@ -38,6 +38,8 @@ public final class NodeUpdate<V> {
      * Type of database update operation.
      */
     public enum Type {
+        // FIXME revisit these, mismatch in description and actual implementation
+        // Also, type of update operations probably insufficient.
         /**
          * Creates an entry if the current version matches specified version.
          */
@@ -90,7 +92,7 @@ public final class NodeUpdate<V> {
     }
 
     /**
-     * Transforms this instance into an instance of different paramterized types.
+     * Transforms this instance into an instance of different parameterized types.
      *
      * @param valueMapper transcoder to value type
      * @return new instance
