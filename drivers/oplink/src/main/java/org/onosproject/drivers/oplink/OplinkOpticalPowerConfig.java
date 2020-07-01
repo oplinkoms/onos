@@ -53,7 +53,6 @@ public class OplinkOpticalPowerConfig<T> extends AbstractHandlerBehaviour
     public static final String KEY_CHPWR = "wavelength-power";
     public static final String KEY_CHSTATS = "wavelength-stats";
     public static final String KEY_OCMSTATS = "ocm-stats";
-    public static final String KEY_OCMS = "ocms";
     public static final String KEY_PORTDIRECT_RX = "rx";
     public static final String KEY_PORTDIRECT_TX = "tx";
     public static final String KEY_PORTTARPWR = "port-target-power";
