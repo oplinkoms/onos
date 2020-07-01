@@ -45,6 +45,17 @@
                    impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceFlowRuleProgrammable"/>
     </driver>
 
+    <driver name="client-line-terminal-device"  manufacturer="CTTC" hwVersion="" swVersion="">
+        <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
+                   impl="org.onosproject.drivers.odtn.openconfig.ClientLineTerminalDeviceDiscovery"/>
+        <behaviour api ="org.onosproject.net.optical.OpticalDevice"
+                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
+        <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
+                   impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceLambdaQuery"/>
+        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
+                   impl="org.onosproject.drivers.odtn.openconfig.ClientLineTerminalDeviceFlowRuleProgrammable"/>
+    </driver>
+
     <driver name="openroadm" extends="" manufacturer="CTTC/CNIT" hwVersion="0.0.1" swVersion="0.0.1">
         <behaviour api ="org.onosproject.net.device.DeviceDescriptionDiscovery"
                    impl="org.onosproject.drivers.odtn.openroadm.OpenRoadmDeviceDescription"/>
@@ -134,8 +145,28 @@
         <behaviour api="org.onosproject.net.behaviour.PowerConfig"
                    impl="org.onosproject.drivers.odtn.CassiniTerminalDevicePowerConfigExt"/>
         <behaviour api="org.onosproject.net.behaviour.ModulationConfig"
-                   impl="org.onosproject.drivers.odtn.CassiniModulationConfig"/>
+                   impl="org.onosproject.drivers.odtn.TerminalDeviceModulationConfig"/>
     </driver>
+
+    <driver name="groove" manufacturer="Infinera" hwVersion="groove" swVersion="4.0.3">
+        <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
+                   impl="org.onosproject.drivers.odtn.GrooveOpenConfigDeviceDiscovery"/>
+        <behaviour api="org.onosproject.odtn.behaviour.OdtnDeviceDescriptionDiscovery"
+                   impl="org.onosproject.drivers.odtn.GrooveOpenConfigDeviceDiscovery"/>
+        <behaviour api="org.onosproject.odtn.behaviour.ConfigurableTransceiver"
+                   impl="org.onosproject.odtn.behaviour.PlainTransceiver"/>
+        <behaviour api ="org.onosproject.net.optical.OpticalDevice"
+                   impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
+        <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
+                   impl="org.onosproject.drivers.odtn.GrooveOpenConfigLambdaQuery"/>
+        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
+                   impl="org.onosproject.drivers.odtn.GrooveOpenConfigFlowRuleProgrammable"/>
+        <behaviour api="org.onosproject.net.behaviour.PowerConfig"
+                   impl="org.onosproject.drivers.odtn.GrooveOpenConfigDevicePowerConfig"/>
+        <behaviour api="org.onosproject.net.behaviour.ModulationConfig"
+                   impl="org.onosproject.drivers.odtn.GrooveModulationOpenConfig"/>
+    </driver>
+
     <driver name="nokia-1830" manufacturer="nokia" hwVersion="1830" swVersion="R10.1.1">
         <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
                    impl="org.onosproject.drivers.odtn.NokiaOpenConfigDeviceDiscovery"/>
@@ -149,6 +180,8 @@
                    impl="org.onosproject.net.optical.DefaultOpticalDevice"/>
         <behaviour api ="org.onosproject.net.behaviour.LambdaQuery"
                    impl="org.onosproject.drivers.odtn.openconfig.TerminalDeviceLambdaQuery"/>
+        <behaviour api="org.onosproject.alarm.DeviceAlarmConfig"
+                   impl="org.onosproject.drivers.odtn.NokiaOpenConfigAlarmConfig"/>
         <behaviour api="org.onosproject.net.behaviour.PowerConfig"
                    impl="org.onosproject.drivers.odtn.NokiaTerminalDevicePowerConfig"/>
         <property name="netconfClientCapability">urn:ietf:params:netconf:base:1.0|
@@ -193,6 +226,21 @@
 	       impl="org.onosproject.drivers.odtn.AdvaTerminalDevicePowerConfig"/>
     <behaviour api="org.onosproject.net.behaviour.ModulationConfig"
                impl="org.onosproject.drivers.odtn.CassiniModulationOpenConfig"/>
+    </driver>
+
+    <driver name="gnmi-openconfig-terminal-device" manufacturer="OpenConfig" hwVersion="Unknown" swVersion="gNMI">
+        <behaviour api="org.onosproject.net.device.DeviceDescriptionDiscovery"
+                   impl="org.onosproject.drivers.odtn.openconfig.GnmiTerminalDeviceDiscovery"/>
+        <behaviour api="org.onosproject.odtn.behaviour.OdtnDeviceDescriptionDiscovery"
+                   impl="org.onosproject.drivers.odtn.openconfig.GnmiTerminalDeviceDiscovery"/>
+        <behaviour api="org.onosproject.net.flow.FlowRuleProgrammable"
+                   impl="org.onosproject.drivers.odtn.openconfig.GnmiTerminalDeviceFlowRuleProgrammable"/>
+        <behaviour api="org.onosproject.net.behaviour.PowerConfig"
+                   impl="org.onosproject.drivers.odtn.openconfig.GnmiTerminalDevicePowerConfig" />
+        <behaviour api="org.onosproject.net.behaviour.ModulationConfig"
+                   impl="org.onosproject.drivers.odtn.openconfig.GnmiTerminalDeviceModulationConfig" />
+        <behaviour api="org.onosproject.net.device.DeviceHandshaker"
+                   impl="org.onosproject.drivers.gnmi.GnmiHandshakerStandalone" />
     </driver>
 </drivers>
 

@@ -15,14 +15,14 @@
  */
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Gui2FwLibModule } from 'gui2-fw-lib';
-import { ProcessorRoutingModule } from './processor-routing.module';
+import { Gui2FwLibModule } from 'org_onosproject_onos/web/gui2-fw-lib/public_api';
 import { ProcessorComponent } from './processor/processor.component';
+import {RouterModule} from '@angular/router';
 
 @NgModule({
     imports: [
         CommonModule,
-        ProcessorRoutingModule,
+        RouterModule.forChild([{path: '', component: ProcessorComponent}]),
         Gui2FwLibModule
     ],
     declarations: [ProcessorComponent]

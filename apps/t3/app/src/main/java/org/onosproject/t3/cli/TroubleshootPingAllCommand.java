@@ -23,6 +23,7 @@ import org.apache.karaf.shell.api.action.Option;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onlab.packet.IpAddress;
 import org.onosproject.cli.AbstractShellCommand;
+import org.onosproject.cli.PlaceholderCompleter;
 import org.onosproject.cli.net.EthTypeCompleter;
 import org.onosproject.net.Host;
 import org.onosproject.net.flow.criteria.Criterion;
@@ -54,17 +55,33 @@ public class TroubleshootPingAllCommand extends AbstractShellCommand {
     String ethType = "ipv4";
 
     @Option(name = "-v", aliases = "--verbose", description = "Outputs trace for each host to host combination")
+    @Completion(PlaceholderCompleter.class)
     private boolean verbosity1 = false;
 
     @Option(name = "-vv", aliases = "--veryverbose", description = "Outputs details of every trace")
+    @Completion(PlaceholderCompleter.class)
     private boolean verbosity2 = false;
 
     @Option(name = "-d", aliases = "--delay", description = "delay between host to host trace display")
+    @Completion(PlaceholderCompleter.class)
     private long delay = 0;
 
     @Override
     protected void doExecute() {
         TroubleshootService service = get(TroubleshootService.class);
+        if (!service.checkNibValidity()) {
+            // if the NIB is found invalid, fill it with the current network states so that this command can proceed
+            print(T3CliUtils.NIB_AUTOFILLED);
+            TroubleshootLoadSnapshotCommand cmd = new TroubleshootLoadSnapshotCommand();
+            cmd.doExecute();
+            if (!service.checkNibValidity()) {
+                // if the NIB is still invalid even after auto-filled snapshots, stop and warn
+                print(T3CliUtils.NIB_TERMINATE);
+                return;
+            }
+        } else {
+            print(service.printNibSummary());
+        }
 
         EtherType type = EtherType.valueOf(ethType.toUpperCase());
 
@@ -175,7 +192,7 @@ public class TroubleshootPingAllCommand extends AbstractShellCommand {
                         .getCriterion(type)).ip().address();
             } else {
                 ipAddress = host.ipAddresses().stream().filter(IpAddress::isIp4)
-                        .findAny().orElseGet(null);
+                        .findAny().orElse(null);
             }
         } else {
             Criterion.Type type = src ? Criterion.Type.IPV6_SRC : Criterion.Type.IPV6_DST;
@@ -184,7 +201,7 @@ public class TroubleshootPingAllCommand extends AbstractShellCommand {
                         .getCriterion(type)).ip().address();
             } else {
                 ipAddress = host.ipAddresses().stream().filter(IpAddress::isIp6)
-                        .findAny().orElseGet(null);
+                        .findAny().orElse(null);
             }
         }
         return ipAddress;

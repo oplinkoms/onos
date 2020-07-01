@@ -115,13 +115,13 @@ public class DistributedContextEventMapTreeStore implements ContextEventMapStore
                 complete(eventMapTree.replace(dpathForCxt, programCounterString, currentWorkletType));
             }
             log.trace("RegisterEventMap for eventType:{}, eventSet:{}, contextName:{}, pc:{}",
-                     eventType, eventHintSet, contextName, programCounterString);
+                    eventType, eventHintSet, contextName, programCounterString);
 
         }
         hintSetPerCxtMap.put(contextName, eventHintSet);
         log.trace("RegisterEventMap in hintSetPerCxt for " +
-                         "eventType:{}, eventSet:{}, contextName:{}, pc:{}",
-                 eventType, eventHintSet, contextName, programCounterString);
+                        "eventType:{}, eventSet:{}, contextName:{}, pc:{}",
+                eventType, eventHintSet, contextName, programCounterString);
     }
 
     @Override
@@ -134,7 +134,7 @@ public class DistributedContextEventMapTreeStore implements ContextEventMapStore
             complete(eventMapTree.removeNode(DocumentPath.from(Lists.newArrayList(
                     "root", eventType, eventHint, contextName))));
             log.trace("UnregisterEventMap from eventCxtPerHintMap for eventType:{}, eventSet:{}, contextName:{}",
-                     eventType, eventHint, contextName);
+                    eventType, eventHint, contextName);
         }
         hintSetPerCxtMap.remove(contextName);
     }

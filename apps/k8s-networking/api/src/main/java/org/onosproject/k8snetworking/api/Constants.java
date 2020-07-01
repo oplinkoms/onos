@@ -53,6 +53,9 @@ public final class Constants {
     public static final String A_CLASS = "a";
     public static final String B_CLASS = "b";
 
+    public static final String DEFAULT_SERVICE_IP_CIDR = "10.96.0.0/12";
+    public static final String DEFAULT_SERVICE_IP_NONE = "none";
+
     public static final String PORT_NAME_PREFIX_CONTAINER = "veth";
 
     public static final String ANNOTATION_NETWORK_ID = "networkId";
@@ -121,4 +124,21 @@ public final class Constants {
     public static final int POD_RESOLUTION_TABLE = 11;
 
     public static final int LOCAL_ENTRY_TABLE = 0;
+
+    // CLI item length
+    public static final int CLI_ID_LENGTH = 30;
+    public static final int CLI_NAME_LENGTH = 30;
+    public static final int CLI_IP_ADDRESSES_LENGTH = 50;
+    public static final int CLI_IP_ADDRESS_LENGTH = 25;
+    public static final int CLI_MAC_ADDRESS_LENGTH = 25;
+    public static final int CLI_PORTS_LENGTH = 20;
+    public static final int CLI_NAMESPACE_LENGTH = 15;
+    public static final int CLI_PHASE_LENGTH = 15;
+    public static final int CLI_TYPE_LENGTH = 15;
+    public static final int CLI_TYPES_LENGTH = 30;
+    public static final int CLI_SEG_ID_LENGTH = 10;
+    public static final int CLI_LABELS_LENGTH = 30;
+    public static final int CLI_CONTAINERS_LENGTH = 30;
+
+    public static final int CLI_MARGIN_LENGTH = 2;
 }

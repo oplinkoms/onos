@@ -20,7 +20,7 @@ import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onosproject.cli.AbstractShellCommand;
 
 /**
- * Sample Apache Karaf CLI command
+ * Sample Apache Karaf CLI command.
  */
 @Service
 @Command(scope = "onos", name = "sample",

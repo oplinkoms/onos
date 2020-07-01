@@ -24,6 +24,7 @@ import com.google.common.collect.Sets;
 import org.easymock.EasyMock;
 import org.junit.Before;
 import org.junit.Test;
+import org.onlab.packet.EthType;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
@@ -54,9 +55,11 @@ import org.onosproject.segmentrouting.config.DeviceConfiguration;
 import org.onosproject.segmentrouting.config.SegmentRoutingDeviceConfig;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.TestConsistentMap;
+import org.onosproject.store.service.TestConsistentMultimap;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import static org.easymock.EasyMock.createMock;
 import static org.easymock.EasyMock.createNiceMock;
@@ -232,6 +235,8 @@ public class HostHandlerTest {
         SegmentRoutingManager srManager = new MockSegmentRoutingManager(NEXT_TABLE);
         srManager.storageService = createMock(StorageService.class);
         expect(srManager.storageService.consistentMapBuilder()).andReturn(new TestConsistentMap.Builder<>()).anyTimes();
+        expect(srManager.storageService.consistentMultimapBuilder()).andReturn(
+                new TestConsistentMultimap.Builder<>()).anyTimes();
         replay(srManager.storageService);
         srManager.cfgService = new NetworkConfigRegistryAdapter();
         srManager.deviceConfiguration = new DeviceConfiguration(srManager);
@@ -565,10 +570,12 @@ public class HostHandlerTest {
 
         // Host moved from [1A/1, 1B/1] to [1A/2, 1B/1]
         // We should expect only one bridging flow and one routing flow programmed on 1A
-        mockDefaultRoutingHandler.populateBridging(DEV3, P2, HOST_MAC, HOST_VLAN_UNTAGGED);
-        expectLastCall().times(1);
-        mockDefaultRoutingHandler.populateRoute(DEV3, HOST_IP11.toIpPrefix(), HOST_MAC, HOST_VLAN_UNTAGGED, P2, true);
-        expectLastCall().times(1);
+
+        expect(mockDefaultRoutingHandler.populateBridging(DEV3, P2, HOST_MAC, HOST_VLAN_UNTAGGED))
+                .andReturn(CompletableFuture.completedFuture(null)).once();
+        expect(mockDefaultRoutingHandler.populateRoute(DEV3, HOST_IP11.toIpPrefix(),
+                HOST_MAC, HOST_VLAN_UNTAGGED, P2, true))
+                .andReturn(CompletableFuture.completedFuture(null)).once();
         replay(mockDefaultRoutingHandler);
 
         hostHandler.processHostMovedEvent(new HostEvent(HostEvent.Type.HOST_MOVED, host2, host1));
@@ -997,5 +1004,17 @@ public class HostHandlerTest {
         hostHandler.processHostMovedEvent(new HostEvent(HostEvent.Type.HOST_MOVED, host2, host1));
 
         verify(hostHandler.srManager.probingService);
+    }
+
+    @Test
+    public void testEffectiveLocations() {
+        Host regularHost = new DefaultHost(PROVIDER_ID, HOST_ID_UNTAGGED, HOST_MAC, HOST_VLAN_TAGGED,
+                Sets.newHashSet(HOST_LOC11, HOST_LOC12), Sets.newHashSet(HOST_IP11), false);
+        Host auxHost = new DefaultHost(PROVIDER_ID, HOST_ID_UNTAGGED, HOST_MAC, HOST_VLAN_TAGGED,
+                Sets.newHashSet(HOST_LOC11, HOST_LOC12), Sets.newHashSet(HOST_LOC21, HOST_LOC22),
+                Sets.newHashSet(HOST_IP11), VlanId.NONE, EthType.EtherType.UNKNOWN.ethType(), false, false);
+
+        assertEquals(Sets.newHashSet(HOST_LOC11, HOST_LOC12), hostHandler.effectiveLocations(regularHost));
+        assertEquals(Sets.newHashSet(HOST_LOC21, HOST_LOC22), hostHandler.effectiveLocations(auxHost));
     }
 }

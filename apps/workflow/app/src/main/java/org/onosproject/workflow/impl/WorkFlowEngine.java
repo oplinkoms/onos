@@ -76,6 +76,7 @@ import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static org.onlab.util.Tools.groupedThreads;
+import static org.onosproject.workflow.api.CheckCondition.check;
 import static org.onosproject.workflow.api.WorkflowAttribute.REMOVE_AFTER_COMPLETE;
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -177,7 +178,7 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
 
         Workflow workflow = workflowStore.get(context.workflowId());
         if (workflow == null) {
-            log.error("Invalid workflow {}", context.workflowId());
+            log.error("Invalid workflow id:{}", context.workflowId());
             return;
         }
 
@@ -196,6 +197,9 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
                 log.info("{} worklet.process(done): {}", context.name(), initWorklet.tag());
                 log.trace("{} context: {}", context.name(), context);
             }
+
+            check(workplaceStore.getContext(context.name()) == null,
+                    "Duplicated workflow context(" + context.name() + ") assignment.");
 
         } catch (WorkflowException e) {
             log.error("Exception: ", e);
@@ -220,6 +224,7 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
         initWorkletExecution(latestContext);
 
         workplaceStore.commitContext(latestContext.name(), latestContext, true);
+
     }
 
     @Override
@@ -803,7 +808,6 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
             log.info("{} worklet.process(done): {}", latestContext.name(), worklet.tag());
             log.trace("{} context: {}", latestContext.name(), latestContext);
 
-
             if (latestContext.completionEventType() != null) {
                 if (latestContext.completionEventGenerator() == null) {
                     String msg = String.format("Invalid exepecting event(%s), generator(%s)",
@@ -846,7 +850,6 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
                     latestContext.setCurrent(workflow.increased(pc));
                 }
             }
-
             workplaceStore.commitContext(latestContext.name(), latestContext, latestContext.triggerNext());
 
         } catch (WorkflowException e) {

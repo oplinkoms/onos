@@ -180,7 +180,7 @@ public class DefaultWorkflowContext extends WorkflowContext {
 
     @Override
     public void waitAnyCompletion(Class<? extends Event> eventType, Set<String> eventHint,
-                               WorkExecutor eventGenerator, long timeoutMs) {
+                                  WorkExecutor eventGenerator, long timeoutMs) {
         this.completionEventType = eventType;
         this.completionEventHintSet = new HashSet<>();
         this.completionEventHintSet.addAll(eventHint);

@@ -2,7 +2,7 @@ workspace(
     name = "org_onosproject_onos",
     managed_directories = {
         "@gui1_npm": ["tools/gui/node_modules"],
-        "@npm": ["web/gui2-fw-lib/node_modules"],
+        "@npm": ["web/gui2/node_modules"],
     },
 )
 
@@ -74,7 +74,7 @@ load("@io_grpc_grpc_java//:repositories.bzl", "grpc_java_repositories")
 # deps.json, so they get wrapped properly for Karaf runtime.
 grpc_java_repositories(
     omit_bazel_skylib = False,
-    omit_com_google_android_annotations = False,
+    omit_com_google_android_annotations = True,
     omit_com_google_api_grpc_google_common_protos = True,
     omit_com_google_auth_google_auth_library_credentials = True,
     omit_com_google_auth_google_auth_library_oauth2_http = True,
@@ -82,7 +82,7 @@ grpc_java_repositories(
     omit_com_google_code_gson = True,
     omit_com_google_errorprone_error_prone_annotations = True,
     omit_com_google_guava = True,
-    omit_com_google_guava_failureaccess = False,
+    omit_com_google_guava_failureaccess = True,
     omit_com_google_j2objc_j2objc_annotations = True,
     omit_com_google_protobuf = True,
     omit_com_google_protobuf_javalite = True,
@@ -124,9 +124,9 @@ load("//tools/build/bazel:gnoi_workspace.bzl", "generate_gnoi")
 generate_gnoi()
 
 # For GUI2 build
-RULES_NODEJS_VERSION = "0.37.0"
+RULES_NODEJS_VERSION = "1.6.0"
 
-RULES_NODEJS_SHA256 = "0d9660cf0894f1fe1e9840818553e0080fbce0851169812d77a70bdb9981c946"
+RULES_NODEJS_SHA256 = "f9e7b9f42ae202cc2d2ce6d698ccb49a9f7f7ea572a78fd451696d03ef2ee116"
 
 load("//tools/build/bazel:topo_workspace.bzl", "generate_topo_device")
 
@@ -141,18 +141,21 @@ http_archive(
 )
 
 # Rules for compiling sass
-RULES_SASS_VERSION = "86ca977cf2a8ed481859f83a286e164d07335116"
+RULES_SASS_VERSION = "1.25.0"
 
-RULES_SASS_SHA256 = "4f05239080175a3f4efa8982d2b7775892d656bb47e8cf56914d5f9441fb5ea6"
+RULES_SASS_SHA256 = "c78be58f5e0a29a04686b628cf54faaee0094322ae0ac99da5a8a8afca59a647"
 
 http_archive(
     name = "io_bazel_rules_sass",
     sha256 = RULES_SASS_SHA256,
     strip_prefix = "rules_sass-%s" % RULES_SASS_VERSION,
-    url = "https://github.com/bazelbuild/rules_sass/archive/%s.zip" % RULES_SASS_VERSION,
+    urls = [
+        "https://github.com/bazelbuild/rules_sass/archive/%s.zip" % RULES_SASS_VERSION,
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_sass/archive/%s.zip" % RULES_SASS_VERSION,
+    ],
 )
 
-load("@build_bazel_rules_nodejs//:defs.bzl", "node_repositories", "npm_install", "yarn_install")
+load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "npm_install", "yarn_install")
 
 # Setup the Node repositories. We need a NodeJS version that is more recent than v10.15.0
 # because "selenium-webdriver" which is required for "ng e2e" cannot be installed.
@@ -168,8 +171,9 @@ node_repositories(
 # TODO give this a name like `gui2_npm` once the @bazel/karma tools can tolerate a name other than `npm`
 yarn_install(
     name = "npm",
-    package_json = "//web/gui2-fw-lib:package.json",
-    yarn_lock = "//web/gui2-fw-lib:yarn.lock",
+    package_json = "//web/gui2:package.json",
+    use_global_yarn_cache = True,
+    yarn_lock = "//web/gui2:yarn.lock",
 )
 
 npm_install(
@@ -185,9 +189,9 @@ load("@npm//:install_bazel_dependencies.bzl", "install_bazel_dependencies")
 
 install_bazel_dependencies()
 
-RULES_WEBTESTING_VERSION = "0.3.1"
+RULES_WEBTESTING_VERSION = "0.3.3"
 
-RULES_WEBTESTING_SHA256 = "f89ca8e91ac53b3c61da356c685bf03e927f23b97b086cc593db8edc088c143f"
+RULES_WEBTESTING_SHA256 = "9bb461d5ef08e850025480bab185fd269242d4e533bca75bfb748001ceb343c3"
 
 http_archive(
     name = "io_bazel_rules_webtesting",

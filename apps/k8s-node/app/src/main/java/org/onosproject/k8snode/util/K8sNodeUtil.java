@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Dictionary;
+import java.util.List;
 
 import static org.onlab.util.Tools.get;
 
@@ -214,6 +215,22 @@ public final class K8sNodeUtil {
     }
 
     /**
+     * Generates string format based on the given string length list.
+     *
+     * @param stringLengths a list of string lengths
+     * @return string format (e.g., %-28s%-15s%-24s%-20s%-15s)
+     */
+    public static String genFormatString(List<Integer> stringLengths) {
+        StringBuilder fsb = new StringBuilder();
+        stringLengths.forEach(length -> {
+            fsb.append("%-");
+            fsb.append(length);
+            fsb.append("s");
+        });
+        return fsb.toString();
+    }
+
+    /**
      * Obtains workable kubernetes client.
      *
      * @param config kubernetes API config
@@ -231,10 +248,13 @@ public final class K8sNodeUtil {
 
         if (config.scheme() == K8sApiConfig.Scheme.HTTPS) {
             configBuilder.withTrustCerts(true)
-                    .withOauthToken(config.token())
                     .withCaCertData(config.caCertData())
                     .withClientCertData(config.clientCertData())
                     .withClientKeyData(config.clientKeyData());
+
+            if (StringUtils.isNotEmpty(config.token())) {
+                configBuilder.withOauthToken(config.token());
+            }
         }
 
         return new DefaultKubernetesClient(configBuilder.build());

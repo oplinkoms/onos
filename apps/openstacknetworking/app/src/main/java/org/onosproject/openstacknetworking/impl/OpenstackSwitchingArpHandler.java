@@ -795,12 +795,26 @@ public class OpenstackSwitchingArpHandler {
                                                     boolean isTunnel,
                                                     boolean install) {
 
-        // add group rule
+        if (install) {
+            processGroupTableRules(osNode, netId, true);
+            processFlowTableRules(osNode, segId, netId, isTunnel, true);
+        } else {
+            processFlowTableRules(osNode, segId, netId, isTunnel, false);
+            processGroupTableRules(osNode, netId, false);
+        }
+    }
+
+    private void processGroupTableRules(OpenstackNode osNode,
+                                        String netId, boolean install) {
         int groupId = netId.hashCode();
         osGroupRuleService.setRule(appId, osNode.intgBridge(), groupId,
                 ALL, Lists.newArrayList(), install);
+    }
 
-        // add flow rule
+    private void processFlowTableRules(OpenstackNode osNode,
+                                        String segId, String netId,
+                                        boolean isTunnel,
+                                        boolean install) {
         TrafficSelector.Builder sBuilder = DefaultTrafficSelector.builder()
                 .matchEthType(EthType.EtherType.ARP.ethType().toShort())
                 .matchArpOp(ARP.OP_REQUEST);
@@ -872,7 +886,7 @@ public class OpenstackSwitchingArpHandler {
             Network network = event.subject();
 
             if (network == null) {
-                log.warn("Network is not specified.");
+                log.debug("Network is not specified.");
                 return false;
             } else {
                 return network.getProviderSegID() != null;
@@ -897,9 +911,10 @@ public class OpenstackSwitchingArpHandler {
                 case OPENSTACK_NETWORK_UPDATED:
                     eventExecutor.execute(() -> processNetworkCreation(event));
                     break;
-                case OPENSTACK_NETWORK_REMOVED:
+                case OPENSTACK_NETWORK_PRE_REMOVED:
                     eventExecutor.execute(() -> processNetworkRemoval(event));
                     break;
+                case OPENSTACK_NETWORK_REMOVED:
                 case OPENSTACK_PORT_CREATED:
                 case OPENSTACK_PORT_UPDATED:
                 case OPENSTACK_PORT_REMOVED:

@@ -15,7 +15,9 @@
  */
 package org.onosproject.store.flow.impl;
 
+import java.time.Duration;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +32,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import org.onlab.util.KryoNamespace;
@@ -37,10 +40,12 @@ import org.onlab.util.Tools;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowId;
 import org.onosproject.net.flow.FlowRule;
 import org.onosproject.net.flow.StoredFlowEntry;
+import org.onosproject.net.flow.FlowRuleStoreException;
 import org.onosproject.store.LogicalTimestamp;
 import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.cluster.messaging.MessageSubject;
@@ -71,15 +76,19 @@ public class DeviceFlowTable {
         .register(LogicalTimestamp.class)
         .register(Timestamped.class)
         .build());
+    private static final int GET_FLOW_ENTRIES_TIMEOUT = 15; // seconds
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final MessageSubject getDigestsSubject;
     private final MessageSubject getBucketSubject;
     private final MessageSubject backupSubject;
+    private final MessageSubject getFlowsSubject;
 
     private final DeviceId deviceId;
     private final ClusterCommunicationService clusterCommunicator;
+    private final ClusterService clusterService;
+    private final DeviceService deviceService;
     private final LifecycleManager lifecycleManager;
     private final ScheduledExecutorService scheduler;
     private final Executor executor;
@@ -112,13 +121,16 @@ public class DeviceFlowTable {
         ClusterService clusterService,
         ClusterCommunicationService clusterCommunicator,
         LifecycleManager lifecycleManager,
+        DeviceService deviceService,
         ScheduledExecutorService scheduler,
         Executor executor,
         long backupPeriod,
         long antiEntropyPeriod) {
         this.deviceId = deviceId;
         this.clusterCommunicator = clusterCommunicator;
+        this.clusterService = clusterService;
         this.lifecycleManager = lifecycleManager;
+        this.deviceService = deviceService;
         this.scheduler = scheduler;
         this.executor = executor;
         this.localNodeId = clusterService.getLocalNode().id();
@@ -131,6 +143,7 @@ public class DeviceFlowTable {
         getDigestsSubject = new MessageSubject(String.format("flow-store-%s-digests", deviceId));
         getBucketSubject = new MessageSubject(String.format("flow-store-%s-bucket", deviceId));
         backupSubject = new MessageSubject(String.format("flow-store-%s-backup", deviceId));
+        getFlowsSubject = new MessageSubject(String.format("flow-store-%s-flows", deviceId));
 
         addListeners();
 
@@ -197,11 +210,66 @@ public class DeviceFlowTable {
      *
      * @return the set of flow entries in the table
      */
-    public Set<FlowEntry> getFlowEntries() {
-        return flowBuckets.values().stream()
-            .flatMap(bucket -> bucket.getFlowBucket().values().stream())
-            .flatMap(entries -> entries.values().stream())
-            .collect(Collectors.toSet());
+    public CompletableFuture<Iterable<FlowEntry>> getFlowEntries() {
+        // Fetch the entries for each bucket in parallel and then concatenate the sets
+        // to create a single iterable.
+        return Tools.allOf(flowBuckets.values()
+            .stream()
+            .map(this::getFlowEntries)
+            .collect(Collectors.toList()))
+            .thenApply(Iterables::concat);
+    }
+
+    /**
+     * Fetches the set of flow entries in the given bucket.
+     *
+     * @param bucketId the bucket for which to fetch flow entries
+     * @return a future to be completed once the flow entries have been retrieved
+     */
+    private CompletableFuture<Set<FlowEntry>> getFlowEntries(BucketId bucketId) {
+        return getFlowEntries(getBucket(bucketId.bucket()));
+    }
+
+    /**
+     * Fetches the set of flow entries in the given bucket.
+     *
+     * @param bucket the bucket for which to fetch flow entries
+     * @return a future to be completed once the flow entries have been retrieved
+     */
+    private CompletableFuture<Set<FlowEntry>> getFlowEntries(FlowBucket bucket) {
+        DeviceReplicaInfo replicaInfo = lifecycleManager.getReplicaInfo();
+        // If the local node is the master, fetch the entries locally. Otherwise, request the entries
+        // from the current master. Note that there's a change of a brief cycle during a mastership change.
+        if (replicaInfo.isMaster(localNodeId)) {
+            return CompletableFuture.completedFuture(
+                bucket.getFlowBucket().values().stream()
+                    .flatMap(entries -> entries.values().stream())
+                    .collect(Collectors.toSet()));
+        } else if (replicaInfo.master() != null) {
+            return clusterCommunicator.sendAndReceive(
+                bucket.bucketId(),
+                getFlowsSubject,
+                SERIALIZER::encode,
+                SERIALIZER::decode,
+                replicaInfo.master(),
+                Duration.ofSeconds(GET_FLOW_ENTRIES_TIMEOUT));
+        } else if (deviceService.isAvailable(deviceId)) {
+            throw new FlowRuleStoreException("There is no master for available device " + deviceId);
+        } else if (clusterService.getNodes().size() <= 1 + ECFlowRuleStore.backupCount) {
+            //TODO remove this check when [ONOS-8080] is fixed
+            //When device is not available and has no master and
+            // the number of nodes surpasses the guaranteed backup count,
+            // we are certain that this node has a replica.
+            // -- DISCLAIMER --
+            // You manually need to set the backup count for clusters > 3 nodes,
+            // the default is 2, which handles the single instance and 3 node scenarios
+            return CompletableFuture.completedFuture(
+                    bucket.getFlowBucket().values().stream()
+                            .flatMap(entries -> entries.values().stream())
+                            .collect(Collectors.toSet()));
+        } else {
+            return CompletableFuture.completedFuture(Collections.emptySet());
+        }
     }
 
     /**
@@ -768,8 +836,10 @@ public class DeviceFlowTable {
             this.replicaInfo = replicaInfo;
         }
 
-        // If the local node is neither the master or a backup for the device, clear the flow table.
-        if (!replicaInfo.isMaster(localNodeId) && !replicaInfo.isBackup(localNodeId)) {
+        // If the local node is neither the master or a backup for the device,
+        // and the number of nodes surpasses the guaranteed backup count, clear the flow table.
+        if (!replicaInfo.isMaster(localNodeId) && !replicaInfo.isBackup(localNodeId) &&
+            (clusterService.getNodes().size() > 1 + ECFlowRuleStore.backupCount)) {
             flowBuckets.values().forEach(bucket -> bucket.clear());
         }
         activeTerm = replicaInfo.term();
@@ -784,10 +854,11 @@ public class DeviceFlowTable {
             this.replicaInfo = replicaInfo;
 
             // If the local node is neither the master or a backup for the device *and the term is active*,
-            // clear the flow table.
+            // and the number of nodes surpasses the guaranteed backup count, clear the flow table.
             if (activeTerm == replicaInfo.term()
                 && !replicaInfo.isMaster(localNodeId)
-                && !replicaInfo.isBackup(localNodeId)) {
+                && !replicaInfo.isBackup(localNodeId)
+            && (clusterService.getNodes().size() > 1 + ECFlowRuleStore.backupCount)) {
                 flowBuckets.values().forEach(bucket -> bucket.clear());
             }
         }
@@ -840,6 +911,8 @@ public class DeviceFlowTable {
         receiveWithTimestamp(getDigestsSubject, v -> getDigests());
         receiveWithTimestamp(getBucketSubject, this::onGetBucket);
         receiveWithTimestamp(backupSubject, this::onBackup);
+        clusterCommunicator.<BucketId, Set<FlowEntry>>addSubscriber(
+            getFlowsSubject, SERIALIZER::decode, this::getFlowEntries, SERIALIZER::encode);
     }
 
     /**
@@ -849,6 +922,7 @@ public class DeviceFlowTable {
         clusterCommunicator.removeSubscriber(getDigestsSubject);
         clusterCommunicator.removeSubscriber(getBucketSubject);
         clusterCommunicator.removeSubscriber(backupSubject);
+        clusterCommunicator.removeSubscriber(getFlowsSubject);
     }
 
     /**

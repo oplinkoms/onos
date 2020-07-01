@@ -152,15 +152,32 @@ public class OvsOfdpaPipeline extends Ofdpa2Pipeline {
 
     @Override
     protected void initGroupHander(PipelinerContext context) {
+        // Terminate internal references
+        // We are terminating the references here
+        // because when the device is offline the apps
+        // are still sending flowobjectives
+        if (groupHandler != null) {
+            groupHandler.terminate();
+        }
         groupHandler = new OvsOfdpaGroupHandler();
         groupHandler.init(deviceId, context);
     }
 
     @Override
     public void init(DeviceId deviceId, PipelinerContext context) {
+        // Terminate internal references
+        // We are terminating the references here
+        // because when the device is offline the apps
+        // are still sending flowobjectives
+        if (groupChecker != null) {
+            groupChecker.shutdown();
+        }
         // create a new executor at each init and a new empty queue
         groupChecker = Executors.newSingleThreadScheduledExecutor(groupedThreads("onos/driver",
-                                                                                 "ovs-ofdpa-%d", log));
+                "ovs-ofdpa-%d", log));
+        if (flowRuleQueue != null) {
+            flowRuleQueue.clear();
+        }
         flowRuleQueue = new ConcurrentLinkedQueue<>();
         groupCheckerLock = new ReentrantLock();
         groupChecker.scheduleAtFixedRate(new PopVlanPuntGroupChecker(), 20, 50, TimeUnit.MILLISECONDS);
@@ -1232,18 +1249,6 @@ public class OvsOfdpaPipeline extends Ofdpa2Pipeline {
                 .forTable(PUNT_TABLE).build();
         ops.add(bbdpRule);
 
-        // Add table miss flow rule
-        TrafficSelector.Builder defaultSelector = DefaultTrafficSelector.builder();
-        FlowRule defaultRule = DefaultFlowRule.builder()
-                .forDevice(deviceId)
-                .withSelector(defaultSelector.build())
-                .withTreatment(treatment)
-                .withPriority(LOWEST_PRIORITY)
-                .fromApp(driverId)
-                .makePermanent()
-                .forTable(PUNT_TABLE).build();
-        ops.add(defaultRule);
-
         flowRuleService.apply(ops.build(new FlowRuleOperationsContext() {
             @Override
             public void onSuccess(FlowRuleOperations ops) {
@@ -1326,12 +1331,46 @@ public class OvsOfdpaPipeline extends Ofdpa2Pipeline {
                     // this signifies that the group is created and now
                     // flow rules can be installed directly
                     flowRuleQueue = null;
-                    // shutdown the group checker gracefully
-                    groupChecker.shutdown();
+                    // Schedule with an initial delay the miss table flow rule installation
+                    // the delay is to make sure the queued flows are all installed before
+                    // pushing the table miss flow rule
+                    // TODO it can be further optimized by using context and completable future
+                    groupChecker.schedule(new TableMissFlowInstaller(), 5000, TimeUnit.MILLISECONDS);
                 }
             } finally {
                 groupCheckerLock.unlock();
             }
+        }
+    }
+
+    private class TableMissFlowInstaller implements Runnable {
+        @Override
+        public void run() {
+            // Add table miss flow rule
+            FlowRuleOperations.Builder ops = FlowRuleOperations.builder();
+            TrafficSelector.Builder defaultSelector = DefaultTrafficSelector.builder();
+            TrafficTreatment treatment =  DefaultTrafficTreatment.builder().punt().build();
+            FlowRule defaultRule = DefaultFlowRule.builder()
+                    .forDevice(deviceId)
+                    .withSelector(defaultSelector.build())
+                    .withTreatment(treatment)
+                    .withPriority(LOWEST_PRIORITY)
+                    .fromApp(driverId)
+                    .makePermanent()
+                    .forTable(PUNT_TABLE).build();
+            ops.add(defaultRule);
+            flowRuleService.apply(ops.build(new FlowRuleOperationsContext() {
+                @Override
+                public void onSuccess(FlowRuleOperations ops) {
+                    log.info("Initialized table miss flow rule {} on {}", PUNT_TABLE, deviceId);
+                }
+                @Override
+                public void onError(FlowRuleOperations ops) {
+                    log.warn("Failed to initialize table miss flow rule {} on {}", PUNT_TABLE, deviceId);
+                }
+            }));
+            // shutdown the group checker gracefully
+            groupChecker.shutdown();
         }
     }
 }

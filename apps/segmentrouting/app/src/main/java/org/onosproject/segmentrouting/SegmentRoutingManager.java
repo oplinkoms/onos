@@ -26,8 +26,8 @@ import org.onlab.packet.IPv4;
 import org.onlab.packet.IPv6;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpPrefix;
-import org.onlab.packet.VlanId;
 import org.onlab.packet.MacAddress;
+import org.onlab.packet.VlanId;
 import org.onlab.util.KryoNamespace;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
@@ -99,10 +99,12 @@ import org.onosproject.segmentrouting.config.SegmentRoutingDeviceConfig;
 import org.onosproject.segmentrouting.grouphandler.DefaultGroupHandler;
 import org.onosproject.segmentrouting.grouphandler.DestinationSet;
 import org.onosproject.segmentrouting.grouphandler.NextNeighbors;
+import org.onosproject.segmentrouting.mcast.McastFilteringObjStoreKey;
 import org.onosproject.segmentrouting.mcast.McastHandler;
 import org.onosproject.segmentrouting.mcast.McastRole;
 import org.onosproject.segmentrouting.mcast.McastRoleStoreKey;
 import org.onosproject.segmentrouting.mcast.McastStoreKey;
+import org.onosproject.segmentrouting.phasedrecovery.api.PhasedRecoveryService;
 import org.onosproject.segmentrouting.pwaas.DefaultL2Tunnel;
 import org.onosproject.segmentrouting.pwaas.DefaultL2TunnelDescription;
 import org.onosproject.segmentrouting.pwaas.DefaultL2TunnelHandler;
@@ -112,9 +114,9 @@ import org.onosproject.segmentrouting.pwaas.L2TunnelDescription;
 import org.onosproject.segmentrouting.pwaas.L2TunnelHandler;
 import org.onosproject.segmentrouting.pwaas.L2TunnelPolicy;
 import org.onosproject.segmentrouting.storekey.DestinationSetNextObjectiveStoreKey;
+import org.onosproject.segmentrouting.storekey.MacVlanNextObjectiveStoreKey;
 import org.onosproject.segmentrouting.storekey.PortNextObjectiveStoreKey;
 import org.onosproject.segmentrouting.storekey.VlanNextObjectiveStoreKey;
-import org.onosproject.segmentrouting.storekey.MacVlanNextObjectiveStoreKey;
 import org.onosproject.segmentrouting.storekey.XConnectStoreKey;
 import org.onosproject.segmentrouting.xconnect.api.XconnectService;
 import org.onosproject.store.serializers.KryoNamespaces;
@@ -257,10 +259,12 @@ public class SegmentRoutingManager implements SegmentRoutingService {
     public LeadershipService leadershipService;
 
     @Reference(cardinality = ReferenceCardinality.OPTIONAL,
-            bind = "bindXconnectService",
-            unbind = "unbindXconnectService",
             policy = ReferencePolicy.DYNAMIC)
-    public XconnectService xconnectService;
+    public volatile XconnectService xconnectService;
+
+    @Reference(cardinality = ReferenceCardinality.OPTIONAL,
+            policy = ReferencePolicy.DYNAMIC)
+    volatile PhasedRecoveryService phasedRecoveryService;
 
     /** Enable active probing to discover dual-homed hosts. */
     boolean activeProbing = ACTIVE_PROBING_DEFAULT;
@@ -406,24 +410,6 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
     Instant lastEdgePortEvent = Instant.EPOCH;
 
-    protected void bindXconnectService(XconnectService xconnectService) {
-        if (this.xconnectService == null) {
-            log.info("Binding XconnectService");
-            this.xconnectService = xconnectService;
-        } else {
-            log.warn("Trying to bind XconnectService but it is already bound");
-        }
-    }
-
-    protected void unbindXconnectService(XconnectService xconnectService) {
-        if (this.xconnectService == xconnectService) {
-            log.info("Unbinding XconnectService");
-            this.xconnectService = null;
-        } else {
-            log.warn("Trying to unbind XconnectService but it is already unbound");
-        }
-    }
-
     @Activate
     protected void activate(ComponentContext context) {
         appId = coreService.registerApplication(APP_NAME);
@@ -493,10 +479,18 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                 .withTimestampProvider((k, v) -> new WallClockTimestamp())
                 .build();
 
-        compCfgService.preSetProperty("org.onosproject.net.group.impl.GroupManager",
-                                      "purgeOnDisconnection", "true", false);
-        compCfgService.preSetProperty("org.onosproject.net.flow.impl.FlowRuleManager",
-                                      "purgeOnDisconnection", "true", false);
+        processor = new InternalPacketProcessor();
+        linkListener = new InternalLinkListener();
+        deviceListener = new InternalDeviceListener();
+        appCfgHandler = new AppConfigHandler(this);
+        mcastHandler = new McastHandler(this);
+        hostHandler = new HostHandler(this);
+        linkHandler = new LinkHandler(this);
+        routeHandler = new RouteHandler(this);
+        neighbourHandler = new SegmentRoutingNeighbourDispatcher(this);
+        l2TunnelHandler = new DefaultL2TunnelHandler(this);
+        topologyHandler = new TopologyHandler(this);
+
         compCfgService.preSetProperty("org.onosproject.provider.host.impl.HostLocationProvider",
                                       "requestInterceptsEnabled", "false", false);
         compCfgService.preSetProperty("org.onosproject.net.neighbour.impl.NeighbourResolutionManager",
@@ -522,18 +516,6 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                                       "fallbackGroupPollFrequency", "3", false);
         compCfgService.registerProperties(getClass());
         modified(context);
-
-        processor = new InternalPacketProcessor();
-        linkListener = new InternalLinkListener();
-        deviceListener = new InternalDeviceListener();
-        appCfgHandler = new AppConfigHandler(this);
-        mcastHandler = new McastHandler(this);
-        hostHandler = new HostHandler(this);
-        linkHandler = new LinkHandler(this);
-        routeHandler = new RouteHandler(this);
-        neighbourHandler = new SegmentRoutingNeighbourDispatcher(this);
-        l2TunnelHandler = new DefaultL2TunnelHandler(this);
-        topologyHandler = new TopologyHandler(this);
 
         cfgService.addListener(cfgListener);
         cfgService.registerConfigFactory(deviceConfigFactory);
@@ -1034,18 +1016,8 @@ public class SegmentRoutingManager implements SegmentRoutingService {
     }
 
     @Override
-    public Map<McastStoreKey, McastRole> getMcastRoles(IpAddress mcastIp) {
-        return mcastHandler.getMcastRoles(mcastIp);
-    }
-
-    @Override
     public Map<McastRoleStoreKey, McastRole> getMcastRoles(IpAddress mcastIp, ConnectPoint sourcecp) {
         return mcastHandler.getMcastRoles(mcastIp, sourcecp);
-    }
-
-    @Override
-    public Map<ConnectPoint, List<ConnectPoint>> getMcastPaths(IpAddress mcastIp) {
-        return mcastHandler.getMcastPaths(mcastIp);
     }
 
     @Override
@@ -1057,6 +1029,11 @@ public class SegmentRoutingManager implements SegmentRoutingService {
     @Override
     public Map<IpAddress, NodeId> getMcastLeaders(IpAddress mcastIp) {
         return mcastHandler.getMcastLeaders(mcastIp);
+    }
+
+    @Override
+    public Map<DeviceId, List<McastFilteringObjStoreKey>> getMcastFilters() {
+        return mcastHandler.getMcastFilters();
     }
 
     @Override
@@ -1074,6 +1051,21 @@ public class SegmentRoutingManager implements SegmentRoutingService {
     @Override
     public boolean shouldProgram(DeviceId deviceId) {
         return defaultRoutingHandler.shouldProgram(deviceId);
+    }
+
+    @Override
+    public boolean isRoutingStable() {
+        return defaultRoutingHandler.isRoutingStable();
+    }
+
+    @Override
+    public void initHost(DeviceId deviceId) {
+        hostEventExecutor.execute(() -> hostHandler.init(deviceId));
+    }
+
+    @Override
+    public void initRoute(DeviceId deviceId) {
+        routeEventExecutor.execute(() -> routeHandler.init(deviceId));
     }
 
     @Override
@@ -1172,6 +1164,25 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         SegmentRoutingDeviceConfig deviceConfig =
                 cfgService.getConfig(deviceId, SegmentRoutingDeviceConfig.class);
         return Optional.ofNullable(deviceConfig).map(SegmentRoutingDeviceConfig::pairLocalPort);
+    }
+
+    @Override
+    public Set<PortNumber> getInfraPorts(DeviceId deviceId) {
+        return deviceService.getPorts(deviceId).stream()
+                .map(port -> new ConnectPoint(port.element().id(), port.number()))
+                .filter(cp -> interfaceService.getInterfacesByPort(cp).isEmpty())
+                .map(ConnectPoint::port)
+                .collect(Collectors.toSet());
+    }
+
+    @Override
+    public Set<PortNumber> getEdgePorts(DeviceId deviceId) {
+        return deviceService.getPorts(deviceId).stream()
+                .map(port -> new ConnectPoint(port.element().id(), port.number()))
+                .filter(cp -> !interfaceService.getInterfacesByPort(cp).isEmpty() &&
+                        !cp.port().equals(getPairLocalPort(deviceId).orElse(null)))
+                .map(ConnectPoint::port)
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -1442,6 +1453,8 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                              event.type());
                     processPortUpdatedInternal(((Device) event.subject()),
                                        ((DeviceEvent) event).port());
+                    mcastHandler.processPortUpdate(((Device) event.subject()),
+                                                   ((DeviceEvent) event).port());
                 } else if (event.type() == TopologyEvent.Type.TOPOLOGY_CHANGED) {
                     // Process topology event, needed for all modules relying on
                     // topology service for path computation
@@ -1455,6 +1468,10 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                 } else if (event.type() == HostEvent.Type.HOST_MOVED) {
                     hostHandler.processHostMovedEvent((HostEvent) event);
                     routeHandler.processHostMovedEvent((HostEvent) event);
+                } else if (event.type() == HostEvent.Type.HOST_AUX_MOVED) {
+                    hostHandler.processHostMovedEvent((HostEvent) event);
+                    // TODO RouteHandler also needs to process this event in order to
+                    //      support nexthops that has auxLocations
                 } else if (event.type() == HostEvent.Type.HOST_REMOVED) {
                     hostHandler.processHostRemovedEvent((HostEvent) event);
                 } else if (event.type() == HostEvent.Type.HOST_UPDATED) {
@@ -1588,14 +1605,14 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
         if (mastershipService.isLocalMaster(deviceId)) {
             defaultRoutingHandler.populatePortAddressingRules(deviceId);
+            defaultRoutingHandler.purgeSeenBeforeRoutes(deviceId);
             DefaultGroupHandler groupHandler = groupHandlerMap.get(deviceId);
             groupHandler.createGroupsFromVlanConfig();
             routingRulePopulator.populateSubnetBroadcastRule(deviceId);
+            phasedRecoveryService.init(deviceId);
         }
 
         appCfgHandler.init(deviceId);
-        hostEventExecutor.execute(() -> hostHandler.init(deviceId));
-        routeEventExecutor.execute(() -> routeHandler.init(deviceId));
     }
 
     private void processDeviceRemoved(Device device) {
@@ -1631,6 +1648,8 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         // done after all rerouting or rehashing has been completed
         groupHandlerMap.entrySet()
             .forEach(entry -> entry.getValue().cleanUpForNeighborDown(device.id()));
+
+        phasedRecoveryService.reset(device.id());
     }
 
     /**
@@ -2166,6 +2185,11 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         if (getVlanNextObjectiveId(deviceId, vlanId) != -1) {
             // Update L2IG bucket of the port
             grpHandler.updateL2InterfaceGroupBucket(portNum, vlanId, pushVlan);
+            // Update bridging and unicast routing rule for each host
+            hostEventExecutor.execute(() -> hostHandler.processIntfVlanUpdatedEvent(deviceId, portNum,
+                    vlanId, !pushVlan, false));
+            hostEventExecutor.execute(() -> hostHandler.processIntfVlanUpdatedEvent(deviceId, portNum,
+                    vlanId, pushVlan, true));
         } else {
             log.warn("Failed to retrieve next objective for vlan {} in device {}:{}", vlanId, deviceId, portNum);
         }
@@ -2188,9 +2212,6 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         int nextId = getVlanNextObjectiveId(deviceId, vlanId);
 
         if (nextId != -1 && !install) {
-            // Update next objective for a single port as an output port
-            // Remove a single port from L2FG
-            grpHandler.updateGroupFromVlanConfiguration(vlanId, portNum, nextId, install);
             // Remove L2 Bridging rule and L3 Unicast rule to the host
             hostEventExecutor.execute(() -> hostHandler.processIntfVlanUpdatedEvent(deviceId, portNum,
                     vlanId, pushVlan, install));
@@ -2202,10 +2223,17 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                 // Remove L2FG for VLAN
                 grpHandler.removeBcastGroupFromVlan(deviceId, portNum, vlanId, pushVlan);
             } else {
-                // Remove L2IG of the port
-                grpHandler.removePortNextObjective(deviceId, portNum, vlanId, pushVlan);
+                // Remove a single port from L2FG
+                grpHandler.updateGroupFromVlanConfiguration(vlanId, portNum, nextId, install);
             }
+            // Remove L2IG of the port
+            grpHandler.removePortNextObjective(deviceId, portNum, vlanId, pushVlan);
         } else if (install) {
+            // Create L2IG of the port
+            grpHandler.createPortNextObjective(deviceId, portNum, vlanId, pushVlan);
+            // Create L2 Bridging rule and L3 Unicast rule to the host
+            hostEventExecutor.execute(() -> hostHandler.processIntfVlanUpdatedEvent(deviceId, portNum,
+                    vlanId, pushVlan, install));
             if (nextId != -1) {
                 // Add a single port to L2FG
                 grpHandler.updateGroupFromVlanConfiguration(vlanId, portNum, nextId, install);
@@ -2214,8 +2242,6 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                 grpHandler.createBcastGroupFromVlan(vlanId, Collections.singleton(portNum));
                 routingRulePopulator.updateSubnetBroadcastRule(deviceId, vlanId, install);
             }
-            hostEventExecutor.execute(() -> hostHandler.processIntfVlanUpdatedEvent(deviceId, portNum,
-                    vlanId, pushVlan, install));
         } else {
             log.warn("Failed to retrieve next objective for vlan {} in device {}:{}", vlanId, deviceId, portNum);
         }
@@ -2237,10 +2263,37 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                 .map(InterfaceIpAddress::subnetAddress)
                 .collect(Collectors.toSet());
 
-        defaultRoutingHandler.revokeSubnet(
-                ipPrefixSet.stream()
-                        .filter(ipPrefix -> !deviceIpPrefixSet.contains(ipPrefix))
-                        .collect(Collectors.toSet()));
+        Set<IpPrefix> subnetsToBeRevoked = ipPrefixSet.stream()
+                .filter(ipPrefix -> !deviceIpPrefixSet.contains(ipPrefix))
+                .collect(Collectors.toSet());
+
+        // Check if any of the subnets to be revoked is configured in the pairDevice.
+        // If any, repopulate the subnet with pairDevice connectPoint instead of revoking.
+        Optional<DeviceId> pairDevice = getPairDeviceId(cp.deviceId());
+        if (pairDevice.isPresent()) {
+            Set<IpPrefix> pairDeviceIpPrefix = getDeviceSubnetMap().get(pairDevice.get());
+
+            Set<IpPrefix> subnetsExistingInPairDevice = subnetsToBeRevoked.stream()
+                    .filter(ipPrefix -> pairDeviceIpPrefix.contains(ipPrefix))
+                    .collect(Collectors.toSet());
+
+            // Update the subnets existing in pair device with pair device connect point.
+            if (!subnetsExistingInPairDevice.isEmpty()) {
+                // PortNumber of connect point is not relevant in populate subnet and hence providing as ANY.
+                ConnectPoint pairDeviceCp = new ConnectPoint(pairDevice.get(), PortNumber.ANY);
+                log.debug("Updating the subnets: {} with pairDevice connectPoint as it exists in the Pair device: {}",
+                        subnetsExistingInPairDevice, pairDeviceCp);
+                defaultRoutingHandler.populateSubnet(Collections.singleton(pairDeviceCp), subnetsExistingInPairDevice);
+            }
+
+            // Remove only the subnets that are not configured in the pairDevice.
+            subnetsToBeRevoked = Sets.difference(subnetsToBeRevoked, subnetsExistingInPairDevice);
+        }
+
+        if (!subnetsToBeRevoked.isEmpty()) {
+            log.debug("Removing subnets for connectPoint: {}, subnets: {}", cp, subnetsToBeRevoked);
+            defaultRoutingHandler.revokeSubnet(subnetsToBeRevoked);
+        }
 
         // 2. Interface IP punts
         // Remove IP punts for old Intf address
@@ -2274,12 +2327,56 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         Set<IpPrefix> deviceIpPrefixSet = deviceIntfIpAddrs.stream()
                 .map(InterfaceIpAddress::subnetAddress)
                 .collect(Collectors.toSet());
+        Set<IpPrefix> subnetsToBePopulated = ipPrefixSet.stream()
+                .filter(ipPrefix -> !deviceIpPrefixSet.contains(ipPrefix))
+                .collect(Collectors.toSet());
 
-        defaultRoutingHandler.populateSubnet(
-                Collections.singleton(cp),
-                ipPrefixSet.stream()
-                        .filter(ipPrefix -> !deviceIpPrefixSet.contains(ipPrefix))
-                        .collect(Collectors.toSet()));
+        if (!subnetsToBePopulated.isEmpty()) {
+            log.debug("Adding subnets for connectPoint: {}, subnets: {}", cp, subnetsToBePopulated);
+
+            // check if pair-device has the same subnet configured?
+            Optional<DeviceId> pairDevice = getPairDeviceId(cp.deviceId());
+            if (pairDevice.isPresent()) {
+                Set<IpPrefix> pairDeviceIpPrefix = getDeviceSubnetMap().get(pairDevice.get());
+
+                Set<IpPrefix>  subnetsToBePopulatedAsDualHomed = subnetsToBePopulated.stream()
+                        .filter(ipPrefix -> pairDeviceIpPrefix.contains(ipPrefix))
+                        .collect(Collectors.toSet());
+                Set<IpPrefix> subnetsToBePopulatedAsSingleHomed = Sets.difference(subnetsToBePopulated,
+                        subnetsToBePopulatedAsDualHomed);
+
+                if (!subnetsToBePopulatedAsSingleHomed.isEmpty()) {
+                    defaultRoutingHandler.populateSubnet(
+                            Collections.singleton(cp),
+                            subnetsToBePopulatedAsSingleHomed);
+                }
+
+                if (!subnetsToBePopulatedAsDualHomed.isEmpty()) {
+                    Set<ConnectPoint> cpts = new HashSet<>();
+                    cpts.add(cp);
+                    // As Subnets is DualHomed adding the pairDevice also as ConnectPoint.
+                    // PortNumber of connect point is not relevant in populate subnet and hence providing as ANY.
+                    ConnectPoint pairCp = new ConnectPoint(pairDevice.get(), PortNumber.ANY);
+                    cpts.add(pairCp);
+
+                    log.debug("Adding DualHomed subnets for connectPoint: {} and its pair device: {}, subnets: {}",
+                            cp, pairCp, subnetsToBePopulatedAsDualHomed);
+
+                    // populating the subnets as DualHomed
+                    defaultRoutingHandler.populateSubnet(
+                            cpts,
+                            subnetsToBePopulated);
+
+                    // revoking the subnets populated in the device as it is now Dualhomed.
+                    defaultRoutingHandler.revokeSubnet(Collections.singleton(cp.deviceId()),
+                            subnetsToBePopulatedAsDualHomed);
+                }
+            } else {
+                defaultRoutingHandler.populateSubnet(
+                        Collections.singleton(cp),
+                        subnetsToBePopulated);
+            }
+        }
 
         // 2. Interface IP punts
         // Add IP punts for new Intf address

@@ -27,6 +27,7 @@ import org.onlab.osgi.ServiceDirectory;
 import org.onlab.packet.EthType;
 import org.onlab.packet.IPv4;
 import org.onlab.packet.IPv6;
+import org.onlab.packet.IpPrefix;
 import org.onlab.packet.VlanId;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.core.ApplicationId;
@@ -78,14 +79,14 @@ import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.StorageService;
 import org.slf4j.Logger;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import java.util.Arrays;
-import java.util.Objects;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -255,7 +256,7 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
 
     @Override
     public void forward(ForwardingObjective fwd) {
-
+        log.debug("Installing forwarding objective {}", fwd);
         if (checkForMulticast(fwd)) {
             processMulticastRule(fwd);
             return;
@@ -300,28 +301,34 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         if (nextObjective.type() != NextObjective.Type.BROADCAST) {
             log.error("OLT only supports broadcast groups.");
             fail(nextObjective, ObjectiveError.BADPARAMS);
+            return;
         }
 
-        if (nextObjective.next().size() != 1) {
+        if (nextObjective.next().size() != 1 && !nextObjective.op().equals(Objective.Operation.REMOVE)) {
             log.error("OLT only supports singleton broadcast groups.");
             fail(nextObjective, ObjectiveError.BADPARAMS);
+            return;
         }
 
-        TrafficTreatment treatment = nextObjective.next().stream().findFirst().get();
+        Optional<TrafficTreatment> treatmentOpt = nextObjective.next().stream().findFirst();
+        if (treatmentOpt.isEmpty() && !nextObjective.op().equals(Objective.Operation.REMOVE)) {
+            log.error("Next objective {} does not have a treatment", nextObjective);
+            fail(nextObjective, ObjectiveError.BADPARAMS);
+            return;
+        }
 
-
-        GroupBucket bucket = DefaultGroupBucket.createAllGroupBucket(treatment);
         GroupKey key = new DefaultGroupKey(appKryo.serialize(nextObjective.id()));
 
-
         pendingGroups.put(key, nextObjective);
-
+        log.trace("NextObjective Operation {}", nextObjective.op());
         switch (nextObjective.op()) {
             case ADD:
                 GroupDescription groupDesc =
                         new DefaultGroupDescription(deviceId,
                                                     GroupDescription.Type.ALL,
-                                                    new GroupBuckets(Collections.singletonList(bucket)),
+                                                    new GroupBuckets(
+                                                            Collections.singletonList(
+                                                                buildBucket(treatmentOpt.get()))),
                                                     key,
                                                     null,
                                                     nextObjective.appId());
@@ -332,12 +339,16 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                 break;
             case ADD_TO_EXISTING:
                 groupService.addBucketsToGroup(deviceId, key,
-                                               new GroupBuckets(Collections.singletonList(bucket)),
+                                               new GroupBuckets(
+                                                       Collections.singletonList(
+                                                               buildBucket(treatmentOpt.get()))),
                                                key, nextObjective.appId());
                 break;
             case REMOVE_FROM_EXISTING:
                 groupService.removeBucketsFromGroup(deviceId, key,
-                                                    new GroupBuckets(Collections.singletonList(bucket)),
+                                                    new GroupBuckets(
+                                                            Collections.singletonList(
+                                                                buildBucket(treatmentOpt.get()))),
                                                     key, nextObjective.appId());
                 break;
             default:
@@ -345,6 +356,10 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         }
 
 
+    }
+
+    private GroupBucket buildBucket(TrafficTreatment treatment) {
+        return DefaultGroupBucket.createAllGroupBucket(treatment);
     }
 
     private void processMulticastRule(ForwardingObjective fwd) {
@@ -364,13 +379,15 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         TrafficTreatment treatment =
                 buildTreatment(Instructions.createGroup(group.id()));
 
+        TrafficSelector.Builder selectorBuilder = buildIpv4SelectorForMulticast(fwd);
+
         FlowRule rule = DefaultFlowRule.builder()
                 .fromApp(fwd.appId())
                 .forDevice(deviceId)
                 .forTable(0)
                 .makePermanent()
                 .withPriority(fwd.priority())
-                .withSelector(fwd.selector())
+                .withSelector(selectorBuilder.build())
                 .withTreatment(treatment)
                 .build();
 
@@ -392,6 +409,45 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
 
         applyFlowRules(builder, fwd);
 
+    }
+
+    private TrafficSelector.Builder buildIpv4SelectorForMulticast(ForwardingObjective fwd) {
+        TrafficSelector.Builder builderToUpdate = DefaultTrafficSelector.builder();
+
+        Optional<Criterion> vlanIdCriterion = readFromSelector(fwd.meta(), Criterion.Type.VLAN_VID);
+        if (vlanIdCriterion.isPresent()) {
+            VlanId assignedVlan = ((VlanIdCriterion) vlanIdCriterion.get()).vlanId();
+            builderToUpdate.matchVlanId(assignedVlan);
+        }
+
+        Optional<Criterion> innerVlanIdCriterion = readFromSelector(fwd.meta(), Criterion.Type.INNER_VLAN_VID);
+        if (innerVlanIdCriterion.isPresent()) {
+            VlanId assignedInnerVlan = ((VlanIdCriterion) innerVlanIdCriterion.get()).vlanId();
+            builderToUpdate.matchMetadata(assignedInnerVlan.toShort());
+        }
+
+        Optional<Criterion> ethTypeCriterion = readFromSelector(fwd.selector(), Criterion.Type.ETH_TYPE);
+        if (ethTypeCriterion.isPresent()) {
+            EthType ethType = ((EthTypeCriterion) ethTypeCriterion.get()).ethType();
+            builderToUpdate.matchEthType(ethType.toShort());
+        }
+
+        Optional<Criterion> ipv4DstCriterion = readFromSelector(fwd.selector(), Criterion.Type.IPV4_DST);
+        if (ipv4DstCriterion.isPresent()) {
+            IpPrefix ipv4Dst = ((IPCriterion) ipv4DstCriterion.get()).ip();
+            builderToUpdate.matchIPDst(ipv4Dst);
+        }
+
+        return builderToUpdate;
+    }
+
+    static Optional<Criterion> readFromSelector(TrafficSelector selector, Criterion.Type type) {
+        if (selector == null) {
+            return Optional.empty();
+        }
+        Criterion criterion = selector.getCriterion(type);
+        return (criterion == null)
+                ? Optional.empty() : Optional.of(criterion);
     }
 
     private boolean checkForMulticast(ForwardingObjective fwd) {
@@ -452,8 +508,10 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         TrafficSelector selector = fwd.selector();
 
         Criterion outerVlan = selector.getCriterion(Criterion.Type.VLAN_VID);
+        Criterion outerPbit = selector.getCriterion(Criterion.Type.VLAN_PCP);
         Criterion innerVlanCriterion = selector.getCriterion(Criterion.Type.INNER_VLAN_VID);
         Criterion inport = selector.getCriterion(Criterion.Type.IN_PORT);
+        Criterion dstMac = selector.getCriterion(Criterion.Type.ETH_DST);
 
         if (outerVlan == null || innerVlanCriterion == null || inport == null) {
             log.error("Forwarding objective is underspecified: {}", fwd);
@@ -464,18 +522,17 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         VlanId innerVlan = ((VlanIdCriterion) innerVlanCriterion).vlanId();
         Criterion innerVid = Criteria.matchVlanId(innerVlan);
 
-        // Required to differentiate the same match flows
-        // Please note that S tag and S p bit values will be same for the same service - so conflict flows!
-        // Metadata match criteria solves the conflict issue - but not used by the voltha
-        // Maybe - find a better way to solve the above problem
-        Criterion metadata = Criteria.matchMetadata(innerVlan.toShort());
-
-        TrafficSelector outerSelector = buildSelector(inport, metadata, outerVlan);
-
         if (innerVlan.toShort() == VlanId.ANY_VALUE) {
+            TrafficSelector outerSelector = buildSelector(inport, outerVlan, outerPbit, dstMac);
             installDownstreamRulesForAnyVlan(fwd, output, outerSelector, buildSelector(inport,
                     Criteria.matchVlanId(VlanId.ANY)));
         } else {
+            // Required to differentiate the same match flows
+            // Please note that S tag and S p bit values will be same for the same service - so conflict flows!
+            // Metadata match criteria solves the conflict issue - but not used by the voltha
+            // Maybe - find a better way to solve the above problem
+            Criterion metadata = Criteria.matchMetadata(innerVlan.toShort());
+            TrafficSelector outerSelector = buildSelector(inport, metadata, outerVlan, outerPbit, dstMac);
             installDownstreamRulesForVlans(fwd, output, outerSelector, buildSelector(inport, innerVid));
         }
     }
@@ -499,8 +556,28 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
             innerTreatment = (buildTreatment(popAndRewrite.getLeft(), fetchMeter(fwd),
                     writeMetadataIncludingOnlyTp(fwd), output));
         } else {
-            innerTreatment = (buildTreatment(popAndRewrite.getLeft(), popAndRewrite.getRight(),
+            innerTreatment = (buildTreatment(popAndRewrite.getRight(),
                     fetchMeter(fwd), writeMetadataIncludingOnlyTp(fwd), output));
+        }
+
+        List<Instruction> setVlanPcps = findL2Instructions(L2ModificationInstruction.L2SubType.VLAN_PCP,
+                fwd.treatment().allInstructions());
+
+        Instruction innerPbitSet = null;
+
+        if (setVlanPcps != null && !setVlanPcps.isEmpty()) {
+            innerPbitSet = setVlanPcps.get(0);
+        }
+
+        VlanId remarkInnerVlan = null;
+        Optional<Criterion> vlanIdCriterion = readFromSelector(innerSelector, Criterion.Type.VLAN_VID);
+        if (vlanIdCriterion.isPresent()) {
+            remarkInnerVlan = ((VlanIdCriterion) vlanIdCriterion.get()).vlanId();
+        }
+
+        Instruction modVlanId = null;
+        if (innerPbitSet != null) {
+            modVlanId = Instructions.modVlanId(remarkInnerVlan);
         }
 
         //match: in port (nni), s-tag
@@ -511,8 +588,8 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                 .makePermanent()
                 .withPriority(fwd.priority())
                 .withSelector(outerSelector)
-                .withTreatment(buildTreatment(popAndRewrite.getLeft(), fetchMeter(fwd), fetchWriteMetadata(fwd),
-                        Instructions.transition(QQ_TABLE)));
+                .withTreatment(buildTreatment(popAndRewrite.getLeft(), modVlanId,
+                        innerPbitSet, fetchMeter(fwd), fetchWriteMetadata(fwd), Instructions.transition(QQ_TABLE)));
 
         //match: in port (nni), c-tag
         //action: immediate: write metadata and pop, meter, output
@@ -571,7 +648,6 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
             return;
         }
 
-        Pair<Instruction, Instruction> innerPair = vlanOps.remove(0);
         Pair<Instruction, Instruction> outerPair = vlanOps.remove(0);
 
         boolean noneValueVlanStatus = checkNoneVlanCriteria(fwd);
@@ -580,6 +656,8 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         if (anyValueVlanStatus) {
             installUpstreamRulesForAnyVlan(fwd, output, outerPair);
         } else {
+            Pair<Instruction, Instruction> innerPair = outerPair;
+            outerPair = vlanOps.remove(0);
             installUpstreamRulesForVlans(fwd, output, innerPair, outerPair, noneValueVlanStatus);
         }
     }
@@ -588,13 +666,25 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                                               Pair<Instruction, Instruction> innerPair,
                                               Pair<Instruction, Instruction> outerPair, Boolean noneValueVlanStatus) {
 
+        List<Instruction> setVlanPcps = findL2Instructions(L2ModificationInstruction.L2SubType.VLAN_PCP,
+                fwd.treatment().allInstructions());
+
+        Instruction innerPbitSet = null;
+        Instruction outerPbitSet = null;
+
+        if (setVlanPcps != null && !setVlanPcps.isEmpty()) {
+            innerPbitSet = setVlanPcps.get(0);
+            outerPbitSet = setVlanPcps.get(1);
+        }
+
         TrafficTreatment innerTreatment;
         if (noneValueVlanStatus) {
             innerTreatment = buildTreatment(innerPair.getLeft(), innerPair.getRight(), fetchMeter(fwd),
-                    fetchWriteMetadata(fwd), Instructions.transition(QQ_TABLE));
+                    fetchWriteMetadata(fwd), innerPbitSet,
+                    Instructions.transition(QQ_TABLE));
         } else {
             innerTreatment = buildTreatment(innerPair.getRight(), fetchMeter(fwd), fetchWriteMetadata(fwd),
-                    Instructions.transition(QQ_TABLE));
+                    innerPbitSet, Instructions.transition(QQ_TABLE));
         }
 
         //match: in port, vlanId (0 or None)
@@ -623,9 +713,17 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                 .forTable(QQ_TABLE)
                 .makePermanent()
                 .withPriority(fwd.priority())
-                .withSelector(buildSelector(inPort, Criteria.matchVlanId(cVlanId)))
                 .withTreatment(buildTreatment(outerPair.getLeft(), outerPair.getRight(),
-                        fetchMeter(fwd), writeMetadataIncludingOnlyTp(fwd), output));
+                        fetchMeter(fwd), writeMetadataIncludingOnlyTp(fwd),
+                        outerPbitSet, output));
+
+        if (innerPbitSet != null) {
+            byte innerPbit = ((L2ModificationInstruction.ModVlanPcpInstruction)
+                    innerPbitSet).vlanPcp();
+            outer.withSelector(buildSelector(inPort, Criteria.matchVlanId(cVlanId), Criteria.matchVlanPcp(innerPbit)));
+        } else {
+            outer.withSelector(buildSelector(inPort, Criteria.matchVlanId(cVlanId)));
+        }
 
         applyRules(fwd, inner, outer);
     }
@@ -646,24 +744,6 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                 .withTreatment(buildTreatment(Instructions.transition(QQ_TABLE), fetchMeter(fwd),
                         fetchWriteMetadata(fwd)));
 
-
-        TrafficSelector defaultSelector = DefaultTrafficSelector.builder()
-                .matchInPort(((PortCriterion) fwd.selector().getCriterion(Criterion.Type.IN_PORT)).port())
-                .build();
-
-        //drop the packets that don't have vlan
-        //match: in port
-        //action: no action
-        FlowRule.Builder defaultInner = DefaultFlowRule.builder()
-                .fromApp(fwd.appId())
-                .forDevice(deviceId)
-                .makePermanent()
-                .withPriority(NO_ACTION_PRIORITY)
-                .withSelector(defaultSelector)
-                .withTreatment(DefaultTrafficTreatment.emptyTreatment());
-
-        Instruction qinqInstruction = Instructions.pushVlan(EthType.EtherType.QINQ.ethType());
-
         //match: in port and any-vlan (coming from OLT app.)
         //action: immediate: push:QinQ, vlanId (s-tag), write metadata, meter and output
         FlowRule.Builder outer = DefaultFlowRule.builder()
@@ -673,10 +753,10 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                 .makePermanent()
                 .withPriority(fwd.priority())
                 .withSelector(fwd.selector())
-                .withTreatment(buildTreatment(qinqInstruction, outerPair.getRight(),
+                .withTreatment(buildTreatment(outerPair.getLeft(), outerPair.getRight(),
                         fetchMeter(fwd), writeMetadataIncludingOnlyTp(fwd), output));
 
-        applyRules(fwd, inner, defaultInner, outer);
+        applyRules(fwd, inner, outer);
     }
 
     private boolean checkNoneVlanCriteria(ForwardingObjective fwd) {
@@ -696,7 +776,8 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                 .findAny().orElse(null);
 
         if (anyValueVlanCriterion == null) {
-            log.debug("Any value vlan match criteria is not found");
+            log.debug("Any value vlan match criteria is not found, criteria {}",
+                      fwd.selector().criteria());
             return false;
         }
 
@@ -761,21 +842,21 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
     private List<Pair<Instruction, Instruction>> findVlanOps(List<Instruction> instructions,
                                                              L2ModificationInstruction.L2SubType type) {
 
-        List<Instruction> vlanPushs = findL2Instructions(
+        List<Instruction> vlanOperations = findL2Instructions(
                 type,
                 instructions);
         List<Instruction> vlanSets = findL2Instructions(
                 L2ModificationInstruction.L2SubType.VLAN_ID,
                 instructions);
 
-        if (vlanPushs.size() != vlanSets.size()) {
+        if (vlanOperations.size() != vlanSets.size()) {
             return ImmutableList.of();
         }
 
         List<Pair<Instruction, Instruction>> pairs = Lists.newArrayList();
 
-        for (int i = 0; i < vlanPushs.size(); i++) {
-            pairs.add(new ImmutablePair<>(vlanPushs.get(i), vlanSets.get(i)));
+        for (int i = 0; i < vlanOperations.size(); i++) {
+            pairs.add(new ImmutablePair<>(vlanOperations.get(i), vlanSets.get(i)));
         }
         return pairs;
     }
@@ -810,7 +891,12 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         Instruction meter = filter.meta().metered();
         Instruction writeMetadata = filter.meta().writeMetadata();
 
-        TrafficSelector selector = buildSelector(filter.key(), ethType, ipProto);
+        // cTag
+        VlanIdCriterion vlanId = (VlanIdCriterion) filterForCriterion(filter.conditions(),
+                Criterion.Type.VLAN_VID);
+        Criterion cTagPriority = filterForCriterion(filter.conditions(), Criterion.Type.VLAN_PCP);
+
+        TrafficSelector selector = buildSelector(filter.key(), ethType, ipProto, vlanId, cTagPriority);
         TrafficTreatment treatment = buildTreatment(output, meter, writeMetadata);
         buildAndApplyRule(filter, selector, treatment);
     }
@@ -824,7 +910,10 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         Instruction meter = filter.meta().metered();
         Instruction writeMetadata = filter.meta().writeMetadata();
 
-        TrafficSelector selector = buildSelector(filter.key(), ethType, ipProto, udpSrcPort, udpDstPort);
+        VlanIdCriterion vlanId = (VlanIdCriterion)
+                filterForCriterion(filter.conditions(), Criterion.Type.VLAN_VID);
+
+        TrafficSelector selector = buildSelector(filter.key(), ethType, ipProto, udpSrcPort, udpDstPort, vlanId);
         TrafficTreatment treatment = buildTreatment(output, meter, writeMetadata);
         buildAndApplyRule(filter, selector, treatment);
     }
@@ -940,16 +1029,23 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
     private class InnerGroupListener implements GroupListener {
         @Override
         public void event(GroupEvent event) {
+            GroupKey key = event.subject().appCookie();
+            NextObjective obj = pendingGroups.getIfPresent(key);
+            if (obj == null) {
+                log.debug("No pending group for {}, moving on", key);
+                return;
+            }
+            log.trace("Event {} for group {}, handling pending" +
+                              "NextGroup {}", event.type(), key, obj.id());
             if (event.type() == GroupEvent.Type.GROUP_ADDED ||
                     event.type() == GroupEvent.Type.GROUP_UPDATED) {
-                GroupKey key = event.subject().appCookie();
-
-                NextObjective obj = pendingGroups.getIfPresent(key);
-                if (obj != null) {
                     flowObjectiveStore.putNextGroup(obj.id(), new OLTPipelineGroup(key));
                     pass(obj);
                     pendingGroups.invalidate(key);
-                }
+            } else if (event.type() == GroupEvent.Type.GROUP_REMOVED) {
+                    flowObjectiveStore.removeNextGroup(obj.id());
+                    pass(obj);
+                    pendingGroups.invalidate(key);
             }
         }
     }

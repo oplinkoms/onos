@@ -91,7 +91,7 @@ public class WorkplaceWorkflow {
             ((SystemWorkflowContext) context).setDistributor(workplaceName);
 
             context.completed();
-       }
+        }
     }
 
     public static class CreateWorkplace extends AbsWorkflowWorklet {

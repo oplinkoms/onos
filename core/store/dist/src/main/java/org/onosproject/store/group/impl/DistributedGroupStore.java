@@ -27,6 +27,7 @@ import org.onosproject.core.GroupId;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.MastershipRole;
+import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.group.DefaultGroup;
 import org.onosproject.net.group.DefaultGroupBucket;
@@ -140,10 +141,15 @@ public class DistributedGroupStore
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ComponentConfigService cfgService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected DeviceService deviceService;
+
     // Guarantees enabling DriverService before enabling GroupStore
     // (DriverService is used in serializing/de-serializing DefaultGroup)
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DriverService driverService;
+
+    private NodeId local;
 
     private ScheduledExecutorService executor;
     private Consumer<Status> statusChangeListener;
@@ -249,6 +255,8 @@ public class DistributedGroupStore
 
         groupTopic = getOrCreateGroupTopic(serializer);
         groupTopic.subscribe(this::processGroupMessage);
+
+        local = clusterService.getLocalNode().id();
 
         log.info("Started");
     }
@@ -375,7 +383,7 @@ public class DistributedGroupStore
 
     private Iterable<StoredGroupEntry> getStoredGroups(DeviceId deviceId) {
         NodeId master = mastershipService.getMasterFor(deviceId);
-        if (master == null) {
+        if (master == null && deviceService.isAvailable(deviceId)) {
             log.debug("Failed to getGroups: No master for {}", deviceId);
             return Collections.emptySet();
         }
@@ -900,6 +908,7 @@ public class DistributedGroupStore
                   existing.id(),
                   existing.deviceId(),
                   existing.state());
+        // TODO is this really safe ?
         synchronized (existing) {
             existing.setState(GroupState.PENDING_DELETE);
             getGroupStoreKeyMap().
@@ -909,6 +918,36 @@ public class DistributedGroupStore
         log.debug("deleteGroupDescriptionInternal: in device {} issuing GROUP_REMOVE_REQUESTED",
                   deviceId);
         notifyDelegate(new GroupEvent(Type.GROUP_REMOVE_REQUESTED, existing));
+    }
+
+    /**
+     * Updates the stats of an existing group entry.
+     *
+     * @param group the new stats
+     * @param existing the existing group
+     */
+    private void updateGroupEntryStatsInternal(Group group, StoredGroupEntry existing) {
+        for (GroupBucket bucket : group.buckets().buckets()) {
+            Optional<GroupBucket> matchingBucket =
+                    existing.buckets().buckets()
+                            .stream()
+                            .filter((existingBucket) -> (existingBucket.equals(bucket)))
+                            .findFirst();
+            if (matchingBucket.isPresent()) {
+                ((StoredGroupBucketEntry) matchingBucket.
+                        get()).setPackets(bucket.packets());
+                ((StoredGroupBucketEntry) matchingBucket.
+                        get()).setBytes(bucket.bytes());
+            } else {
+                log.warn("updateGroupEntryStatsInternal: No matching bucket {}" +
+                        " to update stats", bucket);
+            }
+        }
+        existing.setLife(group.life());
+        existing.setPackets(group.packets());
+        existing.setBytes(group.bytes());
+        existing.setReferenceCount(group.referenceCount());
+        existing.setFailedRetryCount(0);
     }
 
     /**
@@ -927,28 +966,10 @@ public class DistributedGroupStore
             log.trace("addOrUpdateGroupEntry: updating group entry {} in device {}",
                       group.id(),
                       group.deviceId());
+            // TODO is this really safe ?
             synchronized (existing) {
-                for (GroupBucket bucket : group.buckets().buckets()) {
-                    Optional<GroupBucket> matchingBucket =
-                            existing.buckets().buckets()
-                                    .stream()
-                                    .filter((existingBucket) -> (existingBucket.equals(bucket)))
-                                    .findFirst();
-                    if (matchingBucket.isPresent()) {
-                        ((StoredGroupBucketEntry) matchingBucket.
-                                get()).setPackets(bucket.packets());
-                        ((StoredGroupBucketEntry) matchingBucket.
-                                get()).setBytes(bucket.bytes());
-                    } else {
-                        log.warn("addOrUpdateGroupEntry: No matching "
-                                         + "buckets to update stats");
-                    }
-                }
-                existing.setLife(group.life());
-                existing.setPackets(group.packets());
-                existing.setBytes(group.bytes());
-                existing.setReferenceCount(group.referenceCount());
-                existing.setFailedRetryCount(0);
+                // Update stats
+                updateGroupEntryStatsInternal(group, existing);
                 if ((existing.state() == GroupState.PENDING_ADD) ||
                         (existing.state() == GroupState.PENDING_ADD_RETRY)) {
                     log.trace("addOrUpdateGroupEntry: group entry {} in device {} moving from {} to ADDED",
@@ -973,13 +994,65 @@ public class DistributedGroupStore
                                                     existing.appCookie()), existing);
             }
         } else {
-            log.warn("addOrUpdateGroupEntry: Group update "
-                             + "happening for a non-existing entry in the map");
+            log.warn("addOrUpdateGroupEntry: Group update {} " +
+                    "happening for a non-existing entry in the map", group);
         }
 
-        // XXX if map is going to trigger event, is this one needed?
+        // TODO if map is going to trigger event, is this one needed?
         if (event != null) {
             notifyDelegate(event);
+        }
+    }
+
+    /**
+     * Updates stats of an existing entry.
+     *
+     * @param group group entry
+     */
+    private void updateGroupEntryStats(Group group) {
+        // check if this new entry is an update to an existing entry
+        StoredGroupEntry existing = getStoredGroupEntry(group.deviceId(),
+                                                        group.id());
+        if (existing != null) {
+            log.trace("updateStatsGroupEntry: updating group entry {} in device {}",
+                      group.id(),
+                      group.deviceId());
+            // TODO is this really safe ?
+            synchronized (existing) {
+                // We don't make further update - it will be gone after the next update
+                if (existing.state() == GroupState.PENDING_DELETE) {
+                    log.trace("updateStatsGroupEntry: group entry {} in device {} is in {} not updated",
+                              existing.id(),
+                              existing.deviceId(),
+                              existing.state());
+                    return;
+                }
+                // Update stats
+                updateGroupEntryStatsInternal(group, existing);
+                if ((existing.state() == GroupState.PENDING_ADD) ||
+                        (existing.state() == GroupState.PENDING_ADD_RETRY)) {
+                    log.trace("updateStatsGroupEntry: group entry {} in device {} moving from {} to ADDED",
+                              existing.id(),
+                              existing.deviceId(),
+                              existing.state());
+                    existing.setState(GroupState.ADDED);
+                    existing.setIsGroupStateAddedFirstTime(true);
+                } else {
+                    log.trace("updateStatsGroupEntry: group entry {} in device {} moving from {} to ADDED",
+                              existing.id(),
+                              existing.deviceId(),
+                              GroupState.PENDING_UPDATE);
+                    existing.setState(GroupState.ADDED);
+                    existing.setIsGroupStateAddedFirstTime(false);
+                }
+                //Re-PUT map entries to trigger map update events
+                getGroupStoreKeyMap().
+                        put(new GroupStoreKeyMapKey(existing.deviceId(),
+                                                    existing.appCookie()), existing);
+            }
+        } else {
+            log.warn("updateStatsGroupEntry: Group update {} "
+                    + "happening for a non-existing entry in the map", group);
         }
     }
 
@@ -1390,6 +1463,7 @@ public class DistributedGroupStore
                 Sets.newHashSet(getStoredGroups(deviceId));
         Set<Group> extraneousStoredEntries =
                 Sets.newHashSet(getExtraneousGroups(deviceId));
+        NodeId master;
 
         if (log.isTraceEnabled()) {
             log.trace("pushGroupMetrics: Displaying all ({}) southboundGroupEntries for device {}",
@@ -1409,7 +1483,14 @@ public class DistributedGroupStore
 
         garbageCollect(deviceId, southboundGroupEntries, storedGroupEntries);
 
+        // update stats
         for (Iterator<Group> it2 = southboundGroupEntries.iterator(); it2.hasNext();) {
+            // Mastership change can occur during this iteration
+            master = mastershipService.getMasterFor(deviceId);
+            if (!Objects.equals(local, master)) {
+                log.warn("Tried to update the group stats while the node was not the master");
+                return;
+            }
             Group group = it2.next();
             if (storedGroupEntries.remove(group)) {
                 // we both have the group, let's update some info then.
@@ -1420,6 +1501,8 @@ public class DistributedGroupStore
                 it2.remove();
             }
         }
+
+        // extraneous groups in the dataplane
         for (Group group : southboundGroupEntries) {
             if (getGroup(group.deviceId(), group.id()) != null) {
                 // There is a group existing with the same id
@@ -1432,6 +1515,12 @@ public class DistributedGroupStore
                                      + "not present in key based table");
                 }
             } else {
+                // Mastership change can occur during this iteration
+                master = mastershipService.getMasterFor(deviceId);
+                if (!Objects.equals(local, master)) {
+                    log.warn("Tried to process extraneous groups while the node was not the master");
+                    return;
+                }
                 // there are groups in the switch that aren't in the store
                 log.debug("Group AUDIT: extraneous group {} exists in data plane for device {}",
                           group.id(), deviceId);
@@ -1443,13 +1532,29 @@ public class DistributedGroupStore
                 }
             }
         }
+
+        // missing groups in the dataplane
         for (StoredGroupEntry group : storedGroupEntries) {
+            // Mastership change can occur during this iteration
+            master = mastershipService.getMasterFor(deviceId);
+            if (!Objects.equals(local, master)) {
+                log.warn("Tried to process missing groups while the node was not the master");
+                return;
+            }
             // there are groups in the store that aren't in the switch
             log.debug("Group AUDIT: group {} missing in data plane for device {}",
                       group.id(), deviceId);
             groupMissing(group);
         }
+
+        // extraneous groups in the store
         for (Group group : extraneousStoredEntries) {
+            // Mastership change can occur during this iteration
+            master = mastershipService.getMasterFor(deviceId);
+            if (!Objects.equals(local, master)) {
+                log.warn("Tried to process node extraneous groups while the node was not the master");
+                return;
+            }
             // there are groups in the extraneous store that
             // aren't in the switch
             log.debug("Group AUDIT: clearing extraneous group {} from store for device {}",
@@ -1481,8 +1586,15 @@ public class DistributedGroupStore
             return;
         }
 
+        NodeId master;
         Iterator<StoredGroupEntry> it = storedGroupEntries.iterator();
         while (it.hasNext()) {
+            // Mastership change can occur during this iteration
+            master = mastershipService.getMasterFor(deviceId);
+            if (!Objects.equals(local, master)) {
+                log.warn("Tried to run garbage collector while the node was not the master");
+                return;
+            }
             StoredGroupEntry group = it.next();
             if (group.state() != GroupState.PENDING_DELETE && checkGroupRefCount(group)) {
                 log.debug("Garbage collecting group {} on {}", group, deviceId);
@@ -1533,6 +1645,6 @@ public class DistributedGroupStore
     private void groupAdded(Group group) {
         log.trace("Group {} Added or Updated in device {}",
                   group, group.deviceId());
-        addOrUpdateGroupEntry(group);
+        updateGroupEntryStats(group);
     }
 }

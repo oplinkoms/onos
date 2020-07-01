@@ -1,14 +1,40 @@
 load("//tools/build/bazel:variables.bzl", "ONOS_VERSION")
-load("//tools/build/bazel:modules.bzl", "APPS", "CORE", "FEATURES")
+load(
+    "//tools/build/bazel:modules.bzl",
+    "CORE",
+    "FEATURES",
+    "apps",
+    "extensions",
+    "profiles",
+)
+
+#
+# ONOS Package Profiles
+# Usage: bazel build onos-package --define profile=<profile name>
+# Example: bazel build onos-package --define profile=minimal
+#
+# To view or update which apps and features are included in each
+# profile, open: tools/build/bazel/modules.bzl
+#
+profiles([
+    "minimal",
+    "seba",
+    "stratum",
+])
 
 filegroup(
     name = "onos",
-    srcs = CORE + APPS + [
+    srcs = CORE + [
         "//tools/build/conf:onos-build-conf",
         ":onos-package-admin",
         ":onos-package-test",
         ":onos-package",
-    ],
+    ] + select({
+        ":minimal_profile": extensions("minimal") + apps("minimal"),
+        ":seba_profile": extensions("seba") + apps("seba"),
+        ":stratum_profile": extensions("stratum") + apps("stratum"),
+        "//conditions:default": extensions() + apps(),
+    }),
     visibility = ["//visibility:public"],
 )
 
@@ -16,12 +42,15 @@ KARAF = "@apache_karaf//:apache_karaf"
 
 BRANDING = "//tools/package/branding:onos-tools-package-branding"
 
+LOG4J_EXTRA = "//tools/package/log4j2-extra:onos-log4j2-extra"
+
 # Generates auxiliary karaf.zip file; branded and augmented with ONOS runtime tools
 genrule(
     name = "onos-karaf",
     srcs = [
         KARAF,
         BRANDING,
+        LOG4J_EXTRA,
     ] + glob([
         "tools/package/bin/*",
         "tools/package/etc/*",
@@ -29,8 +58,8 @@ genrule(
         "tools/package/runtime/bin/*",
     ]),
     outs = ["karaf.zip"],
-    cmd = "$(location tools/package/onos-prep-karaf) $(location karaf.zip) $(location %s) %s $(location %s) '' tools/package" %
-          (KARAF, ONOS_VERSION, BRANDING),
+    cmd = "$(location tools/package/onos-prep-karaf) $(location karaf.zip) $(location %s) %s $(location %s) '' $(location %s) tools/package" %
+          (KARAF, ONOS_VERSION, BRANDING, LOG4J_EXTRA),
     tools = ["tools/package/onos-prep-karaf"],
 )
 
@@ -40,48 +69,14 @@ genrule(
     srcs = [
         "//tools/package/features:onos-features",
         ":onos-karaf",
-    ] + APPS + FEATURES,
+    ] + FEATURES + select({
+        ":minimal_profile": apps("minimal"),
+        ":seba_profile": apps("seba"),
+        ":stratum_profile": apps("stratum"),
+        "//conditions:default": apps(),
+    }),
     outs = ["onos.tar.gz"],
     cmd = "$(location tools/package/onos_stage.py) $(location onos.tar.gz) %s $(location :onos-karaf) $(SRCS)" % ONOS_VERSION,
-    output_to_bindir = True,
-    tags = ["local"],
-    tools = ["tools/package/onos_stage.py"],
-)
-
-# Generates the minimal onos-minimal.tar.gz bundle
-genrule(
-    name = "onos-package-minimal",
-    srcs = [
-        "//tools/package/features:onos-features",
-        ":onos-karaf",
-        "//drivers/default:onos-drivers-default-oar",
-    ] + FEATURES,
-    outs = ["onos-minimal.tar.gz"],
-    cmd = "$(location tools/package/onos_stage.py) $(location onos-minimal.tar.gz) %s $(location :onos-karaf) $(SRCS)" % ONOS_VERSION,
-    output_to_bindir = True,
-    tags = ["local"],
-    tools = ["tools/package/onos_stage.py"],
-)
-
-# Generates SEBA-specific onos-seba.tar.gz bundle
-genrule(
-    name = "onos-package-seba",
-    srcs = [
-        "//tools/package/features:onos-features",
-        ":onos-karaf",
-        "//drivers/default:onos-drivers-default-oar",
-        "//apps/optical-model:onos-apps-optical-model-oar",
-        "//providers/openflow/app:onos-providers-openflow-app-oar",
-        "//providers/openflow/base:onos-providers-openflow-base-oar",
-        "//providers/host:onos-providers-host-oar",
-        "//providers/lldp:onos-providers-lldp-oar",
-        "//apps/mcast:onos-apps-mcast-oar",
-        "//providers/netcfghost:onos-providers-netcfghost-oar",
-        "//apps/segmentrouting:onos-apps-segmentrouting-oar",
-        "//apps/route-service:onos-apps-route-service-oar",
-    ] + FEATURES,
-    outs = ["onos-seba.tar.gz"],
-    cmd = "$(location tools/package/onos_stage.py) $(location onos-seba.tar.gz) %s $(location :onos-karaf) $(SRCS)" % ONOS_VERSION,
     output_to_bindir = True,
     tags = ["local"],
     tools = ["tools/package/onos_stage.py"],
@@ -180,7 +175,9 @@ buildifier(
     name = "buildifier_check",
     exclude_patterns = [
         "./tools/build/bazel/generate_workspace.bzl",
-        "./web/gui2-fw-lib/node_modules/@angular/bazel/src/esm5.bzl",
+        "./web/gui2/node_modules/@angular/bazel/src/esm5.bzl",
+        "./web/gui2/node_modules/@bazel/typescript/internal/common/tsconfig.bzl",
+        "./web/gui2/node_modules/@bazel/typescript/internal/common/compilation.bzl",
     ],
     mode = "check",
 )
@@ -189,14 +186,9 @@ buildifier(
     name = "buildifier_fix",
     exclude_patterns = [
         "./tools/build/bazel/generate_workspace.bzl",
-        "./web/gui2-fw-lib/node_modules/@angular/bazel/src/esm5.bzl",
+        "./web/gui2/node_modules/@angular/bazel/src/esm5.bzl",
+        "./web/gui2/node_modules/@bazel/typescript/internal/common/tsconfig.bzl",
+        "./web/gui2/node_modules/@bazel/typescript/internal/common/compilation.bzl",
     ],
     mode = "fix",
 )
-
-# This export allows targets in other packages to reference files that live
-# in this package.
-# TODO Try to move this in to /web/gui2-fw-lib when possible
-exports_files([
-    "tsconfig.json",
-])

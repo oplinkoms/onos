@@ -164,8 +164,8 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
         // Init the accumulator, if enabled
         if (isAccumulatorEnabled(this)) {
             accumulator = new ForwardingObjectiveAccumulator(context.accumulatorMaxObjectives(),
-                                                             context.accumulatorMaxBatchMillis(),
-                                                             context.accumulatorMaxIdleMillis());
+                    context.accumulatorMaxBatchMillis(),
+                    context.accumulatorMaxIdleMillis());
         }
 
         initDriverId();
@@ -188,6 +188,13 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
     }
 
     protected void initGroupHander(PipelinerContext context) {
+        // Terminate internal references
+        // We are terminating the references here
+        // because when the device is offline the apps
+        // are still sending flowobjectives
+        if (groupHandler != null) {
+            groupHandler.terminate();
+        }
         groupHandler = new Ofdpa2GroupHandler();
         groupHandler.init(deviceId, context);
     }
@@ -1023,7 +1030,7 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
                 .fromApp(applicationId)
                 .makePermanent()
                 .forTable(TMAC_TABLE).build();
-        log.info("Building flowRule {}", rule);
+        log.debug("Building TMac Mcast flowRule {}", rule);
         return rule;
     }
 

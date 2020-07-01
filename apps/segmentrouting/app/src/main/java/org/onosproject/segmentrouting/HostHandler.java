@@ -16,28 +16,37 @@
 
 package org.onosproject.segmentrouting;
 
+import com.google.common.collect.Lists;
 import org.onlab.packet.EthType;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onlab.util.PredictableExecutor;
+import org.onlab.util.Tools;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Host;
 import org.onosproject.net.HostLocation;
 import org.onosproject.net.PortNumber;
+import org.onosproject.net.flowobjective.Objective;
 import org.onosproject.net.host.HostEvent;
 import org.onosproject.net.host.HostService;
 import org.onosproject.net.host.ProbeMode;
+import org.onosproject.segmentrouting.phasedrecovery.api.Phase;
+import org.onosproject.segmentrouting.phasedrecovery.api.PhasedRecoveryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Sets;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -75,19 +84,54 @@ public class HostHandler {
     }
 
     protected void init(DeviceId devId) {
+        log.info("Initializing hosts on {}", devId);
+        List<CompletableFuture<Void>> hostFutures = Lists.newArrayList();
+
         // Init hosts in parallel using hostWorkers executor
-        hostService.getHosts().forEach(
-                host -> hostWorkers.execute(() -> initHost(host, devId), host.id().hashCode())
-        );
+        hostService.getHosts().forEach(host -> {
+            hostFutures.add(hostWorkers.submit(() -> initHost(host, devId), host.id().hashCode()));
+        });
+
+        log.debug("{} hostFutures for {}", hostFutures.size(), devId);
+        CompletableFuture<Void> allHostFuture = CompletableFuture.allOf(hostFutures.toArray(new CompletableFuture[0]));
+        CompletableFuture<Void> timeoutFuture =
+                Tools.completeAfter(PhasedRecoveryService.PAIR_TIMEOUT, TimeUnit.SECONDS);
+
+        allHostFuture.runAfterEitherAsync(timeoutFuture, () -> {
+            if (allHostFuture.isDone()) {
+                log.info("{} hosts initialized. Move {} to the next phase", hostFutures.size(), devId);
+            } else {
+                log.info("Timeout reached. Move {} to the next phase", devId);
+            }
+            srManager.phasedRecoveryService.setPhase(devId, Phase.INFRA);
+        });
     }
 
     private void initHost(Host host, DeviceId deviceId) {
-        host.locations().forEach(location -> {
+        List<CompletableFuture<Objective>> locationFutures = Lists.newArrayList();
+
+        effectiveLocations(host).forEach(location -> {
             if (location.deviceId().equals(deviceId) ||
                     location.deviceId().equals(srManager.getPairDeviceId(deviceId).orElse(null))) {
-                processHostAddedAtLocation(host, location);
+                locationFutures.addAll(processHostAddedAtLocation(host, location));
             }
         });
+
+        log.debug("{} locationFutures for {}", locationFutures.size(), host);
+
+        // Waiting for all locationFutures to be completed.
+        // This is a blocking operation but it is fine since this is run in a separate thread
+        try {
+            CompletableFuture.allOf(locationFutures.toArray(new CompletableFuture[0]))
+                    .thenApply(objectives -> locationFutures.stream()
+                            .map(CompletableFuture::join)
+                            .collect(Collectors.toList())
+                    )
+                    .get();
+        } catch (InterruptedException | ExecutionException e) {
+            log.warn("Exception caught when executing locationFutures");
+            locationFutures.forEach(future -> future.cancel(false));
+        }
     }
 
     void processHostAddedEvent(HostEvent event) {
@@ -96,10 +140,10 @@ public class HostHandler {
     }
 
     private void processHostAdded(Host host) {
-        host.locations().forEach(location -> processHostAddedAtLocation(host, location));
+        effectiveLocations(host).forEach(location -> processHostAddedAtLocation(host, location));
         // ensure dual-homed host locations have viable uplinks
-        if (host.locations().size() > 1 || srManager.singleHomedDown) {
-            host.locations().forEach(loc -> {
+        if (effectiveLocations(host).size() > 1 || srManager.singleHomedDown) {
+            effectiveLocations(host).forEach(loc -> {
                 if (srManager.mastershipService.isLocalMaster(loc.deviceId())) {
                     srManager.linkHandler.checkUplinksForHost(loc);
                 }
@@ -107,24 +151,31 @@ public class HostHandler {
         }
     }
 
-    void processHostAddedAtLocation(Host host, HostLocation location) {
-        checkArgument(host.locations().contains(location), "{} is not a location of {}", location, host);
+    List<CompletableFuture<Objective>> processHostAddedAtLocation(Host host, HostLocation location) {
+        checkArgument(effectiveLocations(host).contains(location), "{} is not a location of {}", location, host);
 
         MacAddress hostMac = host.mac();
         VlanId hostVlanId = host.vlan();
-        Set<HostLocation> locations = host.locations();
+        Set<HostLocation> locations = effectiveLocations(host);
         Set<IpAddress> ips = host.ipAddresses();
         log.info("Host {}/{} is added at {}", hostMac, hostVlanId, locations);
 
+        List<CompletableFuture<Objective>> objectiveFutures = Lists.newArrayList();
+
+        // TODO Phased recovery does not trace double tagged hosts
         if (isDoubleTaggedHost(host)) {
             ips.forEach(ip ->
                 processDoubleTaggedRoutingRule(location.deviceId(), location.port(), hostMac,
                                                host.innerVlan(), hostVlanId, host.tpid(), ip, false)
             );
         } else {
-            processBridgingRule(location.deviceId(), location.port(), hostMac, hostVlanId, false);
+            objectiveFutures.add(
+                    processBridgingRule(location.deviceId(), location.port(), hostMac, hostVlanId, false)
+            );
             ips.forEach(ip ->
-                processRoutingRule(location.deviceId(), location.port(), hostMac, hostVlanId, ip, false)
+                objectiveFutures.add(
+                        processRoutingRule(location.deviceId(), location.port(), hostMac, hostVlanId, ip, false)
+                )
             );
         }
 
@@ -132,7 +183,7 @@ public class HostHandler {
         // This do not affect single-homed hosts since the flow will be blocked in
         // processBridgingRule or processRoutingRule due to VLAN or IP mismatch respectively
         srManager.getPairDeviceId(location.deviceId()).ifPresent(pairDeviceId -> {
-            if (host.locations().stream().noneMatch(l -> l.deviceId().equals(pairDeviceId))) {
+            if (effectiveLocations(host).stream().noneMatch(l -> l.deviceId().equals(pairDeviceId))) {
                 srManager.getPairLocalPort(pairDeviceId).ifPresent(pairRemotePort -> {
                     // NOTE: Since the pairLocalPort is trunk port, use assigned vlan of original port
                     //       when the host is untagged
@@ -141,9 +192,14 @@ public class HostHandler {
                         return;
                     }
 
-                    processBridgingRule(pairDeviceId, pairRemotePort, hostMac, vlanId, false);
-                    ips.forEach(ip -> processRoutingRule(pairDeviceId, pairRemotePort, hostMac, vlanId,
-                                    ip, false));
+                    objectiveFutures.add(
+                            processBridgingRule(pairDeviceId, pairRemotePort, hostMac, vlanId, false)
+                    );
+                    ips.forEach(ip ->
+                            objectiveFutures.add(
+                                    processRoutingRule(pairDeviceId, pairRemotePort, hostMac, vlanId, ip, false)
+                            )
+                    );
 
                     if (srManager.activeProbing) {
                         probe(host, location, pairDeviceId, pairRemotePort);
@@ -160,6 +216,9 @@ public class HostHandler {
             srManager.updateMacVlanTreatment(location.deviceId(), hostMac, vlanId,
                                 location.port(), nextId);
         }
+
+        log.debug("{} objectiveFutures for {}", objectiveFutures.size(), location);
+        return objectiveFutures;
     }
 
     void processHostRemovedEvent(HostEvent event) {
@@ -170,7 +229,7 @@ public class HostHandler {
     private void processHostRemoved(Host host) {
         MacAddress hostMac = host.mac();
         VlanId hostVlanId = host.vlan();
-        Set<HostLocation> locations = host.locations();
+        Set<HostLocation> locations = effectiveLocations(host);
         Set<IpAddress> ips = host.ipAddresses();
         log.info("Host {}/{} is removed from {}", hostMac, hostVlanId, locations);
 
@@ -223,12 +282,22 @@ public class HostHandler {
     }
 
     private void processHostMovedEventInternal(HostEvent event) {
+        // This method will be called when one of the following value has changed:
+        // (1) locations (2) auxLocations or (3) both locations and auxLocations.
+        // We only need to proceed when effectiveLocation has changed.
+        Set<HostLocation> newLocations = effectiveLocations(event.subject());
+        Set<HostLocation> prevLocations = effectiveLocations(event.prevSubject());
+
+        if (newLocations.equals(prevLocations)) {
+            log.info("effectiveLocations of {} has not changed. Skipping {}", event.subject().id(), event);
+            return;
+        }
+
         Host host = event.subject();
+        Host prevHost = event.prevSubject();
         MacAddress hostMac = host.mac();
         VlanId hostVlanId = host.vlan();
-        Set<HostLocation> prevLocations = event.prevSubject().locations();
-        Set<IpAddress> prevIps = event.prevSubject().ipAddresses();
-        Set<HostLocation> newLocations = host.locations();
+        Set<IpAddress> prevIps = prevHost.ipAddresses();
         Set<IpAddress> newIps = host.ipAddresses();
         EthType hostTpid = host.tpid();
         boolean doubleTaggedHost = isDoubleTaggedHost(host);
@@ -385,7 +454,7 @@ public class HostHandler {
         MacAddress hostMac = host.mac();
         VlanId hostVlanId = host.vlan();
         EthType hostTpid = host.tpid();
-        Set<HostLocation> locations = host.locations();
+        Set<HostLocation> locations = effectiveLocations(host);
         Set<IpAddress> prevIps = event.prevSubject().ipAddresses();
         Set<IpAddress> newIps = host.ipAddresses();
         log.info("Host {}/{} is updated", hostMac, hostVlanId);
@@ -451,6 +520,7 @@ public class HostHandler {
      *
      * @param cp connect point
      */
+    // TODO Current implementation does not handle dual-homed hosts with auxiliary locations.
     void processPortUp(ConnectPoint cp) {
         if (cp.port().equals(srManager.getPairLocalPort(cp.deviceId()).orElse(null))) {
             return;
@@ -463,6 +533,7 @@ public class HostHandler {
         }
     }
 
+    // TODO Current implementation does not handle dual-homed hosts with auxiliary locations.
     private void probingIfNecessary(Host host, DeviceId pairDeviceId, ConnectPoint cp) {
         if (isHostInVlanOfPort(host, pairDeviceId, cp)) {
             srManager.probingService.probeHost(host, cp, ProbeMode.DISCOVER);
@@ -482,7 +553,7 @@ public class HostHandler {
         Set<VlanId> taggedVlan = srManager.interfaceService.getTaggedVlanId(cp);
 
         return taggedVlan.contains(host.vlan()) ||
-                (internalVlan != null && host.locations().stream()
+                (internalVlan != null && effectiveLocations(host).stream()
                         .filter(l -> l.deviceId().equals(deviceId))
                         .map(srManager::getInternalVlanId)
                         .anyMatch(internalVlan::equals));
@@ -496,6 +567,7 @@ public class HostHandler {
      * @param pairDeviceId pair device id
      * @param pairRemotePort pair remote port
      */
+    // TODO Current implementation does not handle dual-homed hosts with auxiliary locations.
     private void probe(Host host, ConnectPoint location, DeviceId pairDeviceId, PortNumber pairRemotePort) {
         //Check if the host still exists in the host store
         if (hostService.getHost(host.id()) == null) {
@@ -539,16 +611,17 @@ public class HostHandler {
      * @param mac mac address
      * @param vlanId VLAN ID
      * @param revoke true to revoke the rule; false to populate
+     * @return future that includes the flow objective if succeeded, null if otherwise
      */
-    private void processBridgingRule(DeviceId deviceId, PortNumber port, MacAddress mac,
+    private CompletableFuture<Objective> processBridgingRule(DeviceId deviceId, PortNumber port, MacAddress mac,
                                      VlanId vlanId, boolean revoke) {
         log.info("{} bridging entry for host {}/{} at {}:{}", revoke ? "Revoking" : "Populating",
                 mac, vlanId, deviceId, port);
 
         if (!revoke) {
-            srManager.defaultRoutingHandler.populateBridging(deviceId, port, mac, vlanId);
+            return srManager.defaultRoutingHandler.populateBridging(deviceId, port, mac, vlanId);
         } else {
-            srManager.defaultRoutingHandler.revokeBridging(deviceId, port, mac, vlanId);
+            return srManager.defaultRoutingHandler.revokeBridging(deviceId, port, mac, vlanId);
         }
     }
 
@@ -562,20 +635,21 @@ public class HostHandler {
      * @param vlanId VLAN ID
      * @param ip IP address
      * @param revoke true to revoke the rule; false to populate
+     * @return future that includes the flow objective if succeeded, null if otherwise
      */
-    private void processRoutingRule(DeviceId deviceId, PortNumber port, MacAddress mac,
+    private CompletableFuture<Objective> processRoutingRule(DeviceId deviceId, PortNumber port, MacAddress mac,
                                     VlanId vlanId, IpAddress ip, boolean revoke) {
         ConnectPoint location = new ConnectPoint(deviceId, port);
         if (!srManager.deviceConfiguration.inSameSubnet(location, ip)) {
             log.info("{} is not included in the subnet config of {}/{}. Ignored.", ip, deviceId, port);
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
         log.info("{} routing rule for {} at {}", revoke ? "Revoking" : "Populating", ip, location);
         if (revoke) {
-            srManager.defaultRoutingHandler.revokeRoute(deviceId, ip.toIpPrefix(), mac, vlanId, port, true);
+            return srManager.defaultRoutingHandler.revokeRoute(deviceId, ip.toIpPrefix(), mac, vlanId, port, true);
         } else {
-            srManager.defaultRoutingHandler.populateRoute(deviceId, ip.toIpPrefix(), mac, vlanId, port, true);
+            return srManager.defaultRoutingHandler.populateRoute(deviceId, ip.toIpPrefix(), mac, vlanId, port, true);
         }
     }
 
@@ -621,7 +695,7 @@ public class HostHandler {
     void populateAllDoubleTaggedHost() {
         log.info("Enabling routing for all double tagged hosts");
         Sets.newHashSet(srManager.hostService.getHosts()).stream().filter(this::isDoubleTaggedHost)
-                .forEach(h -> h.locations().forEach(l ->
+                .forEach(h -> effectiveLocations(h).forEach(l ->
                     h.ipAddresses().forEach(i ->
                         processDoubleTaggedRoutingRule(l.deviceId(), l.port(), h.mac(), h.innerVlan(),
                                 h.vlan(), h.tpid(), i, false)
@@ -633,7 +707,7 @@ public class HostHandler {
     void revokeAllDoubleTaggedHost() {
         log.info("Disabling routing for all double tagged hosts");
         Sets.newHashSet(srManager.hostService.getHosts()).stream().filter(this::isDoubleTaggedHost)
-                .forEach(h -> h.locations().forEach(l ->
+                .forEach(h -> effectiveLocations(h).forEach(l ->
                     h.ipAddresses().forEach(i ->
                         processDoubleTaggedRoutingRule(l.deviceId(), l.port(), h.mac(), h.innerVlan(),
                             h.vlan(), h.tpid(), i, true)
@@ -674,6 +748,7 @@ public class HostHandler {
      * @param popVlan true to pop Vlan tag at TrafficTreatment, false otherwise
      * @param install true to populate the objective, false to revoke
      */
+    // TODO Current implementation does not handle dual-homed hosts with auxiliary locations.
     void processIntfVlanUpdatedEvent(DeviceId deviceId, PortNumber portNum, VlanId vlanId,
                                      boolean popVlan, boolean install) {
         ConnectPoint connectPoint = new ConnectPoint(deviceId, portNum);
@@ -693,15 +768,29 @@ public class HostHandler {
         MacAddress mac = host.mac();
         VlanId hostVlanId = host.vlan();
 
-        // Check whether the host vlan is valid for new interface configuration
-        if ((!popVlan && hostVlanId.equals(vlanId)) ||
-                (popVlan && hostVlanId.equals(VlanId.NONE))) {
-            srManager.defaultRoutingHandler.updateBridging(deviceId, portNum, mac, vlanId, popVlan, install);
-            // Update Forwarding objective and corresponding simple Next objective
-            // for each host and IP address connected to given port
-            host.ipAddresses().forEach(ipAddress -> srManager.defaultRoutingHandler.updateFwdObj(
-                    deviceId, portNum, ipAddress.toIpPrefix(), mac, vlanId, popVlan, install)
+        if (!install) {
+            // Do not check the host validity. Just remove all rules corresponding to the vlan id
+            // Revoke forwarding objective for bridging to the host
+            srManager.defaultRoutingHandler.updateBridging(deviceId, portNum, mac, vlanId, popVlan, false);
+
+            // Revoke forwarding objective and corresponding simple Next objective
+            // for each Host and IP address connected to given port
+            host.ipAddresses().forEach(ipAddress ->
+                srManager.routingRulePopulator.updateFwdObj(deviceId, portNum, ipAddress.toIpPrefix(),
+                                                            mac, vlanId, popVlan, false)
             );
+        } else {
+            // Check whether the host vlan is valid for new interface configuration
+            if ((!popVlan && hostVlanId.equals(vlanId)) ||
+                    (popVlan && hostVlanId.equals(VlanId.NONE))) {
+                srManager.defaultRoutingHandler.updateBridging(deviceId, portNum, mac, vlanId, popVlan, true);
+                // Update Forwarding objective and corresponding simple Next objective
+                // for each Host and IP address connected to given port
+                host.ipAddresses().forEach(ipAddress ->
+                    srManager.routingRulePopulator.updateFwdObj(deviceId, portNum, ipAddress.toIpPrefix(),
+                                                                mac, vlanId, popVlan, true)
+                );
+            }
         }
     }
 
@@ -712,6 +801,7 @@ public class HostHandler {
      * @param ipPrefixSet IP Prefixes added or removed
      * @param install true if IP Prefixes added, false otherwise
      */
+    // TODO Current implementation does not handle dual-homed hosts with auxiliary locations.
     void processIntfIpUpdatedEvent(ConnectPoint cp, Set<IpPrefix> ipPrefixSet, boolean install) {
         Set<Host> hosts = hostService.getConnectedHosts(cp);
 
@@ -752,8 +842,8 @@ public class HostHandler {
     Set<PortNumber> getDualHomedHostPorts(DeviceId deviceId) {
         Set<PortNumber> dualHomedLocations = new HashSet<>();
         srManager.hostService.getConnectedHosts(deviceId).stream()
-            .filter(host -> host.locations().size() == 2)
-            .forEach(host -> host.locations().stream()
+            .filter(host -> effectiveLocations(host).size() == 2)
+            .forEach(host -> effectiveLocations(host).stream()
                      .filter(loc -> loc.deviceId().equals(deviceId))
                         .forEach(loc -> dualHomedLocations.add(loc.port())));
         return dualHomedLocations;
@@ -767,6 +857,16 @@ public class HostHandler {
      */
     private boolean isDoubleTaggedHost(Host host) {
         return !host.innerVlan().equals(VlanId.NONE);
+    }
+
+    /**
+     * Returns effective locations of given host.
+     *
+     * @param host host to check
+     * @return auxLocations of the host if exists, or locations of the host otherwise.
+     */
+    Set<HostLocation> effectiveLocations(Host host) {
+        return (host.auxLocations() != null) ? host.auxLocations() : host.locations();
     }
 
 }

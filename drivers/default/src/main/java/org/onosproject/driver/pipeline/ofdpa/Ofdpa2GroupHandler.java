@@ -124,6 +124,7 @@ public class Ofdpa2GroupHandler {
             new ConcurrentHashMap<>();
     private ScheduledExecutorService groupCheckerExecutor =
             Executors.newScheduledThreadPool(2, groupedThreads("onos/pipeliner", "ofdpa-%d", log));
+    private InnerGroupListener innerGroupListener = new InnerGroupListener();
     /**
      * Determines whether this pipeline support copy ttl instructions or not.
      *
@@ -202,7 +203,34 @@ public class Ofdpa2GroupHandler {
         pendingUpdateNextObjectives = new ConcurrentHashMap<>();
         GroupChecker groupChecker = new GroupChecker(this);
         groupCheckerExecutor.scheduleAtFixedRate(groupChecker, 0, 500, TimeUnit.MILLISECONDS);
-        groupService.addListener(new InnerGroupListener());
+        groupService.addListener(innerGroupListener);
+    }
+
+    // Terminate internal references
+    public void terminate() {
+        if (nextIndex != null) {
+            nextIndex.destroy();
+        }
+        nextIndex = null;
+        if (pendingAddNextObjectives != null) {
+            pendingAddNextObjectives.cleanUp();
+        }
+        pendingAddNextObjectives = null;
+        if (pendingRemoveNextObjectives != null) {
+            pendingRemoveNextObjectives.cleanUp();
+        }
+        pendingRemoveNextObjectives = null;
+        if (pendingGroups != null) {
+            pendingGroups.cleanUp();
+        }
+        pendingGroups = null;
+        if (groupCheckerExecutor != null) {
+            groupCheckerExecutor.shutdown();
+        }
+        groupCheckerExecutor = null;
+        if (groupService != null) {
+            groupService.removeListener(innerGroupListener);
+        }
     }
 
     //////////////////////////////////////
@@ -1964,13 +1992,11 @@ public class Ofdpa2GroupHandler {
         // trying to remove buckets from the same group, each with its own
         // potentially stale copy of allActiveKeys
         synchronized (flowObjectiveStore) {
-            List<Deque<GroupKey>> modifiedGroupKeys = Lists.newArrayList();
-            ArrayDeque<GroupKey> top = new ArrayDeque<>();
-            top.add(l2InterfaceGroupDesc.appCookie());
-            modifiedGroupKeys.add(top);
-
+            // NOTE: The groupKey is computed by deviceId, VLAN and portNum. It remains the same when we modify L2IG.
+            //       Therefore we use the same groupKey of the existing group.
+            List<Deque<GroupKey>> allActiveKeys = appKryo.deserialize(next.data());
             flowObjectiveStore.putNextGroup(nextObjective.id(),
-                                            new OfdpaNextGroup(modifiedGroupKeys,
+                                            new OfdpaNextGroup(allActiveKeys,
                                                                nextObjective));
         }
 
@@ -2074,9 +2100,8 @@ public class Ofdpa2GroupHandler {
                     "nextId:{}, nextObjective-size:{} next-size:{} .. correcting",
                     deviceId, nextObjective.id(), nextObjective.next().size(),
                     allActiveKeys.size());
-            List<Integer> otherIndices =
-                    indicesToRemoveFromNextGroup(allActiveKeys, nextObjective,
-                                                 groupService, deviceId);
+            List<Integer> otherIndices = indicesToRemoveFromNextGroup(allActiveKeys, nextObjective,
+                    groupService, deviceId);
             // Filter out the indices not present
             otherIndices = otherIndices.stream()
                     .filter(index -> !indicesToRemove.contains(index))
@@ -2114,11 +2139,12 @@ public class Ofdpa2GroupHandler {
             log.info("removing {} buckets as part of nextId: {} verification",
                      indicesToRemove.size(), nextObjective.id());
             List<Deque<GroupKey>> chainsToRemove = Lists.newArrayList();
-            indicesToRemove.forEach(index -> chainsToRemove
-                                                 .add(allActiveKeys.get(index)));
+            indicesToRemove.forEach(index -> chainsToRemove.add(allActiveKeys.get(index)));
             removeBucket(chainsToRemove, nextObjective);
         }
 
+        log.trace("Checking mismatch with GroupStore device:{} nextId:{}",
+                  deviceId, nextObjective.id());
         if (bucketsToCreate.isEmpty() && indicesToRemove.isEmpty()) {
             // flowObjective store record is in-sync with nextObjective passed-in
             // Nevertheless groupStore may not be in sync due to bug in the store
@@ -2130,6 +2156,7 @@ public class Ofdpa2GroupHandler {
             if (topGroup == null) {
                 log.warn("topGroup {} not found in GroupStore device:{}, nextId:{}",
                          topGroupKey, deviceId, nextObjective.id());
+                fail(nextObjective, ObjectiveError.GROUPMISSING);
                 return;
             }
             int actualGroupSize = topGroup.buckets().buckets().size();
@@ -2152,8 +2179,7 @@ public class Ofdpa2GroupHandler {
                         if (validChain.size() < 2) {
                             continue;
                         }
-                        GroupKey pointedGroupKey = validChain.stream()
-                                                       .collect(Collectors.toList()).get(1);
+                        GroupKey pointedGroupKey = validChain.stream().collect(Collectors.toList()).get(1);
                         Group pointedGroup = groupService.getGroup(deviceId, pointedGroupKey);
                         if (pointedGroup != null && gidToCheck.equals(pointedGroup.id())) {
                             matches = true;
@@ -2171,9 +2197,8 @@ public class Ofdpa2GroupHandler {
                             + "buckets to remove");
                 } else {
                     GroupBuckets removeBuckets = new GroupBuckets(bucketsToRemove);
-                    groupService.removeBucketsFromGroup(deviceId, topGroupKey,
-                                                        removeBuckets, topGroupKey,
-                                                        nextObjective.appId());
+                    groupService.removeBucketsFromGroup(deviceId, topGroupKey, removeBuckets, topGroupKey,
+                            nextObjective.appId());
                 }
             } else if (actualGroupSize < objGroupSize) {
                 // Group in the device has less chains
@@ -2184,8 +2209,7 @@ public class Ofdpa2GroupHandler {
                     if (validChain.size() < 2) {
                         continue;
                     }
-                    GroupKey pointedGroupKey = validChain.stream()
-                                                   .collect(Collectors.toList()).get(1);
+                    GroupKey pointedGroupKey = validChain.stream().collect(Collectors.toList()).get(1);
                     Group pointedGroup = groupService.getGroup(deviceId, pointedGroupKey);
                     if (pointedGroup == null) {
                         // group should exist, otherwise cannot be added as bucket
@@ -2225,7 +2249,7 @@ public class Ofdpa2GroupHandler {
                 }
             }
         }
-
+        log.trace("Verify done for device:{} nextId:{}", deviceId, nextObjective.id());
         pass(nextObjective);
     }
 

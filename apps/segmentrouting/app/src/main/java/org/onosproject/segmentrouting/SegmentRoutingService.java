@@ -15,7 +15,6 @@
  */
 package org.onosproject.segmentrouting;
 
-import com.google.common.annotations.Beta;
 import com.google.common.collect.Multimap;
 import org.apache.commons.lang3.NotImplementedException;
 import org.onlab.packet.IpAddress;
@@ -29,6 +28,7 @@ import org.onosproject.net.Link;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.flowobjective.NextObjective;
 import org.onosproject.segmentrouting.grouphandler.NextNeighbors;
+import org.onosproject.segmentrouting.mcast.McastFilteringObjStoreKey;
 import org.onosproject.segmentrouting.mcast.McastRole;
 import org.onosproject.segmentrouting.mcast.McastRoleStoreKey;
 import org.onosproject.segmentrouting.pwaas.DefaultL2TunnelDescription;
@@ -296,18 +296,6 @@ public interface SegmentRoutingService {
     ImmutableMap<DeviceId, Set<PortNumber>> getDownedPortState();
 
     /**
-     * Returns the associated roles to the mcast groups or to the single
-     * group if mcastIp is present.
-     *
-     * @param mcastIp the group ip
-     * @return the mapping mcastIp-device to mcast role
-     *
-     * @deprecated in 1.12 ("Magpie") release.
-     */
-    @Deprecated
-    Map<McastStoreKey, McastRole> getMcastRoles(IpAddress mcastIp);
-
-    /**
      * Returns the associated roles to the mcast groups.
      *
      * @param mcastIp the group ip
@@ -316,17 +304,6 @@ public interface SegmentRoutingService {
      */
     Map<McastRoleStoreKey, McastRole> getMcastRoles(IpAddress mcastIp,
                                                     ConnectPoint sourcecp);
-
-    /**
-     * Returns the associated paths to the mcast group.
-     *
-     * @param mcastIp the group ip
-     * @return the mapping egress point to mcast path
-     *
-     * @deprecated in 1.12 ("Magpie") release.
-     */
-    @Deprecated
-    Map<ConnectPoint, List<ConnectPoint>> getMcastPaths(IpAddress mcastIp);
 
     /**
      * Returns the associated trees to the mcast group.
@@ -369,6 +346,36 @@ public interface SegmentRoutingService {
     boolean shouldProgram(DeviceId deviceId);
 
     /**
+     * Returns the mcast filtering obj.
+     *
+     * @return the mapping group-node
+     */
+    Map<DeviceId, List<McastFilteringObjStoreKey>> getMcastFilters();
+
+    /**
+     * Determines if routing in the network has been stable in the last
+     * STABILITY_THRESHOLD seconds, by comparing the current time to the last
+     * routing change timestamp.
+     *
+     * @return true if stable
+     */
+    boolean isRoutingStable();
+
+    /**
+     * Invoke hostHandler.init() for given device.
+     *
+     * @param deviceId device ID
+     */
+    void initHost(DeviceId deviceId);
+
+    /**
+     * Invoke routeHandler.init() for given device.
+     *
+     * @param deviceId device ID
+     */
+    void initRoute(DeviceId deviceId);
+
+    /**
      * Gets application id.
      *
      * @return application id
@@ -386,11 +393,9 @@ public interface SegmentRoutingService {
      * @param connectPoint connect point
      * @return internal VLAN or null if both vlan-untagged and vlan-native are undefined
      */
-    @Beta
     default VlanId getInternalVlanId(ConnectPoint connectPoint) {
         throw new NotImplementedException("getInternalVlanId not implemented");
     }
-
 
     /**
      * Returns optional pair device ID of given device.
@@ -398,11 +403,9 @@ public interface SegmentRoutingService {
      * @param deviceId device ID
      * @return optional pair device ID. Might be empty if pair device is not configured
      */
-    @Beta
     default Optional<DeviceId> getPairDeviceId(DeviceId deviceId) {
         throw new NotImplementedException("getPairDeviceId not implemented");
     }
-
 
     /**
      * Returns optional pair device local port of given device.
@@ -410,8 +413,27 @@ public interface SegmentRoutingService {
      * @param deviceId device ID
      * @return optional pair device ID. Might be empty if pair device is not configured
      */
-    @Beta
     default Optional<PortNumber> getPairLocalPort(DeviceId deviceId) {
         throw new NotImplementedException("getPairLocalPort not implemented");
+    }
+
+    /**
+     * Returns a set of infrastructure ports on the given device.
+     *
+     * @param deviceId device ID
+     * @return a set of ports that does not have interface configuration
+     */
+    default Set<PortNumber> getInfraPorts(DeviceId deviceId) {
+        throw new NotImplementedException("getInfraPorts not implemented");
+    }
+
+    /**
+     * Returns a set of edge ports on the given device.
+     *
+     * @param deviceId device ID
+     * @return a set of ports that has interface configuration
+     */
+    default Set<PortNumber> getEdgePorts(DeviceId deviceId) {
+        throw new NotImplementedException("getEdgePorts not implemented");
     }
 }

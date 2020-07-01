@@ -20,12 +20,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.net.util.SubnetUtils;
 import org.apache.http.HttpException;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
@@ -94,6 +96,7 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.model.network.SecurityGroup;
 import org.openstack4j.model.network.Subnet;
 import org.openstack4j.openstack.OSFactory;
+import org.openstack4j.openstack.networking.domain.NeutronPort;
 import org.openstack4j.openstack.networking.domain.NeutronRouterInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -681,8 +684,6 @@ public final class OpenstackNetworkingUtil {
             log.debug("JsonMappingException caused by {}", e);
         } catch (JsonProcessingException e) {
             log.debug("JsonProcessingException caused by {}", e);
-        } catch (IOException e) {
-            log.debug("IOException caused by {}", e);
         }
         return null;
     }
@@ -1166,64 +1167,27 @@ public final class OpenstackNetworkingUtil {
     }
 
     /**
-     * Returns the external ip address with specified router information.
-     *
-     * @param srcSubnet source subnet
-     * @param osRouterService openstack router service
-     * @param osNetworkService openstack network service
-     * @return external ip address
-     */
-    public static IpAddress externalIpFromSubnet(Subnet srcSubnet,
-                                                 OpenstackRouterService
-                                                         osRouterService,
-                                                 OpenstackNetworkService
-                                                         osNetworkService) {
-
-        Router osRouter = getRouterFromSubnet(srcSubnet, osRouterService);
-
-        if (osRouter.getExternalGatewayInfo() == null) {
-            // this router does not have external connectivity
-            log.trace("router({}) has no external gateway",
-                    osRouter.getName());
-            return null;
-        }
-
-        return getExternalIp(osRouter, osNetworkService);
-    }
-
-    /**
-     * Returns the external ip address with specified router information.
+     * Returns the external gateway IP address with specified router information.
      *
      * @param router openstack router
      * @param osNetworkService openstack network service
-     * @return external ip address
+     * @return external IP address
      */
-    public static IpAddress getExternalIp(Router router,
-                                          OpenstackNetworkService osNetworkService) {
-        if (router == null) {
-            return null;
-        }
+    public static IpAddress externalGatewayIp(Router router,
+                                              OpenstackNetworkService osNetworkService) {
+        return externalGatewayIpBase(router, false, osNetworkService);
+    }
 
-        ExternalGateway externalGateway = router.getExternalGatewayInfo();
-        if (externalGateway == null || !externalGateway.isEnableSnat()) {
-            log.trace("Failed to get externalIp for router {} because " +
-                            "externalGateway is null or SNAT is disabled",
-                    router.getId());
-            return null;
-        }
-
-        // TODO fix openstack4j for ExternalGateway provides external fixed IP list
-        Port exGatewayPort = osNetworkService.ports(externalGateway.getNetworkId())
-                .stream()
-                .filter(port -> Objects.equals(port.getDeviceId(), router.getId()))
-                .findAny().orElse(null);
-
-        if (exGatewayPort == null) {
-            return null;
-        }
-
-        return IpAddress.valueOf(exGatewayPort.getFixedIps().stream()
-                .findAny().get().getIpAddress());
+    /**
+     * Returns the external gateway IP address (SNAT enabled) with specified router information.
+     *
+     * @param router openstack router
+     * @param osNetworkService openstack network service
+     * @return external IP address
+     */
+    public static IpAddress externalGatewayIpSnatEnabled(Router router,
+                                                         OpenstackNetworkService osNetworkService) {
+        return externalGatewayIpBase(router, true, osNetworkService);
     }
 
     /**
@@ -1406,8 +1370,15 @@ public final class OpenstackNetworkingUtil {
         return null;
     }
 
-    private static Router getRouterFromSubnet(Subnet subnet,
-                                              OpenstackRouterService osRouterService) {
+    /**
+     * Return the router associated with the given subnet.
+     *
+     * @param subnet openstack subnet
+     * @param osRouterService openstack router service
+     * @return router
+     */
+    public static Router getRouterFromSubnet(Subnet subnet,
+                                             OpenstackRouterService osRouterService) {
         RouterInterface osRouterIface = osRouterService.routerInterfaces().stream()
                 .filter(i -> Objects.equals(i.getSubnetId(), subnet.getId()))
                 .findAny().orElse(null);
@@ -1483,6 +1454,66 @@ public final class OpenstackNetworkingUtil {
      */
     public static GroupKey getGroupKey(int groupId) {
         return new DefaultGroupKey((Integer.toString(groupId)).getBytes());
+    }
+
+    /**
+     * Calculate the broadcast address from given IP address and subnet prefix length.
+     *
+     * @param ipAddr        IP address
+     * @param prefixLength  subnet prefix length
+     * @return broadcast address
+     */
+    public static String getBroadcastAddr(String ipAddr, int prefixLength) {
+        String subnet = ipAddr + "/" + prefixLength;
+        SubnetUtils utils = new SubnetUtils(subnet);
+        return utils.getInfo().getBroadcastAddress();
+    }
+
+    /**
+     * Obtains the DHCP server name from option.
+     *
+     * @param port neutron port
+     * @return server name
+     */
+    public static String getDhcpServerName(NeutronPort port) {
+        return getDhcpOptionValue(port, "server-ip-address");
+    }
+
+    /**
+     * Obtains the DHCP static boot file name from option.
+     *
+     * @param port neutron port
+     * @return DHCP static boot file name
+     */
+    public static String getDhcpStaticBootFileName(NeutronPort port) {
+        return getDhcpOptionValue(port, "tag:!ipxe,67");
+    }
+
+    /**
+     * Obtains the DHCP full boot file name from option.
+     *
+     * @param port neutron port
+     * @return DHCP full boot file name
+     */
+    public static String getDhcpFullBootFileName(NeutronPort port) {
+        return getDhcpOptionValue(port, "tag:ipxe,67");
+    }
+
+    private static String getDhcpOptionValue(NeutronPort port, String optionNameStr) {
+        ObjectNode node = modelEntityToJson(port, NeutronPort.class);
+
+        if (node != null) {
+            JsonNode portJson = node.get("port");
+            ArrayNode options = (ArrayNode) portJson.get("extra_dhcp_opts");
+            for (JsonNode option : options) {
+                String optionName = option.get("optName").asText();
+                if (StringUtils.equals(optionName, optionNameStr)) {
+                    return option.get("optValue").asText();
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -1595,6 +1626,49 @@ public final class OpenstackNetworkingUtil {
             intIndex++;
         }
         return gw;
+    }
+
+    /**
+     * Returns the external gateway IP address with specified router information.
+     *
+     * @param router openstack router
+     * @param snatOnly true for only query SNAT enabled case, false otherwise
+     * @param osNetworkService openstack network service
+     * @return external IP address
+     */
+    private static IpAddress externalGatewayIpBase(Router router, boolean snatOnly,
+                                                   OpenstackNetworkService osNetworkService) {
+        if (router == null) {
+            return null;
+        }
+
+        ExternalGateway externalGateway = router.getExternalGatewayInfo();
+        if (externalGateway == null) {
+            log.info("Failed to get external IP for router {} because no " +
+                            "external gateway is associated with the router",
+                    router.getId());
+            return null;
+        }
+
+        if (snatOnly) {
+            if (!externalGateway.isEnableSnat()) {
+                log.warn("The given router {} SNAT is configured as false", router.getId());
+                return null;
+            }
+        }
+
+        // TODO fix openstack4j for ExternalGateway provides external fixed IP list
+        Port exGatewayPort = osNetworkService.ports(externalGateway.getNetworkId())
+                .stream()
+                .filter(port -> Objects.equals(port.getDeviceId(), router.getId()))
+                .findAny().orElse(null);
+
+        if (exGatewayPort == null) {
+            return null;
+        }
+
+        return IpAddress.valueOf(exGatewayPort.getFixedIps().stream()
+                .findAny().get().getIpAddress());
     }
 
     private static void print(String format, Object... args) {

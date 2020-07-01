@@ -64,6 +64,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
+import static java.lang.Thread.sleep;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static org.onlab.packet.TpPort.tpPort;
 import static org.onlab.util.Tools.groupedThreads;
@@ -110,6 +111,7 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
     private static final String DEFAULT_OF_PROTO = "tcp";
     private static final int DEFAULT_OFPORT = 6653;
     private static final int DPID_BEGIN = 3;
+    private static final long SLEEP_MS = 3000; // we wait 3s
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
@@ -241,6 +243,22 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
 
     @Override
     public void processIncompleteState(K8sNode k8sNode) {
+        // do something if needed
+    }
+
+    @Override
+    public void processPreOnBoardState(K8sNode k8sNode) {
+        processInitState(k8sNode);
+        processDeviceCreatedState(k8sNode);
+    }
+
+    @Override
+    public void processOnBoardedState(K8sNode k8sNode) {
+        // do something if needed
+    }
+
+    @Override
+    public void processPostOnBoardState(K8sNode k8sNode) {
         // do something if needed
     }
 
@@ -455,38 +473,67 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
     private boolean isCurrentStateDone(K8sNode k8sNode) {
         switch (k8sNode.state()) {
             case INIT:
-                if (!isOvsdbConnected(k8sNode, ovsdbPortNum,
-                        ovsdbController, deviceService)) {
-                    return false;
-                }
-
-                return k8sNode.intgBridge() != null && k8sNode.extBridge() != null &&
-                        deviceService.isAvailable(k8sNode.intgBridge()) &&
-                        deviceService.isAvailable(k8sNode.extBridge()) &&
-                        deviceService.isAvailable(k8sNode.localBridge());
+                return isInitStateDone(k8sNode);
             case DEVICE_CREATED:
-                if (k8sNode.dataIp() != null &&
-                        !isIntfEnabled(k8sNode, VXLAN_TUNNEL)) {
-                    return false;
-                }
-                if (k8sNode.dataIp() != null &&
-                        !isIntfEnabled(k8sNode, GRE_TUNNEL)) {
-                    return false;
-                }
-                if (k8sNode.dataIp() != null &&
-                        !isIntfEnabled(k8sNode, GENEVE_TUNNEL)) {
-                    return false;
-                }
-
-                return true;
+                return isDeviceCreatedStateDone(k8sNode);
+            case PRE_ON_BOARD:
+                return isInitStateDone(k8sNode) && isDeviceCreatedStateDone(k8sNode);
             case COMPLETE:
             case INCOMPLETE:
+            case ON_BOARDED:
+            case POST_ON_BOARD:
                 // always return false
                 // run init CLI to re-trigger node bootstrap
                 return false;
             default:
                 return true;
         }
+    }
+
+    private boolean isInitStateDone(K8sNode k8sNode) {
+        if (!isOvsdbConnected(k8sNode, ovsdbPortNum,
+                ovsdbController, deviceService)) {
+            return false;
+        }
+
+        try {
+            // we need to wait a while, in case interface and bridge
+            // creation requires some time
+            sleep(SLEEP_MS);
+        } catch (InterruptedException e) {
+            log.error("Exception caused during init state checking...");
+        }
+
+        return k8sNode.intgBridge() != null && k8sNode.extBridge() != null &&
+                deviceService.isAvailable(k8sNode.intgBridge()) &&
+                deviceService.isAvailable(k8sNode.extBridge()) &&
+                deviceService.isAvailable(k8sNode.localBridge());
+    }
+
+    private boolean isDeviceCreatedStateDone(K8sNode k8sNode) {
+
+        try {
+            // we need to wait a while, in case interface and bridge
+            // creation requires some time
+            sleep(SLEEP_MS);
+        } catch (InterruptedException e) {
+            log.error("Exception caused during init state checking...");
+        }
+
+        if (k8sNode.dataIp() != null &&
+                !isIntfEnabled(k8sNode, VXLAN_TUNNEL)) {
+            return false;
+        }
+        if (k8sNode.dataIp() != null &&
+                !isIntfEnabled(k8sNode, GRE_TUNNEL)) {
+            return false;
+        }
+        if (k8sNode.dataIp() != null &&
+                !isIntfEnabled(k8sNode, GENEVE_TUNNEL)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

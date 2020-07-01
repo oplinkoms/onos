@@ -49,7 +49,7 @@ When a change is made to the library code, it has to be built again
 
 This requires the following manual steps
 * Make directory `fw/widget` in `~/onos/web/gui2-topo-lib/projects/gui2-topo-lib`
-* Copy  ~/onos/web/gui2-fw-lib/projects/gui2-fw-lib/src/lib/widget/panel*.css in to this
+* Copy  ~/onos/web/gui2-fw-lib/lib/widget/panel*.css in to this
 * Copy directory `~/onos/web/gui/src/main/webapp/data` in
     to `~/onos/web/gui2-topo-lib/projects/gui2-topo-tester/src/data`
 * Change (temporarily) web/gui/src/main/java/org/onosproject/ui/impl/UiWebSocket.java
@@ -71,12 +71,4 @@ the `dist/` directory. Use the `--prod` flag for a production build.
 
 ## Running unit tests
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
-
-## Running end-to-end tests
-
-Run `ng e2e` to execute the end-to-end tests via [Protractor](http://www.protractortest.org/).
-
-## Further help
-
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI README](https://github.com/angular/angular-cli/blob/master/README.md).
+Run `bazel test //web/gui2-topo-lib:test-not-coverage` to execute the unit tests via [Karma](https://karma-runner.github.io).

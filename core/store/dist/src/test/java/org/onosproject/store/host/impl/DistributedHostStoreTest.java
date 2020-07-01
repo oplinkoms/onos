@@ -19,8 +19,10 @@ import com.google.common.collect.ImmutableSet;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.onlab.packet.EthType;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
+import org.onlab.packet.VlanId;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DefaultHost;
 import org.onosproject.net.DeviceId;
@@ -30,6 +32,8 @@ import org.onosproject.net.HostLocation;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.host.DefaultHostDescription;
 import org.onosproject.net.host.HostDescription;
+import org.onosproject.net.host.HostEvent;
+import org.onosproject.net.host.HostStoreDelegate;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.TestStorageService;
@@ -50,6 +54,7 @@ import static org.junit.Assert.*;
 public class DistributedHostStoreTest {
 
     private DistributedHostStore ecXHostStore;
+    private TestStoreDelegate delegate;
 
     private static final HostId HOSTID = HostId.hostId(MacAddress.valueOf("1a:1a:1a:1a:1a:1a"));
     private static final HostId HOSTID1 = HostId.hostId(MacAddress.valueOf("1a:1a:1a:1a:1a:1b"));
@@ -95,12 +100,55 @@ public class DistributedHostStoreTest {
                                                                 HOST_ADDRESS,
                                                                 HOST_LEARNT_WITH_ADDRESSES.configured(),
                                                                 HOST_LEARNT_WITH_ADDRESSES.annotations());
+
+    private static final HostDescription HOST_DESC_WITHOUT_AUX =
+            new DefaultHostDescription(HOSTID.mac(), HOSTID.vlanId(),
+                    Sets.newHashSet(HOST_LOC11), null,
+                    Sets.newHashSet(IP1, IP2), VlanId.NONE, EthType.EtherType.UNKNOWN.ethType(),
+                    false);
+    private static final HostDescription HOST_DESC_WITH_AUX =
+            new DefaultHostDescription(HOSTID1.mac(), HOSTID1.vlanId(),
+                    Sets.newHashSet(HOST_LOC11), Sets.newHashSet(HOST_LOC12),
+                    Sets.newHashSet(IP1, IP2), VlanId.NONE, EthType.EtherType.UNKNOWN.ethType(),
+                    false);
+    private  static final Host HOST_WITHOUT_AUX =
+            new DefaultHost(PID, HOSTID,
+                    HOST_DESC_WITHOUT_AUX.hwAddress(), HOST_DESC_WITHOUT_AUX.vlan(),
+                    HOST_DESC_WITHOUT_AUX.locations(), HOST_DESC_WITHOUT_AUX.auxLocations(),
+                    HOST_DESC_WITHOUT_AUX.ipAddress(), HOST_DESC_WITHOUT_AUX.innerVlan(), HOST_DESC_WITHOUT_AUX.tpid(),
+                    HOST_DESC_WITHOUT_AUX.configured(), false);
+    private  static final Host HOST_WITH_AUX =
+            new DefaultHost(PID, HOSTID1,
+                    HOST_DESC_WITH_AUX.hwAddress(), HOST_DESC_WITH_AUX.vlan(),
+                    HOST_DESC_WITH_AUX.locations(), HOST_DESC_WITH_AUX.auxLocations(),
+                    HOST_DESC_WITH_AUX.ipAddress(), HOST_DESC_WITH_AUX.innerVlan(), HOST_DESC_WITH_AUX.tpid(),
+                    HOST_DESC_WITH_AUX.configured(), false);
+
     private static final MapEvent<HostId, DefaultHost> HOST_EVENT =
             new MapEvent<>("foobar", HOSTID, new Versioned<>(NEW_HOST, 0), new Versioned<>(OLD_HOST, 0));
+    private static final DefaultHost HOST1 = new DefaultHost(PID, HOSTID, HOSTID.mac(), HOSTID.vlanId(),
+            Set.<HostLocation>of(HOST_LOC11), null,
+            Set.<IpAddress>of(), VlanId.NONE,
+            EthType.EtherType.UNKNOWN.ethType(), false, false);
+    private static final DefaultHost HOST2 = new DefaultHost(PID, HOSTID, HOSTID.mac(), HOSTID.vlanId(),
+            Set.<HostLocation>of(HOST_LOC11), null,
+            Set.<IpAddress>of(IP1), VlanId.NONE,
+            EthType.EtherType.UNKNOWN.ethType(), false, false);
+    private static final DefaultHost HOST3 = new DefaultHost(PID, HOSTID, HOSTID.mac(), HOSTID.vlanId(),
+            Set.<HostLocation>of(HOST_LOC11, HOST_LOC12), null,
+            Set.<IpAddress>of(IP1), VlanId.NONE,
+            EthType.EtherType.UNKNOWN.ethType(), false, false);
+    private static final DefaultHost HOST4 = new DefaultHost(PID, HOSTID, HOSTID.mac(), HOSTID.vlanId(),
+            Set.<HostLocation>of(HOST_LOC11), Set.<HostLocation>of(HOST_LOC12),
+            Set.<IpAddress>of(IP1), VlanId.NONE,
+            EthType.EtherType.UNKNOWN.ethType(), false, false);
 
     @Before
     public void setUp() {
         ecXHostStore = new DistributedHostStore();
+
+        delegate = new TestStoreDelegate();
+        ecXHostStore.setDelegate(delegate);
 
         ecXHostStore.storageService = new TestStorageService();
         ecXHostStore.activate();
@@ -299,6 +347,87 @@ public class DistributedHostStoreTest {
         assertEquals(HOST_ADDRESS, hostInHostsByIp.ipAddresses());
     }
 
+    @Test
+    public void testHostAdded() {
+        // Host is first discovered at only one location
+        MapEvent<HostId, DefaultHost> event = new MapEvent<>("event", HOSTID,
+                new Versioned<>(HOST1, 0), null);
+        // Expect: HOST_ADDED
+        ecXHostStore.hostLocationTracker.event(event);
+        assertEquals(HostEvent.Type.HOST_ADDED, delegate.lastEvent.type());
+        assertEquals(HOST1, delegate.lastEvent.subject());
+        assertNull(delegate.lastEvent.prevSubject());
+    }
+
+    @Test
+    public void testHostUpdated() {
+        // Host is updated with an IP
+        MapEvent<HostId, DefaultHost> event = new MapEvent<>("event", HOSTID,
+                new Versioned<>(HOST2, 1), new Versioned<>(HOST1, 0));
+        // Expect: HOST_UPDATED
+        ecXHostStore.hostLocationTracker.event(event);
+        assertEquals(HostEvent.Type.HOST_UPDATED, delegate.lastEvent.type());
+        assertEquals(HOST2, delegate.lastEvent.subject());
+        assertEquals(HOST1, delegate.lastEvent.prevSubject());
+    }
+
+    @Test
+    public void testHostMoved() {
+        // Host is updated with a second location
+        MapEvent<HostId, DefaultHost> event = new MapEvent<>("event", HOSTID,
+                new Versioned<>(HOST3, 1), new Versioned<>(HOST2, 0));
+        // Expect: HOST_MOVED
+        ecXHostStore.hostLocationTracker.event(event);
+        assertEquals(HostEvent.Type.HOST_MOVED, delegate.lastEvent.type());
+        assertEquals(HOST3, delegate.lastEvent.subject());
+        assertEquals(HOST2, delegate.lastEvent.prevSubject());
+    }
+
+    @Test
+    public void testHostAuxMoved() {
+        // Host aux location changed
+        MapEvent<HostId, DefaultHost> event = new MapEvent<>("event", HOSTID,
+                new Versioned<>(HOST4, 1), new Versioned<>(HOST1, 0));
+        // Expect: HOST_AUX_MOVED
+        ecXHostStore.hostLocationTracker.event(event);
+        assertEquals(HostEvent.Type.HOST_AUX_MOVED, delegate.lastEvent.type());
+        assertEquals(HOST4, delegate.lastEvent.subject());
+        assertEquals(HOST1, delegate.lastEvent.prevSubject());
+    }
+
+    @Test
+    public void testHostRemoved() {
+        // Host is removed
+        MapEvent<HostId, DefaultHost> event = new MapEvent<>("event", HOSTID,
+                null, new Versioned<>(HOST3, 0));
+        // Expect: HOST_REMOVED
+        ecXHostStore.hostLocationTracker.event(event);
+        assertEquals(HostEvent.Type.HOST_REMOVED, delegate.lastEvent.type());
+        assertEquals(HOST3, delegate.lastEvent.subject());
+        assertNull(delegate.lastEvent.prevSubject());
+    }
+
+    @Test
+    public void testGetConnectedHost() {
+        ecXHostStore.createOrUpdateHost(PID, HOSTID, HOST_DESC_WITHOUT_AUX, false);
+        ecXHostStore.createOrUpdateHost(PID, HOSTID1, HOST_DESC_WITH_AUX, false);
+
+        assertEquals(Sets.newHashSet(HOST_WITHOUT_AUX, HOST_WITH_AUX),
+                ecXHostStore.getConnectedHosts(HOST_LOC11, false));
+        assertEquals(Sets.newHashSet(),
+                ecXHostStore.getConnectedHosts(HOST_LOC11, true));
+        assertEquals(Sets.newHashSet(HOST_WITH_AUX),
+                ecXHostStore.getConnectedHosts(HOST_LOC12, true));
+    }
+
+    private class TestStoreDelegate implements HostStoreDelegate {
+        public HostEvent lastEvent;
+
+        @Override
+        public void notify(HostEvent event) {
+            lastEvent = event;
+        }
+    }
 
     private static HostDescription createHostDesc(HostId hostId, Set<IpAddress> ips) {
         return createHostDesc(hostId, ips, false, Collections.emptySet());

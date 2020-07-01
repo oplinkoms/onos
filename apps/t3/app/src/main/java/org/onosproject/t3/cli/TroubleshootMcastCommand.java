@@ -18,12 +18,14 @@ package org.onosproject.t3.cli;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.Completion;
 import org.apache.karaf.shell.api.action.Option;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onlab.packet.EthType;
 import org.onlab.packet.IpPrefix;
 import org.onlab.packet.VlanId;
 import org.onosproject.cli.AbstractShellCommand;
+import org.onosproject.cli.PlaceholderCompleter;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.criteria.Criterion;
@@ -45,23 +47,40 @@ import java.util.Set;
         description = "Traces all the mcast routes present in the system")
 public class TroubleshootMcastCommand extends AbstractShellCommand {
 
-
     @Option(name = "-v", aliases = "--verbose", description = "Outputs trace for each mcast route")
+    @Completion(PlaceholderCompleter.class)
     private boolean verbosity1 = false;
 
     @Option(name = "-vv", aliases = "--veryverbose", description = "Outputs middle level details of every trace")
+    @Completion(PlaceholderCompleter.class)
     private boolean verbosity2 = false;
 
     @Option(name = "-vvv", aliases = "--veryveryverbose", description = "Outputs complete details of every trace")
+    @Completion(PlaceholderCompleter.class)
     private boolean verbosity3 = false;
 
     @Option(name = "-vid", aliases = "--vlanId", description = "Vlan of incoming packet", valueToShowInHelp = "None")
+    @Completion(PlaceholderCompleter.class)
     String vlan = "None";
 
 
     @Override
     protected void doExecute() {
         TroubleshootService service = get(TroubleshootService.class);
+        if (!service.checkNibValidity()) {
+            // if the NIB is found invalid, fill it with the current network states so that this command can proceed
+            print(T3CliUtils.NIB_AUTOFILLED);
+            TroubleshootLoadSnapshotCommand cmd = new TroubleshootLoadSnapshotCommand();
+            cmd.doExecute();
+            if (!service.checkNibValidity()) {
+                // if the NIB is still invalid even after auto-filled snapshots, stop and warn
+                print(T3CliUtils.NIB_TERMINATE);
+                return;
+            }
+        } else {
+            print(service.printNibSummary());
+        }
+
         print("Tracing all Multicast routes in the System");
 
         //Create the generator for the list of traces.
@@ -81,7 +100,7 @@ public class TroubleshootMcastCommand extends AbstractShellCommand {
                         print("Failure: %s", trace.resultMessage());
                         failedTraces.add(trace);
                     } else {
-                        print("Success");
+                        print(trace.resultMessage());
                     }
                 }
             } else {
