@@ -22,10 +22,13 @@ import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.PortNumber;
+import org.onosproject.net.Device;
 import org.onosproject.net.device.DeviceDescription;
 import org.onosproject.net.device.DeviceDescriptionDiscovery;
+import org.onosproject.net.device.DefaultDeviceDescription;
 import org.onosproject.net.device.PortDescription;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
+import org.onlab.packet.ChassisId;
 import org.slf4j.Logger;
 
 import java.util.List;
@@ -45,14 +48,21 @@ public class OplinkOpticalDeviceDescription extends AbstractHandlerBehaviour
 
     private static final String KEY_PORTNAME = "port-name";
     private static final String PORT_DIRECTION = "direction";
+    private static final String KEY_INFO = "info";
+    private static final String KEY_VENDOR = "vendor";
+    private static final String KEY_NODETYPE = "node-type";
+    private static final String KEY_NODENUM = "node-number";
+    private static final String KEY_SWVER = "softwareVersion";
+    private static final String KEY_DATA_ORGOPENRDMDEV_INFO = String.format("%s.%s.%s", KEY_DATA, KEY_ORGOPENRDMDEV, KEY_INFO);
+
     // log
     private static final Logger log = getLogger(OplinkOpticalDeviceDescription.class);
 
     @Override
     public DeviceDescription discoverDeviceDetails() {
-        log.debug("No description to be added for device");
-        //TODO to be implemented if needed.
-        return null;
+        log.debug("Device description to be added for device {}", data().deviceId());
+        String reply = netconfGet(handler(), getInfoFilter());
+        return parseInfo(reply);
     }
 
     @Override
@@ -63,15 +73,57 @@ public class OplinkOpticalDeviceDescription extends AbstractHandlerBehaviour
         return ImmutableList.copyOf(descriptions);
     }
 
+
+
+    private String getInfoFilter() {
+        return new StringBuilder(xmlOpen(KEY_ORGOPENRDMDEV_XMLNS))
+            .append(xmlEmpty(KEY_INFO))
+            .append(xmlClose(KEY_ORGOPENRDMDEV))
+            .toString();
+    }
+
+    private DeviceDescription parseInfo(String content) {
+        HierarchicalConfiguration subtree = configAt(content, KEY_DATA_ORGOPENRDMDEV_INFO);
+        Device.Type type = mapNodeType(subtree.getString(KEY_NODETYPE));
+        if (type == null) {
+            return null;
+        }
+        String vendor = subtree.getString(KEY_VENDOR);
+        String swVersion = subtree.getString(KEY_SWVER);
+        // did not find appropriate loc for hwVersion and serialNumber
+        String hwVersion = "unknown";
+        String serialNumber = "unknown";
+        Integer chassisId = subtree.getInteger(KEY_NODENUM, 0);
+        ChassisId cid = new ChassisId(chassisId);
+        return new DefaultDeviceDescription(data().deviceId().uri(), type, vendor, hwVersion, swVersion, serialNumber, cid, true);
+    }
+    
+    private Device.Type mapNodeType(String nodeType) {
+        if (nodeType.equals("rdm")) {
+            return Device.Type.ROADM;
+        } else if (nodeType.equals("toa")) {
+            return Device.Type.OPTICAL_AMPLIFIER;
+        } else if (nodeType.equals("ops")) {
+            return Device.Type.FIBER_SWITCH;
+        } else {
+            log.debug("Device {} reports unsupported type", data().deviceId());
+            return null;
+        }
+    }
+
+
+
     private String getPortsFilter() {
-        return new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
+        return new StringBuilder(xmlOpen(KEY_ORGOPENRDMDEV_XMLNS))
+                .append(xmlOpen(KEY_CIRPACKS))
                 .append(xmlEmpty(KEY_PORTS))
-                .append(xmlClose(KEY_OPENOPTICALDEV))
+                .append(xmlClose(KEY_CIRPACKS))
+                .append(xmlClose(KEY_ORGOPENRDMDEV))
                 .toString();
     }
 
     private List<PortDescription> parsePorts(String content) {
-        List<HierarchicalConfiguration> subtrees = configsAt(content, KEY_DATA_PORTS);
+        List<HierarchicalConfiguration> subtrees = configsAt(content, KEY_DATA_ORGOPENRDMDEV_CIRPACKS_PORTS);
         List<PortDescription> portDescriptions = Lists.newArrayList();
         for (HierarchicalConfiguration portConfig : subtrees) {
             portDescriptions.add(parsePort(portConfig));
@@ -80,12 +132,12 @@ public class OplinkOpticalDeviceDescription extends AbstractHandlerBehaviour
     }
 
     private PortDescription parsePort(HierarchicalConfiguration cfg) {
-        PortNumber portNumber = PortNumber.portNumber(cfg.getLong(KEY_PORTID));
         HierarchicalConfiguration portInfo = cfg.configurationAt(KEY_PORT);
         DefaultAnnotations annotations = DefaultAnnotations.builder()
                 .set(AnnotationKeys.PORT_NAME, portInfo.getString(KEY_PORTNAME))
                 .set(PORT_DIRECTION, portInfo.getString(KEY_PORTDIRECT))
                 .build();
+        PortNumber portNumber = PortNumber.portNumber(cfg.getLong(KEY_PORTID), portInfo.getString(KEY_PORTNAME));
         return omsPortDescription(portNumber,
                                   true,
                                   START_CENTER_FREQ,

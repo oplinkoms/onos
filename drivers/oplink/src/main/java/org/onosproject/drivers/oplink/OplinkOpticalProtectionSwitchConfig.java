@@ -41,6 +41,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import static org.onosproject.drivers.oplink.OplinkNetconfUtility.*;
+import static org.onosproject.drivers.oplink.OplinkOpticalPowerConfig.*;
 import static org.onosproject.net.LinkKey.linkKey;
 import static org.onosproject.net.optical.OpticalAnnotations.INPUT_PORT_STATUS;
 import static org.onosproject.net.optical.OpticalAnnotations.STATUS_IN_SERVICE;
@@ -80,7 +81,6 @@ public class OplinkOpticalProtectionSwitchConfig extends AbstractHandlerBehaviou
     // key nodes
     private static final String KEY_CONFIG = "config";
     private static final String KEY_OPSCONFIG = "ops-config";
-    private static final String KEY_STATE = "state";
     private static final String KEY_OPSSTATE = "ops-state";
     private static final String KEY_NAME_PRIMARY = "primary";
     private static final String KEY_NAME_SECONDARY = "secondary";
@@ -88,13 +88,32 @@ public class OplinkOpticalProtectionSwitchConfig extends AbstractHandlerBehaviou
     private static final String KEY_OPT_MANUAL = "manual";
     private static final String KEY_OPT_AUTO = "auto-revertive";
 
+    // new key nodes for latest yang-model
+    protected static final String KEY_XMLNSOPLINKOPSEXT = "xmlns=\"http://com/oplink/ops/ext\"";
+    protected static final String KEY_PROTECTIONSWITCH = "protection-switch";
+    protected static final String KEY_PROTECTIONSWITCH_XMLNS = String.format("%s %s", KEY_PROTECTIONSWITCH, KEY_XMLNSOPLINKOPSEXT);
+    protected static final String KEY_APS = "aps";
+    protected static final String KEY_APSMODULES = "aps-modules";
+    protected static final String KEY_APSMODULE = "aps-module";
+    protected static final String KEY_APSMODULENAME = "aps-module-name";
+    protected static final String KEY_TARGETPATH = "target-path";
+    protected static final String KEY_SWITCHCOMMAND = "switch-command";
+    protected static final String KEY_PRIMARY = "PRIMARY";
+    protected static final String KEY_SECONDARY = "SECONDARY";
+    protected static final String KEY_FORCESWITCH = "Force-Switch";
+    protected static final String KEY_MANUALSWITCH = "Manual-Switch";
+    protected static final String KEY_CLEAR = "Clear";
+    protected static final String KEY_ACTIVEPATH = "active-path";
+    protected static final String KEY_XMLNSOPTTRANSLINEPROC = "xmlns=\"http://openconfig.net/yang/optical-transport-line-protection\"";
+    protected static final String KEY_APS_XMLNS = String.format("%s %s", KEY_APS, KEY_XMLNSOPTTRANSLINEPROC);
+
     // operation format: [OPT]-[NAME], eg. force-primary
     private static final String FMT_OPT = "%s-%s";
 
     // define virtual port number
     private static final PortNumber PORT_VIRTUAL = PortNumber.portNumber(0);
-    private static final PortNumber PORT_PRIMARY = PortNumber.portNumber(3, "primary_port");
-    private static final PortNumber PORT_SECONDARY = PortNumber.portNumber(5, "secondary_port");
+    protected static final PortNumber PORT_PRIMARY = PortNumber.portNumber(3, KEY_PRIMARY);
+    protected static final PortNumber PORT_SECONDARY = PortNumber.portNumber(5, KEY_SECONDARY);
     // log
     private static final Logger log = getLogger(OplinkOpticalProtectionSwitchConfig.class);
 
@@ -140,11 +159,18 @@ public class OplinkOpticalProtectionSwitchConfig extends AbstractHandlerBehaviou
         return CompletableFuture.completedFuture(map);
     }
 
+    /**
+     * @param identifier {@link ConnectPoint} for the virtual Port representing
+     *                     protected path endpoint, hence has to endsWith "\0"
+     *                     otherwise first line returns null and no effect
+     * @param index either 0(PRIMARY) or 1(SECONDARY), path index to switch to
+     *                      otherwise get(index) returns null and no effect
+     */
     @Override
     public CompletableFuture<Void> switchToForce(ConnectPoint identifier, int index) {
         return getProtectionEndpointConfig(identifier)
                 .thenApply(m -> m.paths().get(index))
-                .thenApply(m -> switchDevice(formatOperation(m.output().connectPoint().port(), KEY_OPT_FORCE)))
+                .thenApply(m -> switchDevice(m.output().connectPoint().port().name(), KEY_FORCESWITCH))
                 .thenApply(m -> null);
     }
 
@@ -152,13 +178,13 @@ public class OplinkOpticalProtectionSwitchConfig extends AbstractHandlerBehaviou
     public CompletableFuture<Void> switchToManual(ConnectPoint identifier, int index) {
         return getProtectionEndpointConfig(identifier)
                 .thenApply(m -> m.paths().get(index))
-                .thenApply(m -> switchDevice(formatOperation(m.output().connectPoint().port(), KEY_OPT_MANUAL)))
+                .thenApply(m -> switchDevice(m.output().connectPoint().port().name(), KEY_MANUALSWITCH))
                 .thenApply(m -> null);
     }
 
     @Override
     public CompletableFuture<Void> switchToAutomatic(ConnectPoint identifier) {
-        switchDevice(KEY_OPT_AUTO);
+        switchDevice(KEY_PRIMARY, KEY_CLEAR);
         return CompletableFuture.completedFuture(null);
     }
 
@@ -213,15 +239,29 @@ public class OplinkOpticalProtectionSwitchConfig extends AbstractHandlerBehaviou
     }
 
     private PortNumber acquireActivePort() {
-        String filter = new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
+        String filter = new StringBuilder(xmlOpen(KEY_OPTICALCONTROL_XMLNS))
+                .append(xmlOpen(KEY_OPTICALMODULES))
+                .append(xmlOpen(KEY_APS_XMLNS))
+                .append(xmlOpen(KEY_APSMODULES))
+                .append(xmlOpen(KEY_APSMODULE))
                 .append(xmlOpen(KEY_STATE))
-                .append(xmlEmpty(KEY_OPSSTATE))
+                .append(xmlEmpty(KEY_ACTIVEPATH))
                 .append(xmlClose(KEY_STATE))
-                .append(xmlClose(KEY_OPENOPTICALDEV))
+                .append(xmlClose(KEY_APSMODULE))
+                .append(xmlClose(KEY_APSMODULES))
+                .append(xmlClose(KEY_APS))
+                .append(xmlClose(KEY_OPTICALMODULES))
+                .append(xmlClose(KEY_OPTICALCONTROL))
                 .toString();
         String reply = netconfGet(handler(), filter);
         log.debug("Service state replying, {}", reply);
-        return reply.contains(KEY_NAME_PRIMARY) ? PORT_PRIMARY : PORT_SECONDARY;
+        if (reply.contains(KEY_PRIMARY)) {
+            return PORT_PRIMARY;
+        } else if (reply.contains(KEY_SECONDARY)) {
+            return PORT_SECONDARY;
+        } else {
+            return null;
+        }
     }
 
     private String formatOperation(PortNumber port, String operation) {
@@ -229,15 +269,15 @@ public class OplinkOpticalProtectionSwitchConfig extends AbstractHandlerBehaviou
         return String.format(FMT_OPT, operation, key);
     }
 
-    private boolean switchDevice(String operation) {
-        log.debug("Switch to {} for Device {}", operation, data().deviceId());
-        String cfg = new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
-                .append(xmlOpen(KEY_CONFIG))
-                .append(xml(KEY_OPSCONFIG, operation))
-                .append(xmlClose(KEY_CONFIG))
-                .append(xmlClose(KEY_OPENOPTICALDEV))
+    private String switchDevice(String targetPath, String switchCommand) {
+        log.debug("Switch to {} for Device {}", targetPath, data().deviceId());
+        String cfg = new StringBuilder(xmlOpen(KEY_PROTECTIONSWITCH_XMLNS))
+                .append(xml(KEY_APSMODULENAME, "OPS"))
+                .append(xml(KEY_TARGETPATH, targetPath))
+                .append(xml(KEY_SWITCHCOMMAND, switchCommand))
+                .append(xmlClose(KEY_PROTECTIONSWITCH))
                 .toString();
-        return netconfEditConfig(handler(), CFG_MODE_MERGE, cfg);
+        return netconfRpc(handler(), cfg);
     }
 
     private void addLink(DeviceId peerId) {

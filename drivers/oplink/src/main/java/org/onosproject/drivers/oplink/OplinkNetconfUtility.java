@@ -38,9 +38,10 @@ public final class OplinkNetconfUtility {
     public static final String CFG_MODE_MERGE = "merge";
     public static final String CFG_MODE_NONE = "none";
     public static final String CFG_OPT_DELETE = "nc:operation=\"delete\"";
-    public static final String KEY_XMLNS = "xmlns=\"http://com/att/device\"";
+    public static final String KEY_XMLNS = "xmlns=\"http://org/openroadm/device\"";
     public static final String KEY_DATA = "data";
-    public static final String KEY_OPENOPTICALDEV = "open-optical-device";
+    public static final String KEY_ORGOPENRDMDEV = "org-openroadm-device";
+    public static final String KEY_CIRPACKS = "circuit-packs";
     public static final String KEY_CONNS = "connections";
     public static final String KEY_CONNID = "connection-id";
     public static final String KEY_PORTS = "ports";
@@ -48,9 +49,15 @@ public final class OplinkNetconfUtility {
     public static final String KEY_PORT = "port";
     public static final String KEY_PORTDIRECT = "port-direction";
     public static final String KEY_CHATT = "attenuation";
+    public static final String KEY_DATA_ORGOPENRDMDEV_CIRPACKS_PORTS = String.format("%s.%s.%s.%s", KEY_DATA, KEY_ORGOPENRDMDEV, KEY_CIRPACKS, KEY_PORTS);
+    public static final String KEY_ORGOPENRDMDEV_XMLNS = String.format("%s %s", KEY_ORGOPENRDMDEV, KEY_XMLNS);
+
+    // old nodes, kept so that functions that aren't updated can still be compiled
+    public static final String KEY_OLDXMLNS = "xmlns=\"http://com/att/device\"";
+    public static final String KEY_OPENOPTICALDEV = "open-optical-device";
     public static final String KEY_DATA_CONNS = String.format("%s.%s.%s", KEY_DATA, KEY_OPENOPTICALDEV, KEY_CONNS);
     public static final String KEY_DATA_PORTS = String.format("%s.%s.%s", KEY_DATA, KEY_OPENOPTICALDEV, KEY_PORTS);
-    public static final String KEY_OPENOPTICALDEV_XMLNS = String.format("%s %s", KEY_OPENOPTICALDEV, KEY_XMLNS);
+    public static final String KEY_OPENOPTICALDEV_XMLNS = String.format("%s %s", KEY_OPENOPTICALDEV, KEY_OLDXMLNS);
 
     private OplinkNetconfUtility() {
     }
@@ -109,6 +116,25 @@ public final class OplinkNetconfUtility {
             reply = session.editConfig(DatastoreId.RUNNING, mode, cfg);
         } catch (NetconfException e) {
             throw new IllegalStateException(new NetconfException("Failed to edit configuration.", e));
+        }
+        return reply;
+    }
+
+    /**
+     * Retrieves session reply information for rpc operation.
+     *
+     * @param handler parent driver handler
+     * @param rpc the body of rpc
+     * @return the reply string
+     */
+    public static String netconfRpc(DriverHandler handler, String rpc) {
+        NetconfController controller = checkNotNull(handler.get(NetconfController.class));
+        NetconfSession session = controller.getNetconfDevice(handler.data().deviceId()).getSession();
+        String reply;
+        try {
+            reply = session.doWrappedRpc(rpc);
+        } catch (NetconfException e) {
+            throw new IllegalStateException(new NetconfException("Failed to do rpc.", e));
         }
         return reply;
     }

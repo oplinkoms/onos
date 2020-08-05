@@ -51,7 +51,7 @@ public class PowerConfigCommand extends AbstractShellCommand {
     @Completion(NetconfOperationCompleter.class)
     private String operation = null;
 
-    @Argument(index = 1, name = "connection point", description = "{DeviceID}/{PortNumber}",
+    @Argument(index = 1, name = "connection-point", description = "{DeviceID}/{PortNumber}",
             required = true, multiValued = false)
     @Completion(OpticalConnectPointCompleter.class)
     private String connectPoint = null;
