@@ -43,9 +43,32 @@ public class OplinkOpticalFlowRuleProgrammable
     public static final String KEY_CHID = "wavelength-id";
     public static final String KEY_SRC = "source";
     public static final String KEY_DST = "destination";
-    public static final String KEY_SRC_PORTID = String.format("%s.%s", KEY_SRC, KEY_PORTID);
-    public static final String KEY_SRC_CHID = String.format("%s.%s", KEY_SRC, KEY_CHID);
-    public static final String KEY_DST_PORTID = String.format("%s.%s", KEY_DST, KEY_PORTID);
+
+    private static final String KEY_WAVELENGTHROUTER = "wavelength-router";
+    private static final String KEY_XMLNS_WAVELENGTHROUTER = "xmlns=\"http://openconfig.net/yang/wavelength-router\"";
+    private static final String KEY_WAVELENGTHROUTER_XMLNS = String.format("%s %s", KEY_WAVELENGTHROUTER, KEY_XMLNS_WAVELENGTHROUTER);
+    private static final String KEY_MEDIACHANNELS = "media-channels";
+    private static final String KEY_CHANNEL = "channel";
+    private static final String KEY_DATA_WAVELENGTHROUTER_MEDIACHANNELS_CHANNEL = String.format("%s.%s.%s.%s", KEY_DATA, KEY_WAVELENGTHROUTER, KEY_MEDIACHANNELS, KEY_CHANNEL);
+    private static final String KEY_CONFIG = "config";
+    private static final String KEY_INDEX = "index";
+    private static final String KEY_NAME = "name";
+    private static final String KEY_SRC_CONFIG_PORTNAME = String.format("%s.%s.%s", KEY_SRC, KEY_CONFIG, KEY_PORTNAME);
+    private static final String KEY_DST_CONFIG_PORTNAME = String.format("%s.%s.%s", KEY_DST, KEY_CONFIG, KEY_PORTNAME);
+    private static final String KEY_LOWFREQ = "lower-frequency";
+    private static final String KEY_UPFREQ = "upper-frequency";
+    private static final String KEY_ADMINSTAT = "admin-status";
+    private static final String KEY_ATTENCTRLMODE = "attenuation-control-mode";
+    private static final String KEY_SPECPOWERPROF = "spectrum-power-profile";
+    private static final String KEY_DIST = "distribution";
+    private static final String KEY_ATTENVAL = "attenuation-value";
+    private static final String KEY_XMLNS_ALIWAVELEN = "xmlns=\"http://com/alibaba/wavelength-router-ext\"";
+    private static final String KEY_ATTENVAL_XMLNS = String.format("%s %s", KEY_ATTENVAL, KEY_XMLNS_ALIWAVELEN);
+
+
+    // hard-coded entries
+    private static final String KEY_SETATTEN = "ext:SET-ATTENUATION";
+
 
     // log
     private static final Logger log = getLogger(OplinkOpticalFlowRuleProgrammable.class);
@@ -65,17 +88,19 @@ public class OplinkOpticalFlowRuleProgrammable
         return removeConnections(rules);
     }
 
-    private String getConnectionsFilter() {
-        return new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
-                .append(xmlEmpty(KEY_CONNS))
-                .append(xmlClose(KEY_OPENOPTICALDEV))
+    private String getChannelsFilter() {
+        return new StringBuilder(xmlOpen(KEY_WAVELENGTHROUTER_XMLNS))
+                .append(xmlOpen(KEY_MEDIACHANNELS))
+                .append(xmlEmpty(KEY_CHANNEL))
+                .append(xmlClose(KEY_MEDIACHANNELS))
+                .append(xmlClose(KEY_WAVELENGTHROUTER))
                 .toString();
     }
 
     private Collection<FlowEntry> parseConnections() {
         log.debug("Fetch connections...");
-        String reply = netconfGet(handler(), getConnectionsFilter());
-        List<HierarchicalConfiguration> subtrees = configsAt(reply, KEY_DATA_CONNS);
+        String reply = netconfGet(handler(), getChannelsFilter());
+        List<HierarchicalConfiguration> subtrees = configsAt(reply, KEY_DATA_WAVELENGTHROUTER_MEDIACHANNELS_CHANNEL);
         Collection<FlowEntry> list = new ArrayList<>();
         for (HierarchicalConfiguration connection : subtrees) {
             list.add(new DefaultFlowEntry(parseConnection(connection), FlowEntry.FlowEntryState.ADDED));
@@ -85,9 +110,9 @@ public class OplinkOpticalFlowRuleProgrammable
 
     private FlowRule parseConnection(HierarchicalConfiguration cfg) {
         return OplinkOpticalUtility.toFlowRule(this,
-                                               PortNumber.portNumber(cfg.getString(KEY_SRC_PORTID)),
-                                               PortNumber.portNumber(cfg.getString(KEY_DST_PORTID)),
-                                               cfg.getInt(KEY_SRC_CHID));
+                                               PortNumber.portNumber(cfg.getString(KEY_SRC_CONFIG_PORTNAME)),
+                                               PortNumber.portNumber(cfg.getString(KEY_DST_CONFIG_PORTNAME)),
+                                               cfg.getInt(KEY_INDEX));
 
     }
 
@@ -101,20 +126,56 @@ public class OplinkOpticalFlowRuleProgrammable
         log.debug("Applying connection {}", rule);
         OplinkCrossConnect crossConnect = OplinkOpticalUtility.fromFlowRule(this, rule);
         // Build xml
-        String connID = Integer.toString(crossConnect.getChannel());
-        String cfg = new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
-                .append(xmlOpen(KEY_CONNS))
-                .append(xml(KEY_CONNID, connID))
+        Integer connID = crossConnect.getChannel(); // FIXME ID
+        String connIDStr = Integer.toString(connID);
+        String channelName;
+        if (connID <= 512)
+            channelName = "wss-1-" + connID;
+        else
+            channelName = "wss-2-" + (connID - 512);
+        String upperFrequency = "" + (1914 + connID)*100000;
+        String lowerFrequency = "" + (1913 + connID)*100000;
+        // See the end of this file for expected xml output
+        String cfg = new StringBuilder(xmlOpen(KEY_WAVELENGTHROUTER_XMLNS))
+                .append(xmlOpen(KEY_MEDIACHANNELS))
+                .append(xmlOpen(KEY_CHANNEL))
+                .append(xml(KEY_INDEX, connIDStr))
+                .append(xmlOpen(KEY_CONFIG))
+                .append(xml(KEY_INDEX, connIDStr))
+                .append(xml(KEY_NAME, channelName))
+                .append(xml(KEY_LOWFREQ, lowerFrequency))
+                .append(xml(KEY_UPFREQ, upperFrequency))
+                .append(xml(KEY_ATTENCTRLMODE, "ext:SET-ATTENUATION"))
+                .append(xml(KEY_ADMINSTAT, "ENABLED"))
+                .append(xmlClose(KEY_CONFIG))
                 .append(xmlOpen(KEY_SRC))
-                .append(xml(KEY_PORTID, crossConnect.getInPort().name()))
-                .append(xml(KEY_CHID, connID))
+                .append(xmlOpen(KEY_CONFIG))
+                // FIXME verify that the port has name
+                .append(xml(KEY_PORTNAME, crossConnect.getInPort().name()))
+                .append(xmlClose(KEY_CONFIG))
                 .append(xmlClose(KEY_SRC))
                 .append(xmlOpen(KEY_DST))
-                .append(xml(KEY_PORTID, crossConnect.getOutPort().name()))
+                .append(xmlOpen(KEY_CONFIG))
+                // FIXME verify that the port has name
+                .append(xml(KEY_PORTNAME, crossConnect.getOutPort().name()))
+                .append(xmlClose(KEY_CONFIG))
                 .append(xmlClose(KEY_DST))
-                .append(xml(KEY_CHATT, Integer.toString(crossConnect.getAttenuation())))
-                .append(xmlClose(KEY_CONNS))
-                .append(xmlClose(KEY_OPENOPTICALDEV))
+                .append(xmlOpen(KEY_SPECPOWERPROF))
+                .append(xmlOpen(KEY_DIST))
+                .append(xml(KEY_LOWFREQ, lowerFrequency))
+                .append(xml(KEY_UPFREQ, upperFrequency))
+                .append(xmlOpen(KEY_CONFIG))
+                .append(xml(KEY_LOWFREQ, lowerFrequency))
+                .append(xml(KEY_UPFREQ, upperFrequency))
+                .append(xmlOpen(KEY_ATTENVAL_XMLNS))
+                .append(crossConnect.getAttenuation())
+                .append(xmlClose(KEY_ATTENVAL))
+                .append(xmlClose(KEY_CONFIG))
+                .append(xmlClose(KEY_DIST))
+                .append(xmlClose(KEY_SPECPOWERPROF))
+                .append(xmlClose(KEY_CHANNEL))
+                .append(xmlClose(KEY_MEDIACHANNELS))
+                .append(xmlClose(KEY_WAVELENGTHROUTER))
                 .toString();
         return netconfEditConfig(handler(), CFG_MODE_MERGE, cfg);
     }
@@ -143,3 +204,42 @@ public class OplinkOpticalFlowRuleProgrammable
         return netconfEditConfig(handler(), CFG_MODE_NONE, cfg);
     }
 }
+
+// adapted from https://github.com/oplinkoms/yang-model/blob/new_sysrepo/oplink/optical/openconfig-wavelength-router-startup-MEIWU_100GHz_example.xml
+// <channel>
+//			<index>1</index>
+//			<config>
+//				<index>1</index>
+//				<name>wss-1-1</name>
+//				<lower-frequency>191400000</lower-frequency>
+//				<upper-frequency>191500000</upper-frequency>
+//				<attenuation-control-mode>ext:SET-ATTENUATION</attenuation-control-mode>
+//				<admin-status>ENABLED</admin-status>
+//			</config>
+//			<source>
+//				<config>
+//					<port-name>In01</port-name>
+//				</config>
+//			</source>
+//			<dest>
+//				<config>
+//					<port-name>Add1_Com1</port-name>
+//				</config>
+//			</dest>
+//			<spectrum-power-profile>
+//				<distribution>
+//					<lower-frequency>191400000</lower-frequency>
+//					<upper-frequency>191500000</upper-frequency>
+//					<config>
+//						<lower-frequency>191400000</lower-frequency>
+//						<upper-frequency>191500000</upper-frequency>
+//						<attenuation-value xmlns="http://com/alibaba/wavelength-router-ext">0.00</attenuation-value>
+//					</config>
+//				</distribution>
+//			</spectrum-power-profile>
+//		</channel>
+//
+// wss-1-index for index <= 512
+// wss-2-(index-512) for index > 512
+// upper-frequency = 191400000 + index*100000
+// lower-frequency = 191300000 + index*100000

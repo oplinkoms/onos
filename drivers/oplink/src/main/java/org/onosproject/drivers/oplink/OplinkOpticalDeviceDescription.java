@@ -46,8 +46,7 @@ import static org.onosproject.drivers.oplink.OplinkNetconfUtility.*;
 public class OplinkOpticalDeviceDescription extends AbstractHandlerBehaviour
         implements DeviceDescriptionDiscovery {
 
-    private static final String KEY_PORTNAME = "port-name";
-    private static final String PORT_DIRECTION = "direction";
+    private static final String KEY_DIRECTION = "direction";
     private static final String KEY_INFO = "info";
     private static final String KEY_VENDOR = "vendor";
     private static final String KEY_NODETYPE = "node-type";
@@ -135,7 +134,7 @@ public class OplinkOpticalDeviceDescription extends AbstractHandlerBehaviour
         HierarchicalConfiguration portInfo = cfg.configurationAt(KEY_PORT);
         DefaultAnnotations annotations = DefaultAnnotations.builder()
                 .set(AnnotationKeys.PORT_NAME, portInfo.getString(KEY_PORTNAME))
-                .set(PORT_DIRECTION, portInfo.getString(KEY_PORTDIRECT))
+                .set(KEY_DIRECTION, portInfo.getString(KEY_PORTDIRECT))
                 .build();
         PortNumber portNumber = PortNumber.portNumber(cfg.getLong(KEY_PORTID), portInfo.getString(KEY_PORTNAME));
         return omsPortDescription(portNumber,

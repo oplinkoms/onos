@@ -46,6 +46,7 @@ public final class OplinkNetconfUtility {
     public static final String KEY_CONNID = "connection-id";
     public static final String KEY_PORTS = "ports";
     public static final String KEY_PORTID = "port-id";
+    public static final String KEY_PORTNAME = "port-name";
     public static final String KEY_PORT = "port";
     public static final String KEY_PORTDIRECT = "port-direction";
     public static final String KEY_CHATT = "attenuation";
