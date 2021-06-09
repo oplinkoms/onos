@@ -126,7 +126,7 @@ public class OplinkOpticalFlowRuleProgrammable
         log.debug("Applying connection {}", rule);
         OplinkCrossConnect crossConnect = OplinkOpticalUtility.fromFlowRule(this, rule);
         // Build xml
-        Integer connID = crossConnect.getChannel(); // FIXME ID
+        Integer connID = crossConnect.getChannel(); // TODO verify this ID is the right one
         String connIDStr = Integer.toString(connID);
         String channelName;
         if (connID <= 512)
@@ -150,13 +150,13 @@ public class OplinkOpticalFlowRuleProgrammable
                 .append(xmlClose(KEY_CONFIG))
                 .append(xmlOpen(KEY_SRC))
                 .append(xmlOpen(KEY_CONFIG))
-                // FIXME verify that the port has name
+                // TODO verify that the port has name
                 .append(xml(KEY_PORTNAME, crossConnect.getInPort().name()))
                 .append(xmlClose(KEY_CONFIG))
                 .append(xmlClose(KEY_SRC))
                 .append(xmlOpen(KEY_DST))
                 .append(xmlOpen(KEY_CONFIG))
-                // FIXME verify that the port has name
+                // TODO verify that the port has name
                 .append(xml(KEY_PORTNAME, crossConnect.getOutPort().name()))
                 .append(xmlClose(KEY_CONFIG))
                 .append(xmlClose(KEY_DST))
@@ -191,15 +191,17 @@ public class OplinkOpticalFlowRuleProgrammable
         OplinkCrossConnect crossConnect = OplinkOpticalUtility.fromFlowRule(this, rule);
         // Build xml
         String connID = Integer.toString(crossConnect.getChannel());
-        String cfg = new StringBuilder(xmlOpen(KEY_OPENOPTICALDEV_XMLNS))
-                .append(xmlOpen(String.format("%s %s", KEY_CONNS, CFG_OPT_DELETE)))
-                .append(xml(KEY_CONNID, connID))
-                .append(xmlOpen(KEY_SRC))
-                .append(xml(KEY_PORTID, crossConnect.getInPort().name()))
-                .append(xml(KEY_CHID, connID))
-                .append(xmlClose(KEY_SRC))
-                .append(xmlClose(KEY_CONNS))
-                .append(xmlClose(KEY_OPENOPTICALDEV))
+        String cfg = new StringBuilder(xmlOpen(KEY_WAVELENGTHROUTER_XMLNS))
+                .append(xmlOpen(KEY_MEDIACHANNELS))
+                .append(xmlOpen(String.format("%s %s", KEY_CHANNEL, CFG_OPT_DELETE)))
+                .append(xml(KEY_INDEX, connID))
+//                .append(xmlOpen(KEY_SRC))
+//                .append(xml(KEY_PORTID, crossConnect.getInPort().name()))
+//                .append(xml(KEY_CHID, connID))
+//                .append(xmlClose(KEY_SRC))
+                .append(xmlClose(KEY_CHANNEL))
+                .append(xmlClose(KEY_MEDIACHANNELS))
+                .append(xmlClose(KEY_WAVELENGTHROUTER))
                 .toString();
         return netconfEditConfig(handler(), CFG_MODE_NONE, cfg);
     }
